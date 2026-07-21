@@ -148,8 +148,24 @@ def _seg_len_m(lon1, lat1, lon2, lat2):
     return d
 
 
-def delineate(lat, lon, buffer_deg=0.15, river_km2=1.0, max_tries=3):
+def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=3):
     """Outlet (lat, lon) için havza çıkarımı. GeoJSON + fiziksel parametreler döner."""
+    # Bellek kontrolü (Render free planında 512 MB — pysheds ~400 MB gerektirir)
+    try:
+        import resource
+        mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+        if mem_mb > 350:
+            import gc
+            gc.collect()
+            mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+            if mem_mb > 450:
+                raise RuntimeError(
+                    f"Yetersiz bellek ({mem_mb:.0f} MB kullanımda, pysheds ~400 MB daha gerektirir). "
+                    "Render Starter planına (2 GB RAM) yükseltin veya yerel DEM kullanın.")
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
     out = None
     for attempt in range(max_tries):
         buf = buffer_deg * (2 ** attempt)
@@ -166,6 +182,7 @@ def delineate(lat, lon, buffer_deg=0.15, river_km2=1.0, max_tries=3):
 
 
 def _delineate_once(lat, lon, bbox, river_km2):
+    import gc
     from pysheds.grid import Grid
     from rasterio import features as rfeatures
     from shapely.geometry import LineString, shape
@@ -175,10 +192,19 @@ def _delineate_once(lat, lon, bbox, river_km2):
     grid = Grid.from_raster(dem_path)
     dem = grid.read_raster(dem_path)
     pit_filled = grid.fill_pits(dem)
+    del dem
+    gc.collect()
     flooded = grid.fill_depressions(pit_filled)
+    del pit_filled
+    gc.collect()
     inflated = grid.resolve_flats(flooded)
+    del flooded
+    gc.collect()
     fdir = grid.flowdir(inflated)
+    del inflated
+    gc.collect()
     acc = grid.accumulation(fdir)
+    gc.collect()
 
     # hücre alanı (yaklaşık, merkez enlemde)
     dx = abs(grid.affine.a) * 111320.0 * math.cos(math.radians(lat))
@@ -198,6 +224,7 @@ def _delineate_once(lat, lon, bbox, river_km2):
 
     catch = grid.catchment(x=x_snap, y=y_snap, fdir=fdir, xytype="coordinate")
     catch_arr = np.asarray(catch).astype(bool)
+    del catch
     n_cells = int(catch_arr.sum())
     if n_cells < 4:
         return None
@@ -211,19 +238,27 @@ def _delineate_once(lat, lon, bbox, river_km2):
     shapes = list(rfeatures.shapes(catch_arr.astype(np.uint8),
                                    mask=catch_arr, transform=grid.affine))
     poly = unary_union([shape(g) for g, v in shapes]).simplify(abs(grid.affine.a) / 2)
+    del shapes
+    gc.collect()
     if poly.geom_type == "MultiPolygon":
         poly = max(poly.geoms, key=lambda p: p.area)
 
     fdir_arr = np.asarray(fdir)
     acc_arr = np.asarray(acc)
+    del fdir, acc
+    gc.collect()
 
     # ---- en uzun akış yolu: havza içi her uç hücreden değil, akış mesafesiyle
     dist = grid.distance_to_outlet(x=x_snap, y=y_snap, fdir=fdir, xytype="coordinate")
     dist_arr = np.asarray(dist)
+    del dist
+    gc.collect()
     dist_arr = np.where(catch_arr & np.isfinite(dist_arr), dist_arr, -1)
     head = np.unravel_index(np.argmax(dist_arr), dist_arr.shape)
     path = _path_downstream(fdir_arr, head[0], head[1], grid.shape, stop=(row, col))
     path_ll = [tuple(grid.affine * (c + 0.5, r + 0.5)) for r, c in path]
+    del dist_arr
+    gc.collect()
 
     # metrik uzunluk (kümülatif)
     cum = [0.0]
@@ -241,13 +276,15 @@ def _delineate_once(lat, lon, bbox, river_km2):
     Lc_m = L_m - cum[imin]  # outlet'ten itibaren
 
     # ---- harmonik profil: yol boyunca 11 eşit aralıklı kot
-    dem_arr = np.asarray(inflated)
+    dem_arr = np.asarray(grid.read_raster(dem_path))  # yeniden oku (inflated silindi)
     prof = []
     for k in range(11):
         target = L_m * k / 10.0  # H0=outlet (mesafe 0), H10=memba (mesafe L)
         j = min(range(len(cum)), key=lambda i: abs((L_m - cum[i]) - target))
         r, c = path[j]
         prof.append(float(dem_arr[r, c]))
+    del dem_arr
+    gc.collect()
     # artan olmaya zorla (Excel gereksinimi)
     for i in range(1, 11):
         if prof[i] <= prof[i - 1]:
@@ -267,6 +304,8 @@ def _delineate_once(lat, lon, bbox, river_km2):
                 p2 = grid.affine * (c2 + 0.5, r2 + 0.5)
                 lines.append(LineString([p1, p2]))
     rivers = unary_union(lines) if lines else None
+    del riv_mask, fdir_arr, acc_arr, catch_arr
+    gc.collect()
 
     out = {
         "outlet": {"lat": lat, "lon": lon, "snap_lat": y_snap, "snap_lon": x_snap},
