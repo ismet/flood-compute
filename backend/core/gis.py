@@ -77,14 +77,19 @@ def _download_cop30(lat_i, lon_i):
     return dest
 
 
-def get_dem_mosaic(bbox):
+def get_dem_mosaic(bbox, target_resolution_deg=0.001):
     """bbox (w,s,e,n) kapsayan DEM mozaiğini geçici GeoTIFF olarak döner.
 
     Önce data/dem altındaki yerel dosyalara bakar; kapsam eksikse
     Copernicus GLO-30 karolarını indirir (data/dem/cache).
+
+    target_resolution_deg: hedef piksel boyutu (derece). Varsayılan 0.001° ≈ 110 m
+    (Copernicus GLO-30 orijinali ~0.00027° ≈ 30 m). 3x alt-örnekleme = 9x daha az
+    bellek — 512 MB planında pysheds+numba ile birlikte sığması için gerekli.
     """
     import rasterio
     from rasterio.merge import merge
+    from rasterio.transform import Affine
     from shapely.geometry import shape, box as sbox
     from shapely.ops import unary_union
 
@@ -113,15 +118,29 @@ def get_dem_mosaic(bbox):
         raise RuntimeError("Bölgeyi kapsayan DEM bulunamadı (yerel yok, indirme başarısız)")
     dss = [rasterio.open(p) for p in srcs]
     arr, transform = merge(dss, bounds=(w, s, e, n))
-    meta = dss[0].meta.copy()
     for d in dss:
         d.close()
-    meta.update(height=arr.shape[1], width=arr.shape[2], transform=transform,
-                driver="GTiff", count=1)
+
+    # Alt-örnekleme (downsample): hedef çözünürlüğe nearest-neighbor ile
+    src_h, src_w = arr.shape[1], arr.shape[2]
+    src_res = abs(transform.a)
+    if src_res < target_resolution_deg:
+        step = max(1, int(round(target_resolution_deg / src_res)))
+        arr = arr[:, ::step, ::step]
+        transform = Affine(
+            transform.a * step, transform.b, transform.c,
+            transform.d, transform.e * step, transform.f)
+
+    meta = {
+        "height": arr.shape[1], "width": arr.shape[2], "transform": transform,
+        "driver": "GTiff", "count": 1, "dtype": "float32", "crs": "EPSG:4326",
+        "nodata": None,
+    }
     tmp = os.path.join(CACHE_DIR if os.path.isdir(CACHE_DIR) else DEM_DIR, "_mosaic.tif")
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
     with rasterio.open(tmp, "w", **meta) as dst:
-        dst.write(arr[0], 1)
+        dst.write(arr[0].astype("float32"), 1)
+    del arr
     return tmp
 
 
