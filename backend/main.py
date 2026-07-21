@@ -97,9 +97,21 @@ class YilAraReq(BaseModel):
 # ------------------------------------------------------------------- uçlar
 @app.post("/api/delineate")
 def api_delineate(req: DelineateReq):
-    from backend.core import gis
+    """Havza çıkarımını ayrı sürece (subprocess) yollar — 512 MB planında
+    pysheds+numba belleği süreç çıkışında işletim sistemine iade edilir."""
+    import subprocess, sys
     try:
-        return gis.delineate(req.lat, req.lon, river_km2=req.river_km2)
+        proc = subprocess.run(
+            [sys.executable, "-m", "backend.core._delineate_subprocess",
+             str(req.lat), str(req.lon), str(req.river_km2)],
+            capture_output=True, text=True, timeout=300,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if proc.returncode != 0:
+            msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
+            raise RuntimeError(msg)
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except subprocess.TimeoutExpired:
+        return _err(RuntimeError("Havza çıkarımı zaman aşımına uğradı (5 dk) — DEM indirme çok yavaş olabilir"))
     except Exception as e:
         return _err(e)
 
