@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+venv/
+.venv/
+env/
+
+data/dem/cache/
+data/corine/cache/
+data/projects/
+
+# data/stations/DMİ.kmz is the canonical copy; root is a local fallback
+/DMİ.kmz

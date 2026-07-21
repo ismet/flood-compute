@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Taşkın Hesap — Sentetik Yöntemler</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header>
+      <h1>Taşkın Hesap</h1>
+      <div class="proj-row">
+        <input id="projName" placeholder="Proje adı (dere adı)">
+        <button id="btnSave" title="Projeyi kaydet">💾</button>
+        <select id="projList" title="Kayıtlı projeler"><option value="">— yükle —</option></select>
+      </div>
+    </header>
+
+    <nav id="steps">
+      <button class="step active" data-step="1">1<span>Havza</span></button>
+      <button class="step" data-step="2">2<span>Parametre</span></button>
+      <button class="step" data-step="3">3<span>CN</span></button>
+      <button class="step" data-step="4">4<span>Thiessen</span></button>
+      <button class="step" data-step="5">5<span>Yağış</span></button>
+      <button class="step" data-step="6">6<span>Hesap</span></button>
+    </nav>
+
+    <!-- ADIM 1: Havza -->
+    <section class="page" data-page="1">
+      <p class="hint">Haritada derenin <b>çıkış noktasına (outlet)</b> tıklayın; havza sınırı,
+      dere ağı ve fiziksel parametreler DEM'den çıkarılır. Yerel DEM
+      (<code>data/dem/*.tif</code>) varsa o kullanılır, yoksa Copernicus GLO-30 indirilir.</p>
+      <button id="btnPick" class="primary">📍 Outlet seç (haritaya tıkla)</button>
+      <div id="delinStatus" class="status"></div>
+      <div class="grid2">
+        <label>Alan A (km²)<input id="inpA" type="number" step="0.001"></label>
+        <label>L (km)<input id="inpL" type="number" step="0.001"></label>
+        <label>Lc (km)<input id="inpLc" type="number" step="0.001"></label>
+        <label>Dere eşiği (km²)<input id="inpRivThr" type="number" step="0.1" value="1"></label>
+      </div>
+    </section>
+
+    <!-- ADIM 2: Parametreler -->
+    <section class="page hidden" data-page="2">
+      <p class="hint">Harmonik eğim için ana kanal boyunca 11 kot (outlet → membaa).
+      DEM'den otomatik dolar, elle düzeltilebilir.</p>
+      <div id="kotlar" class="kot-grid"></div>
+      <div class="grid2">
+        <label>Bölge sınıfı (YZD)
+          <select id="inpRegion"><option>A</option><option>B</option><option>C</option></select>
+        </label>
+        <label>Baz akım Q<sub>baz</sub> (m³/s)<input id="inpQbaz" type="number" step="0.1" value="0"></label>
+      </div>
+      <details><summary>Kar erimesi (opsiyonel)</summary>
+        <div class="grid2">
+          <label>Kar alanı (km²)<input id="karA" type="number" step="0.1"></label>
+          <label>Kar alanı ort. kotu (m)<input id="karH" type="number" step="1"></label>
+          <label>DMİ istasyon kotu (m)<input id="karHist" type="number" step="1"></label>
+          <label>Erime oranı (mm/°C-gün)<input id="karRate" type="number" step="0.01" value="1.08"></label>
+          <label>Periyot (gün)<select id="karPeriod"><option>5</option><option>10</option><option selected>15</option></select></label>
+        </div>
+        <label>Günlük en büyük sıcaklıklar (virgülle)<textarea id="karTemps" rows="2" placeholder="19.7, 18.8, 17.1, ..."></textarea></label>
+      </details>
+    </section>
+
+    <!-- ADIM 3: CN -->
+    <section class="page hidden" data-page="3">
+      <p class="hint">CORINE 2018'den havza kesilir, seçilen hidrolojik zemin grubuna göre
+      ağırlıklı CN hesaplanır. Yerel raster (<code>data/corine/*.tif</code>) varsa o kullanılır;
+      yoksa EEA CLC2018 servisinden <b>otomatik indirilir</b>.</p>
+      <div class="grid2">
+        <label>Zemin grubu
+          <select id="inpSoil"><option>A</option><option selected>B</option><option>C</option><option>D</option></select>
+        </label>
+        <button id="btnCN" class="primary">CORINE'den CN hesapla</button>
+      </div>
+      <div id="cnStatus" class="status"></div>
+      <div class="grid2">
+        <label>CN (Şart II)<input id="inpCN2" type="number" step="0.1" value="75"></label>
+        <label>CN (Şart III)<input id="inpCN3" type="number" step="0.1"></label>
+      </div>
+      <div id="cnTable"></div>
+    </section>
+
+    <!-- ADIM 4: Thiessen -->
+    <section class="page hidden" data-page="4">
+      <p class="hint">Varsayılan istasyon seti (<code>data/stations/DMİ.kmz</code>) otomatik
+      kullanılır; isterseniz başka bir KMZ/KML yükleyin. Thiessen poligonları havzaya
+      kesilerek alan ağırlıkları bulunur.</p>
+      <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan (DMİ.kmz)</button>
+      <input type="file" id="kmzFile" accept=".kmz,.kml">
+      <div id="thStatus" class="status"></div>
+      <div id="thTable"></div>
+    </section>
+
+    <!-- ADIM 5: Yağış -->
+    <section class="page hidden" data-page="5">
+      <p class="hint"><b>Yinelenmeli Yağışlar (24 Saatlik)</b> ve <b>DPLV oranları</b> tabloları
+      ekranın altında, harita üzerinde tam genişlikte açılır. Excel'deki değer bloğunu kopyalayın,
+      tabloda başlangıç hücresine tıklayıp <b>Ctrl+V</b> ile yapıştırın; kalan hücreler otomatik
+      dolar, ağırlıklı satır anlık hesaplanır.</p>
+    </section>
+
+    <!-- ADIM 6: Hesap -->
+    <section class="page hidden" data-page="6">
+      <details id="rasyonelBox"><summary>Rasyonel yöntem seçenekleri</summary>
+        <div class="grid2">
+          <label class="chk"><input type="checkbox" id="inpRasyonel"> Rasyonel yöntemi de hesapla</label>
+          <span class="small">A ≤ 1 km² ise her durumda hesaplanır</span>
+          <label>C100 katsayısı<input id="inpC100" type="number" step="0.01" value="0.45"></label>
+          <label>Üs (C_T = C100·(T/100)^üs)<input id="inpUs" type="number" step="0.01" value="0.2"></label>
+        </div>
+      </details>
+      <button id="btnCompute" class="primary big">▶ HESAPLA</button>
+      <div id="compStatus" class="status"></div>
+      <div id="results"></div>
+    </section>
+  </aside>
+
+  <main id="mapwrap">
+    <div id="map"></div>
+    <div id="rainDock" class="hidden">
+      <div id="rainGrid"></div>
+      <div id="rainStatus" class="status"></div>
+      <div class="dplv-head">
+        <b>Yağış Zaman Dağılımı (DPLV)</b>
+        <label class="inline">Hazır istasyon: <select id="inpDplv"></select></label>
+        <span class="small">— veya 14 oranı Excel'den tabloya yapıştırın</span>
+      </div>
+      <div id="dplvGrid"></div>
+    </div>
+    <div id="chartwrap" class="hidden">
+      <div class="chart-head">
+        <select id="chartDur"></select>
+        <button id="btnCloseChart">✕</button>
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+  </main>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="/static/app.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+data/dem/cache/
+data/corine/cache/
+data/projects/
+__pycache__/
+*.pyc
+tools/
