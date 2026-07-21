@@ -8,10 +8,12 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 
-import numpy as np
-from pyproj import Transformer
-from scipy.spatial import Voronoi
-from shapely.geometry import Polygon, shape
+# Ağır kütüphaneler (numpy, scipy, pyproj, shapely) fonksiyon içinden yüklenir
+# — 512 MB planında bellek tasarrufu için.
+# import numpy as np
+# from pyproj import Transformer
+# from scipy.spatial import Voronoi
+# from shapely.geometry import Polygon, shape
 
 def parse_kmz(data: bytes):
     """KMZ/KML içeriğinden [{name, lat, lon}] listesi (nokta Placemark'lar).
@@ -58,6 +60,11 @@ def weights(basin_geojson, stations):
 
     Dönen ağırlıklar Excel DATAGİR H kolonuna (alan oranı) karşılık gelir.
     """
+    import numpy as np
+    from pyproj import Transformer
+    from scipy.spatial import Voronoi
+    from shapely.geometry import Polygon, shape
+
     basin = shape(basin_geojson)
     cen = basin.centroid
     epsg = _utm_epsg(cen.x, cen.y)

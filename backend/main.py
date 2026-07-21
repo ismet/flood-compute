@@ -10,7 +10,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend.core import corine, engine, gis, rational, snowmelt, tables, thiessen
+# Heavy GIS modules (pysheds→scikit-image→numba→llvmlite, rasterio, scipy) are
+# imported lazily inside endpoints to keep startup memory low enough for the
+# 512 MB free plan. Python caches in sys.modules, so repeated imports are free.
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(ROOT, "frontend")
@@ -95,6 +97,7 @@ class YilAraReq(BaseModel):
 # ------------------------------------------------------------------- uçlar
 @app.post("/api/delineate")
 def api_delineate(req: DelineateReq):
+    from backend.core import gis
     try:
         return gis.delineate(req.lat, req.lon, river_km2=req.river_km2)
     except Exception as e:
@@ -103,6 +106,7 @@ def api_delineate(req: DelineateReq):
 
 @app.post("/api/cn")
 def api_cn(req: CNReq):
+    from backend.core import corine
     try:
         return corine.cn_from_basin(req.havza_geojson, req.zemin_grubu)
     except Exception as e:
@@ -121,6 +125,7 @@ def api_stations_default():
                           if f.lower().endswith((".kmz", ".kml"))]
         if not cands:
             return {"istasyonlar": [], "dosya": None}
+        from backend.core import thiessen
         with open(cands[0], "rb") as f:
             sts = thiessen.parse_kmz(f.read())
         return {"istasyonlar": sts, "dosya": os.path.basename(cands[0])}
@@ -131,6 +136,7 @@ def api_stations_default():
 @app.post("/api/stations")
 async def api_stations(file: UploadFile = File(...)):
     try:
+        from backend.core import thiessen
         data = await file.read()
         sts = thiessen.parse_kmz(data)
         if not sts:
@@ -142,6 +148,7 @@ async def api_stations(file: UploadFile = File(...)):
 
 @app.post("/api/thiessen")
 def api_thiessen(req: ThiessenReq):
+    from backend.core import thiessen
     try:
         return {"sonuc": thiessen.weights(req.havza_geojson, req.istasyonlar)}
     except Exception as e:
@@ -187,11 +194,13 @@ def api_rain_parse(req: RainParseReq):
 
 @app.get("/api/dplv")
 def api_dplv():
+    from backend.core import tables
     return tables.load("dplv_stations")
 
 
 @app.post("/api/compute")
 def api_compute(req: ComputeReq):
+    from backend.core import engine, rational, snowmelt, tables
     try:
         g = dict(req.girdi)
         kar_res = None
@@ -202,6 +211,8 @@ def api_compute(req: ComputeReq):
                 k.get("melt_rate", 1.08), k.get("period", 15))
             g["kar_qmax"] = kar_res["Qkar_pik"]
         g["P24"] = {int(k): v for k, v in g["P24"].items()}
+        if not g.get("CN3"):
+            g["CN3"] = tables.cn2_to_cn3(g["CN2"])
         res = engine.compute(g)
         if kar_res:
             res["kar"] = kar_res
@@ -214,6 +225,7 @@ def api_compute(req: ComputeReq):
 
 @app.post("/api/yil-ara")
 def api_yil_ara(req: YilAraReq):
+    from backend.core import engine
     t = engine.find_return_period(req.q, req.q10, req.q100)
     return {"tekerrur_yili": t}
 

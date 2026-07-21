@@ -13,14 +13,23 @@ if not hasattr(np, "in1d"):
 if not hasattr(np, "float_"):
     np.float_ = np.float64
 
-import requests
-from pyproj import Geod
-from pysheds.grid import Grid
-from rasterio import features as rfeatures
-from shapely.geometry import LineString, Point, shape
-from shapely.ops import unary_union
+# Ağır kütüphaneler (pysheds→scikit-image→numba→llvmlite, rasterio, shapely)
+# fonksiyon içinden yüklenir — 512 MB planında bellek tasarrufu için.
+# import requests
+# from pyproj import Geod
+# from pysheds.grid import Grid
+# from rasterio import features as rfeatures
+# from shapely.geometry import LineString, Point, shape
+# from shapely.ops import unary_union
 
-GEOD = Geod(ellps="WGS84")
+# GEOD = Geod(ellps="WGS84")
+_GEOD = None
+def _geod():
+    global _GEOD
+    if _GEOD is None:
+        from pyproj import Geod
+        _GEOD = Geod(ellps="WGS84")
+    return _GEOD
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEM_DIR = os.path.join(ROOT, "data", "dem")
 CACHE_DIR = os.path.join(DEM_DIR, "cache")
@@ -52,6 +61,7 @@ def _local_dems():
 
 
 def _download_cop30(lat_i, lon_i):
+    import requests
     os.makedirs(CACHE_DIR, exist_ok=True)
     ns = "N" if lat_i >= 0 else "S"
     ew = "E" if lon_i >= 0 else "W"
@@ -75,6 +85,8 @@ def get_dem_mosaic(bbox):
     """
     import rasterio
     from rasterio.merge import merge
+    from shapely.geometry import shape, box as sbox
+    from shapely.ops import unary_union
 
     w, s, e, n = bbox
     srcs = []
@@ -88,7 +100,6 @@ def get_dem_mosaic(bbox):
             "coordinates": [[(b.left, b.bottom), (b.right, b.bottom),
                              (b.right, b.top), (b.left, b.top), (b.left, b.bottom)]]})
             for p, b in _local_dems() if p in srcs])
-        from shapely.geometry import box as sbox
         covered = u.contains(sbox(w, s, e, n))
     if not covered:
         for lat_i in range(math.floor(s), math.floor(n) + 1):
@@ -133,7 +144,7 @@ def _path_downstream(fdir, r, c, grid_shape, stop=None):
 
 
 def _seg_len_m(lon1, lat1, lon2, lat2):
-    _, _, d = GEOD.inv(lon1, lat1, lon2, lat2)
+    _, _, d = _geod().inv(lon1, lat1, lon2, lat2)
     return d
 
 
@@ -155,8 +166,14 @@ def delineate(lat, lon, buffer_deg=0.15, river_km2=1.0, max_tries=3):
 
 
 def _delineate_once(lat, lon, bbox, river_km2):
-    grid = Grid.from_raster(get_dem_mosaic(bbox))
-    dem = grid.read_raster(get_dem_mosaic(bbox))
+    from pysheds.grid import Grid
+    from rasterio import features as rfeatures
+    from shapely.geometry import LineString, shape
+    from shapely.ops import unary_union
+
+    dem_path = get_dem_mosaic(bbox)
+    grid = Grid.from_raster(dem_path)
+    dem = grid.read_raster(dem_path)
     pit_filled = grid.fill_pits(dem)
     flooded = grid.fill_depressions(pit_filled)
     inflated = grid.resolve_flats(flooded)
