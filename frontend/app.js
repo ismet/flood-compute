@@ -34,24 +34,47 @@ const layers = {
 };
 
 /* ---------------- adım gezinme ---------------- */
-document.querySelectorAll(".step").forEach(b => b.onclick = () => {
+const STEP_KEYS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+document.querySelectorAll(".step").forEach(b => {
+  b.tabIndex = 0;
+  b.onclick = () => activateStep(+b.dataset.step);
+  b.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateStep(+b.dataset.step); }
+    const dir = STEP_KEYS[e.key];
+    if (dir) {
+      e.preventDefault();
+      const n = +b.dataset.step + dir;
+      const next = document.querySelector(`.step[data-step="${n < 1 ? 6 : n > 6 ? 1 : n}"]`);
+      if (next) next.focus();
+    }
+  };
+});
+
+function activateStep(n) {
   document.querySelectorAll(".step").forEach(x => x.classList.remove("active"));
-  b.classList.add("active");
+  document.querySelector(`.step[data-step="${n}"]`).classList.add("active");
   document.querySelectorAll(".page").forEach(p =>
-    p.classList.toggle("hidden", p.dataset.page !== b.dataset.step));
-  // Adım 4'e ilk girişte varsayılan KMZ ile Thiessen'i otomatik hesapla
-  if (b.dataset.step === "4" && S.havza && !S.thiessen.length) useDefaultStations();
-  // Adım 5'e girişte yağış tablosunu istasyonlara göre kur; alt paneli göster
-  $("rainDock").classList.toggle("hidden", b.dataset.step !== "5");
-  if (b.dataset.step === "5") { renderRainTable(); renderDplvGrid(); }
-  // Küçük havzada rasyonel seçeneğini öne çıkar
-  if (b.dataset.step === "6" && +$("inpA").value > 0 && +$("inpA").value <= 1) {
+    p.classList.toggle("hidden", p.dataset.page !== String(n)));
+  if (n === 4 && S.havza && !S.thiessen.length) useDefaultStations();
+  $("rainDock").classList.toggle("hidden", n !== 5);
+  if (n === 5) { renderRainTable(); renderDplvGrid(); }
+  if (n === 6 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
     $("inpRasyonel").checked = true;
     $("rasyonelBox").open = true;
   }
-});
+  if (n === 6) updateComputeReady();
+}
 const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`).classList.add("done");
-const setStatus = (id, msg, cls = "") => { const e = $(id); e.textContent = msg; e.className = "status " + cls; };
+const setStatus = (id, msg, cls = "") => {
+  const e = $(id); e.textContent = msg; e.className = "status " + cls;
+  const loader = $("loader");
+  if (loader) loader.classList.toggle("hidden", cls !== "loading");
+};
+
+function updateComputeReady() {
+  const ready = $("inpA").value && $("inpL").value && S.P24w != null;
+  $("btnCompute").disabled = !ready;
+}
 
 /* ---------------- ADIM 1: havza ---------------- */
 let picking = false;
@@ -59,13 +82,22 @@ $("btnPick").onclick = () => {
   picking = !picking;
   $("btnPick").classList.toggle("picking", picking);
   map.getContainer().style.cursor = picking ? "crosshair" : "";
+  if (picking) setStatus("delinStatus", "Haritaya tıklayın (Esc ile iptal)");
 };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && picking) {
+    picking = false;
+    $("btnPick").classList.remove("picking");
+    map.getContainer().style.cursor = "";
+    setStatus("delinStatus", "İptal edildi", "");
+  }
+});
 map.on("click", async (ev) => {
   if (!picking) return;
   picking = false;
   $("btnPick").classList.remove("picking");
   map.getContainer().style.cursor = "";
-  setStatus("delinStatus", "Havza çıkarılıyor… (ilk seferde DEM indirme birkaç dakika sürebilir)");
+  setStatus("delinStatus", "Havza çıkarılıyor… (DEM işleniyor, birkaç saniye sürebilir)", "loading");
   try {
     const r = await api("/api/delineate", {
       lat: ev.latlng.lat, lon: ev.latlng.lng, river_km2: +$("inpRivThr").value || 1,
@@ -83,6 +115,7 @@ map.on("click", async (ev) => {
       `Havza: ${r.alan_km2} km² | L=${r.L_km} km | Lc=${r.Lc_km} km` +
       (r.kenar_uyarisi ? "\n⚠ Havza pencere kenarına değiyor, sonuçları kontrol edin!" : ""), "ok");
     markDone(1);
+    updateComputeReady();
   } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
 });
 
@@ -103,7 +136,7 @@ renderKotlar();
 /* ---------------- ADIM 3: CN ---------------- */
 $("btnCN").onclick = async () => {
   if (!S.havza) return setStatus("cnStatus", "Önce havzayı çıkarın (Adım 1)", "err");
-  setStatus("cnStatus", "CORINE kesiliyor… (yerel raster yoksa EEA'dan indirilir, birkaç saniye)");
+  setStatus("cnStatus", "CORINE kesiliyor…", "loading");
   try {
     const r = await api("/api/cn", { havza_geojson: S.havza, zemin_grubu: $("inpSoil").value });
     $("inpCN2").value = r.CN2; $("inpCN3").value = r.CN3;
@@ -118,7 +151,7 @@ $("btnCN").onclick = async () => {
 /* ---------------- ADIM 4: Thiessen ---------------- */
 async function runThiessen(stations, kaynak) {
   if (!S.havza) return setStatus("thStatus", "Önce havzayı çıkarın (Adım 1)", "err");
-  setStatus("thStatus", "Thiessen hesaplanıyor…");
+  setStatus("thStatus", "Thiessen hesaplanıyor…", "loading");
   try {
     S.istasyonlar = stations;
     const r2 = await api("/api/thiessen", { havza_geojson: S.havza, istasyonlar: S.istasyonlar });
@@ -143,7 +176,7 @@ async function runThiessen(stations, kaynak) {
 }
 
 async function useDefaultStations() {
-  setStatus("thStatus", "Varsayılan istasyonlar yükleniyor…");
+  setStatus("thStatus", "Varsayılan istasyonlar yükleniyor…", "loading");
   try {
     const r = await api("/api/stations/default");
     if (!r.istasyonlar.length)
@@ -156,7 +189,7 @@ $("btnDefaultSt").onclick = useDefaultStations;
 $("kmzFile").onchange = async () => {
   const f = $("kmzFile").files[0];
   if (!f) return;
-  setStatus("thStatus", "İstasyonlar okunuyor…");
+  setStatus("thStatus", "İstasyonlar okunuyor…", "loading");
   try {
     const fd = new FormData(); fd.append("file", f);
     const r1 = await api("/api/stations", fd, true);
@@ -305,6 +338,7 @@ function recalcRain() {
   } else if (w.length) {
     setStatus("rainStatus", "Tüm istasyonlar için P2..P100 değerlerini girin", "");
   }
+  updateComputeReady();
 }
 
 function dplvRatios() {
@@ -331,7 +365,7 @@ $("btnCompute").onclick = async () => {
       P24: S.P24w, P24_OET: S.OETw ?? 0,
       dplv_ratios: dplvRatios(),
     };
-    setStatus("compStatus", "Hesaplanıyor…");
+    setStatus("compStatus", "Hesaplanıyor…", "loading");
     S.sonuc = await api("/api/compute", {
       girdi, kar,
       rasyonel: $("inpRasyonel").checked,
@@ -439,6 +473,16 @@ function showChart(dur) {
   });
 }
 $("btnCloseChart").onclick = () => $("chartwrap").classList.add("hidden");
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    // Close chart if open
+    const cw = $("chartwrap");
+    if (cw && !cw.classList.contains("hidden")) {
+      cw.classList.add("hidden");
+      return;
+    }
+  }
+});
 
 /* ---------------- dışa aktarım / proje ---------------- */
 function download(name, text) {
@@ -481,6 +525,7 @@ $("projList").onchange = async () => {
   renderKotlar();
   renderRainTable();
   renderDplvGrid();
+  updateComputeReady();
   if (S.havza) { layers.havza.clearLayers(); layers.havza.addData(S.havza); map.fitBounds(layers.havza.getBounds()); }
 };
 loadProjects();
