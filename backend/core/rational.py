@@ -25,7 +25,7 @@ def compute(inp, c100=0.2, exponent=0.2):
     tc_min = max(5.0, tc_min)
     tc_hr = max(0.5, tc_min / 60.0)
 
-    yadk = 1.0 if A < 25 else tables.yad_abak2(tc_hr, A)
+    yadk = 1.0 if A <= 25 else tables.yad_abak2(tc_hr, A)
     plv_tc = tables.plv_ratio(tc_hr, inp["dplv_ratios"])
 
     Q = {}

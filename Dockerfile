@@ -15,4 +15,4 @@ RUN mkdir -p data/dem/cache data/corine/cache data/projects
 ENV HOST=0.0.0.0 PORT=8737
 EXPOSE 8737
 
-CMD ["sh", "-c", "uvicorn backend.main:app --host $HOST --port $PORT --timeout-keep-alive 300"]
+CMD ["sh", "-c", "uvicorn backend.main:app --host $HOST --port $PORT --timeout-keep-alive 300 --limit-max-requests 100"]

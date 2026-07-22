@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 """Havza çıkarımı — alt süreç (subprocess) sürümü.
 
-Render free planında (512 MB RAM) pysheds+numba+scikit-image ~400 MB bellek
-kullanır. Bu modül, delineate() fonksiyonunu ayrı bir Python sürecinde
-çalıştırır; süreç çıkışında tüm bellek işletim sistemine iade edilir.
-
-Çağrı: python -m backend.core._delineate_subprocess <lat> <lon> <river_km2> <buffer_deg>
-Çıktı: tek satır JSON (stdout)
+pyflwdir+numba ~150 MB bellek kullanır. Bu modül, delineate() fonksiyonunu
+ayrı bir Python sürecinde çalıştırır; süreç çıkışında tüm bellek işletim
+sistemine iade edilir.
 """
 import json
 import sys

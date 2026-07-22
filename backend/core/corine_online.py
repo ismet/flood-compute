@@ -18,7 +18,7 @@ CACHE_DIR = os.path.join(ROOT, "data", "corine", "cache")
 EXPORT_URL = ("https://image.discomap.eea.europa.eu/arcgis/rest/services/"
               "Corine/CLC2018_WM/MapServer/export")
 RES_M = 100.0        # hedef çözünürlük (CORINE orijinali 100 m)
-MAX_PX = 4000        # servis tek istekte ~4096 px sınırı
+MAX_PX = 2000        # servis tek istekte ~4096 px sınırı; 2000 px @ 100 m = 200 km yeterli
 COLOR_TOL = 12       # anti-aliasing için en yakın renk toleransı (kanal başına)
 
 
@@ -98,8 +98,11 @@ def fetch_classified(bbox_wgs84, pad_ratio=0.05):
             "EEA CLC2018 servisinden görüntü alınamadı "
             f"(HTTP {r.status_code}). Yerel CORINE rasteri kullanın (data/corine/).")
 
-    with MemoryFile(r.content) as mf, mf.open() as src:
-        bands = src.read()
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)
+        with MemoryFile(r.content) as mf, mf.open() as src:
+            bands = src.read()
     rgb = np.transpose(bands[:3], (1, 2, 0))
     alpha = bands[3] if bands.shape[0] > 3 else None
     codes = _classify_rgb(rgb, alpha)

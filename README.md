@@ -26,7 +26,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 
 ## İş akışı (6 adım)
 
-1. **Havza** — Haritada outlet'e tıklanır; pysheds ile (çukur doldurma → D8 akış
+1. **Havza** — Haritada outlet'e tıklanır; pyflwdir ile (pit doldurma → D8 akış
    yönü → birikim → outlet kenetleme) havza sınırı, dere ağı, en uzun akış yolu
    (L), ağırlık merkezi hizasına kanal mesafesi (Lc) ve alan çıkarılır.
 2. **Parametre** — Ana kanal boyunca 11 kot (harmonik eğim profili) DEM'den

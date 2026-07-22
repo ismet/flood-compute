@@ -8,12 +8,23 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 
-# Ağır kütüphaneler (numpy, scipy, pyproj, shapely) fonksiyon içinden yüklenir
+# Ağır kütüphaneler (numpy, pyproj, shapely) fonksiyon içinden yüklenir
 # — 512 MB planında bellek tasarrufu için.
 # import numpy as np
 # from pyproj import Transformer
-# from scipy.spatial import Voronoi
 # from shapely.geometry import Polygon, shape
+
+def _sanitize(text):
+    """Escape HTML/XML special chars to prevent XSS in innerHTML."""
+    if not text:
+        return ""
+    text = text.strip()
+    text = text.replace("&", "&amp;")
+    text = text.replace("<", "&lt;")
+    text = text.replace(">", "&gt;")
+    text = text.replace("\"", "&quot;")
+    text = text.replace("'", "&#x27;")
+    return text
 
 def parse_kmz(data: bytes):
     """KMZ/KML içeriğinden [{name, lat, lon}] listesi (nokta Placemark'lar).
@@ -39,7 +50,7 @@ def parse_kmz(data: bytes):
     out = []
     for pm in root.findall(".//{*}Placemark"):
         name_el = pm.find("{*}name")
-        name = (name_el.text or "").strip() if name_el is not None else f"IST-{len(out)+1}"
+        name = _sanitize(name_el.text) if name_el is not None else f"IST-{len(out)+1}"
         coord_el = pm.find(".//{*}Point/{*}coordinates")
         if coord_el is None or not coord_el.text:
             continue
@@ -62,8 +73,8 @@ def weights(basin_geojson, stations):
     """
     import numpy as np
     from pyproj import Transformer
-    from scipy.spatial import Voronoi
-    from shapely.geometry import Polygon, shape
+    from shapely import MultiPoint, voronoi_polygons
+    from shapely.geometry import Polygon, shape, box
 
     basin = shape(basin_geojson)
     cen = basin.centroid
@@ -77,22 +88,22 @@ def weights(basin_geojson, stations):
     if len(stations) == 1:
         cells = [basin_m]
     else:
-        # uzak köşe noktalarıyla sınırlı Voronoi
         cx, cy = basin_m.centroid.x, basin_m.centroid.y
         span = max(basin_m.bounds[2] - basin_m.bounds[0],
                    basin_m.bounds[3] - basin_m.bounds[1],
                    np.ptp(pts[:, 0]) if len(pts) > 1 else 1,
                    np.ptp(pts[:, 1]) if len(pts) > 1 else 1) * 100 + 1e5
-        far = [(cx - span, cy - span), (cx + span, cy - span),
-               (cx - span, cy + span), (cx + span, cy + span)]
-        vor = Voronoi(np.vstack([pts, far]))
-        cells = []
-        for i in range(len(stations)):
-            reg = vor.regions[vor.point_region[i]]
-            if -1 in reg or not reg:
-                cells.append(Polygon())
-                continue
-            cells.append(Polygon(vor.vertices[reg]))
+        envelope = box(cx - span, cy - span, cx + span, cy + span)
+        # Deduplicate coincident points (GEOS crashes on them); jitter by ~1mm
+        _pts = pts.tolist()
+        jitter = 0.0
+        for i in range(len(_pts)):
+            for j in range(i):
+                if _pts[i][0] == _pts[j][0] and _pts[i][1] == _pts[j][1]:
+                    jitter += 1e-8
+                    _pts[i] = [_pts[i][0] + jitter, _pts[i][1] + jitter]
+        result = voronoi_polygons(MultiPoint(_pts), extend_to=envelope, ordered=True)
+        cells = list(result.geoms)
 
     tot = basin_m.area
     inv = Transformer.from_crs(epsg, 4326, always_xy=True)
