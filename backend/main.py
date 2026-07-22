@@ -10,9 +10,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# Heavy GIS modules (pysheds→scikit-image→numba→llvmlite, rasterio, scipy) are
+# Heavy GIS modules (pyflwdir→numba, rasterio) are
 # imported lazily inside endpoints to keep startup memory low enough for the
 # 512 MB free plan. Python caches in sys.modules, so repeated imports are free.
+
+import threading
+_delineate_lock = threading.Lock()
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(ROOT, "frontend")
@@ -97,10 +100,19 @@ class YilAraReq(BaseModel):
 # ------------------------------------------------------------------- uçlar
 @app.post("/api/delineate")
 def api_delineate(req: DelineateReq):
-    """Havza çıkarımını ayrı sürece (subprocess) yollar — 512 MB planında
-    pysheds+numba belleği süreç çıkışında işletim sistemine iade edilir."""
-    import subprocess, sys
+    """Havza çıkarımını ayrı sürece (subprocess) yollar — pyflwdir+numba
+    belleği süreç çıkışında işletim sistemine iade edilir."""
+    import math
+    if not (-90 <= req.lat <= 90 and -180 <= req.lon <= 180
+            and math.isfinite(req.lat) and math.isfinite(req.lon)
+            and req.river_km2 > 0 and math.isfinite(req.river_km2)):
+        return _err(ValueError("lat/lon/river_km2 geçersiz"))
+    acquired = _delineate_lock.acquire(blocking=False)
+    if not acquired:
+        return JSONResponse(status_code=503,
+            content={"hata": "Havza çıkarımı devam ediyor, lütfen bekleyip tekrar deneyin."})
     try:
+        import subprocess, sys
         proc = subprocess.run(
             [sys.executable, "-m", "backend.core._delineate_subprocess",
              str(req.lat), str(req.lon), str(req.river_km2)],
@@ -114,6 +126,8 @@ def api_delineate(req: DelineateReq):
         return _err(RuntimeError("Havza çıkarımı zaman aşımına uğradı (4 dk) — DEM indirme çok yavaş olabilir"))
     except Exception as e:
         return _err(e)
+    finally:
+        _delineate_lock.release()
 
 
 @app.post("/api/cn")

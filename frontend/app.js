@@ -26,10 +26,10 @@ const sat = L.tileLayer(
   { maxZoom: 19, attribution: "Esri World Imagery" });
 L.control.layers({ "Harita": osm, "Uydu": sat }).addTo(map);
 const layers = {
-  havza: L.geoJSON(null, { style: { color: "#0b4f8a", weight: 2, fillOpacity: .08 } }).addTo(map),
-  dere: L.geoJSON(null, { style: { color: "#1e88e5", weight: 1.5 } }).addTo(map),
-  kanal: L.geoJSON(null, { style: { color: "#b3261e", weight: 2.5, dashArray: "6 4" } }).addTo(map),
-  thiessen: L.geoJSON(null, { style: { color: "#7b1fa2", weight: 1.5, fillOpacity: .05, dashArray: "3 3" } }).addTo(map),
+  havza: L.geoJSON(null, { style: { color: "#0d5c63", weight: 2, fillOpacity: .08 } }).addTo(map),
+  dere: L.geoJSON(null, { style: { color: "#3b8ea5", weight: 1.5 } }).addTo(map),
+  kanal: L.geoJSON(null, { style: { color: "#c73e3a", weight: 2.5, dashArray: "6 4" } }).addTo(map),
+  thiessen: L.geoJSON(null, { style: { color: "#7d6e4f", weight: 1.5, fillOpacity: .05, dashArray: "3 3" } }).addTo(map),
   markers: L.layerGroup().addTo(map),
 };
 
@@ -130,7 +130,7 @@ async function runThiessen(stations, kaynak) {
     let h = `<table class="tbl"><tr><th>İstasyon</th><th>Ağırlık</th><th>Alan (km²)</th></tr>`;
     aktif.forEach(t => {
       if (t.poligon_geojson) layers.thiessen.addData(t.poligon_geojson);
-      L.circleMarker([t.lat, t.lon], { radius: 6, color: "#7b1fa2", fillOpacity: .8 })
+      L.circleMarker([t.lat, t.lon], { radius: 6, color: "#7d6e4f", fillOpacity: .8 })
         .addTo(layers.markers).bindPopup(`${t.name} (w=${(t.agirlik * 100).toFixed(1)}%)`);
       h += `<tr class="sel"><td>${t.name}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td></tr>`;
     });
@@ -420,7 +420,7 @@ function showChart(dur) {
   sel.innerHTML = DURS.map(d => `<option value="${d}" ${d === dur ? "selected" : ""}>${d} saat</option>`).join("");
   sel.onchange = () => showChart(+sel.value);
   const hy = S.sonuc.dsi.hidrograflar[dur];
-  const colors = { "2": "#90a4ae", "5": "#4fc3f7", "10": "#26a69a", "25": "#ffb300", "50": "#f4511e", "100": "#b3261e", "OET": "#6a1b9a" };
+  const colors = { "2": "#9db5b2", "5": "#64b5aa", "10": "#2a9d8f", "25": "#d9a441", "50": "#e07b3a", "100": "#c73e3a", "OET": "#5e2d48" };
   const dt = 0.5;
   const n = Math.max(...RPS.map(rp => hy[rp].length));
   const labels = Array.from({ length: n }, (_, i) => (i * dt).toFixed(1));

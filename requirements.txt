@@ -3,10 +3,9 @@ uvicorn
 python-multipart
 pydantic>=2
 numpy
-scipy
 shapely
 pyproj
 rasterio
-pysheds
+pyflwdir
 requests
-openpyxl
+

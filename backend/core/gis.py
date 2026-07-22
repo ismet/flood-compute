@@ -1,25 +1,18 @@
 # -*- coding: utf-8 -*-
 """Havza çıkarımı: DEM temini (yerel klasör + Copernicus GLO-30 online),
-pysheds ile akış yönü/birikim, havza sınırı, dere ağı, L, Lc ve harmonik kot profili.
+pyflwdir ile akış yönü/birikim/pit doldurma, havza sınırı, dere ağı,
+L, Lc ve harmonik kot profili.
 """
 import math
 import os
 
 import numpy as np
 
-# pysheds, NumPy 2'de kaldırılan takma adları kullanıyor
-if not hasattr(np, "in1d"):
-    np.in1d = np.isin
-if not hasattr(np, "float_"):
-    np.float_ = np.float64
-
-# Ağır kütüphaneler (pysheds→scikit-image→numba→llvmlite, rasterio, shapely)
-# fonksiyon içinden yüklenir — 512 MB planında bellek tasarrufu için.
-# import requests
+# Ağır kütüphaneler (pyflwdir→numba, rasterio, shapely) fonksiyon içinden
+# yüklenir — bellek tasarrufu için.
 # from pyproj import Geod
-# from pysheds.grid import Grid
 # from rasterio import features as rfeatures
-# from shapely.geometry import LineString, Point, shape
+# from shapely.geometry import LineString, shape
 # from shapely.ops import unary_union
 
 # GEOD = Geod(ellps="WGS84")
@@ -37,7 +30,7 @@ COP30_URL = ("https://copernicus-dem-30m.s3.amazonaws.com/"
              "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM/"
              "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM.tif")
 
-# D8 yön kodlaması (pysheds varsayılanı) -> (dsatır, dsütun)
+# D8 yön kodlaması (pyflwdir/D8 standart) -> (dsatır, dsütun)
 D8 = {64: (-1, 0), 128: (-1, 1), 1: (0, 1), 2: (1, 1),
       4: (1, 0), 8: (1, -1), 16: (0, -1), 32: (-1, -1)}
 
@@ -85,7 +78,7 @@ def get_dem_mosaic(bbox, target_resolution_deg=0.001):
 
     target_resolution_deg: hedef piksel boyutu (derece). Varsayılan 0.001° ≈ 110 m
     (Copernicus GLO-30 orijinali ~0.00027° ≈ 30 m). 3x alt-örnekleme = 9x daha az
-    bellek — 512 MB planında pysheds+numba ile birlikte sığması için gerekli.
+    bellek — pyflwdir+numba ile birlikte sığması için gerekli.
     """
     import rasterio
     from rasterio.merge import merge
@@ -117,9 +110,11 @@ def get_dem_mosaic(bbox, target_resolution_deg=0.001):
     if not srcs:
         raise RuntimeError("Bölgeyi kapsayan DEM bulunamadı (yerel yok, indirme başarısız)")
     dss = [rasterio.open(p) for p in srcs]
-    arr, transform = merge(dss, bounds=(w, s, e, n))
-    for d in dss:
-        d.close()
+    try:
+        arr, transform = merge(dss, bounds=(w, s, e, n))
+    finally:
+        for d in dss:
+            d.close()
 
     # Alt-örnekleme (downsample): hedef çözünürlüğe nearest-neighbor ile
     src_h, src_w = arr.shape[1], arr.shape[2]
@@ -136,30 +131,21 @@ def get_dem_mosaic(bbox, target_resolution_deg=0.001):
         "driver": "GTiff", "count": 1, "dtype": "float32", "crs": "EPSG:4326",
         "nodata": None,
     }
-    tmp = os.path.join(CACHE_DIR if os.path.isdir(CACHE_DIR) else DEM_DIR, "_mosaic.tif")
-    os.makedirs(os.path.dirname(tmp), exist_ok=True)
-    with rasterio.open(tmp, "w", **meta) as dst:
-        dst.write(arr[0].astype("float32"), 1)
+    import tempfile
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = tempfile.NamedTemporaryFile(suffix='.tif', delete=False, dir=CACHE_DIR)
+    tmp.close()
+    try:
+        with rasterio.open(tmp.name, "w", **meta) as dst:
+            dst.write(arr[0].astype("float32"), 1)
+    except Exception:
+        os.unlink(tmp.name)
+        raise
     del arr
-    return tmp
+    return tmp.name
 
 
 # ------------------------------------------------------------- havza çıkarımı
-def _path_downstream(fdir, r, c, grid_shape, stop=None):
-    """(r,c) hücresinden D8 boyunca mansaba hücre listesi; stop hücresinde durur."""
-    path = [(r, c)]
-    seen = {(r, c)}
-    while (r, c) != stop:
-        d = int(fdir[r, c])
-        if d not in D8:
-            break
-        dr, dc = D8[d]
-        r, c = r + dr, c + dc
-        if not (0 <= r < grid_shape[0] and 0 <= c < grid_shape[1]) or (r, c) in seen:
-            break
-        path.append((r, c))
-        seen.add((r, c))
-    return path
 
 
 def _seg_len_m(lon1, lat1, lon2, lat2):
@@ -169,7 +155,7 @@ def _seg_len_m(lon1, lat1, lon2, lat2):
 
 def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=3):
     """Outlet (lat, lon) için havza çıkarımı. GeoJSON + fiziksel parametreler döner."""
-    # Bellek kontrolü (Render free planında 512 MB — pysheds ~400 MB gerektirir)
+    # Bellek kontrolü
     try:
         import resource
         mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
@@ -179,7 +165,7 @@ def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=3):
             mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
             if mem_mb > 450:
                 raise RuntimeError(
-                    f"Yetersiz bellek ({mem_mb:.0f} MB kullanımda, pysheds ~400 MB daha gerektirir). "
+                    f"Yetersiz bellek ({mem_mb:.0f} MB kullanımda). "
                     "Render Starter planına (2 GB RAM) yükseltin veya yerel DEM kullanın.")
     except RuntimeError:
         raise
@@ -202,48 +188,57 @@ def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=3):
 
 def _delineate_once(lat, lon, bbox, river_km2):
     import gc
-    from pysheds.grid import Grid
+    import pyflwdir
     from rasterio import features as rfeatures
     from shapely.geometry import LineString, shape
     from shapely.ops import unary_union
 
     dem_path = get_dem_mosaic(bbox)
-    grid = Grid.from_raster(dem_path)
-    dem = grid.read_raster(dem_path)
-    pit_filled = grid.fill_pits(dem)
-    del dem
-    gc.collect()
-    flooded = grid.fill_depressions(pit_filled)
-    del pit_filled
-    gc.collect()
-    inflated = grid.resolve_flats(flooded)
-    del flooded
-    gc.collect()
-    fdir = grid.flowdir(inflated)
-    del inflated
-    gc.collect()
-    acc = grid.accumulation(fdir)
+
+    # DEM'i oku + pit doldur + akış yönü (pyflwdir tek çağrıda)
+    import rasterio
+    try:
+        with rasterio.open(dem_path) as src:
+            dem_arr = src.read(1)
+            transform = src.transform
+    finally:
+        os.unlink(dem_path)  # clean up tempfile
+    dem_arr = dem_arr.astype(np.float64)
+    dem_arr[dem_arr <= -1e6] = np.nan
+
+    # Pit doldurulmuş DEM + D8 akış yönü (tek geçişte)
+    dem_raw = dem_arr  # raw elevations (harmonik profil için sakla)
+    filled_dem, d8 = pyflwdir.fill_depressions(np.copy(dem_arr), nodata=np.nan)
+    flw = pyflwdir.from_array(d8, ftype='d8', transform=transform, latlon=True)
+    del d8
     gc.collect()
 
+    acc = flw.upstream_area('cell')
+
     # hücre alanı (yaklaşık, merkez enlemde)
-    dx = abs(grid.affine.a) * 111320.0 * math.cos(math.radians(lat))
-    dy = abs(grid.affine.e) * 110540.0
+    dx = abs(transform.a) * 111320.0 * math.cos(math.radians(lat))
+    dy = abs(transform.e) * 110540.0
     cell_km2 = dx * dy / 1e6
 
     # outlet'i yüksek birikime kenetle (~500 m)
     snap_cells = max(3, int(500.0 / dx))
-    col, row = ~grid.affine * (lon, lat)
-    col, row = int(col), int(row)
-    r0, r1 = max(0, row - snap_cells), min(grid.shape[0], row + snap_cells + 1)
-    c0, c1 = max(0, col - snap_cells), min(grid.shape[1], col + snap_cells + 1)
-    win = np.asarray(acc)[r0:r1, c0:c1]
+    col, row = int((lon - transform.c) / transform.a), int((lat - transform.f) / transform.e)
+    h, w = flw.shape
+    r0, r1 = max(0, row - snap_cells), min(h, row + snap_cells + 1)
+    c0, c1 = max(0, col - snap_cells), min(w, col + snap_cells + 1)
+    win = np.array(acc[r0:r1, c0:c1])
     rr, cc = np.unravel_index(np.argmax(win), win.shape)
     row, col = r0 + rr, c0 + cc
-    x_snap, y_snap = grid.affine * (col + 0.5, row + 0.5)
+    idx_out = row * w + col
+    x_snap, y_snap = transform * (col + 0.5, row + 0.5)
 
-    catch = grid.catchment(x=x_snap, y=y_snap, fdir=fdir, xytype="coordinate")
-    catch_arr = np.asarray(catch).astype(bool)
-    del catch
+    # havza maskesi
+    flw.add_pits(xy=([x_snap], [y_snap]))
+    basin_ids = flw.basins(xy=([x_snap], [y_snap]))
+    outlet_id = basin_ids[row, col]
+    if outlet_id == 0:
+        return None
+    catch_arr = np.asarray(basin_ids == outlet_id, dtype=bool)
     n_cells = int(catch_arr.sum())
     if n_cells < 4:
         return None
@@ -255,27 +250,39 @@ def _delineate_once(lat, lon, bbox, river_km2):
 
     # havza poligonu
     shapes = list(rfeatures.shapes(catch_arr.astype(np.uint8),
-                                   mask=catch_arr, transform=grid.affine))
-    poly = unary_union([shape(g) for g, v in shapes]).simplify(abs(grid.affine.a) / 2)
+                                   mask=catch_arr, transform=transform))
+    poly = unary_union([shape(g) for g, v in shapes]).simplify(abs(transform.a) / 2)
     del shapes
     gc.collect()
     if poly.geom_type == "MultiPolygon":
         poly = max(poly.geoms, key=lambda p: p.area)
 
-    fdir_arr = np.asarray(fdir)
+    fdir_arr = flw.to_array('d8')
     acc_arr = np.asarray(acc)
-    del fdir, acc
+    del acc
     gc.collect()
 
-    # ---- en uzun akış yolu: havza içi her uç hücreden değil, akış mesafesiyle
-    dist = grid.distance_to_outlet(x=x_snap, y=y_snap, fdir=fdir, xytype="coordinate")
-    dist_arr = np.asarray(dist)
-    del dist
-    gc.collect()
+    # ---- en uzun akış yolu: akış mesafesi havza içinde max olan hücreden
+    dist_arr = flw.stream_distance(unit='m')
     dist_arr = np.where(catch_arr & np.isfinite(dist_arr), dist_arr, -1)
-    head = np.unravel_index(np.argmax(dist_arr), dist_arr.shape)
-    path = _path_downstream(fdir_arr, head[0], head[1], grid.shape, stop=(row, col))
-    path_ll = [tuple(grid.affine * (c + 0.5, r + 0.5)) for r, c in path]
+    head_idx = int(np.argmax(dist_arr))
+
+    path_idxs, _ = flw.path(idxs=np.array([head_idx]))
+    path_idxs = np.asarray(path_idxs[0])
+
+    # outlet'e kadar olan kısmı al
+    outlet_found = None
+    for i in range(len(path_idxs)):
+        if path_idxs[i] == idx_out:
+            outlet_found = i
+            break
+    if outlet_found is None:
+        outlet_found = len(path_idxs) - 1
+    path_idxs = path_idxs[:outlet_found + 1]
+    path = [(int(x) // w, int(x) % w) for x in path_idxs]
+
+    xs, ys = flw.xy(path_idxs)
+    path_ll = [(float(xs[i]), float(ys[i])) for i in range(len(xs))]
     del dist_arr
     gc.collect()
 
@@ -292,19 +299,17 @@ def _delineate_once(lat, lon, bbox, river_km2):
         d = (px - cen.x) ** 2 + (py - cen.y) ** 2
         if d < dmin:
             dmin, imin = d, i
-    Lc_m = L_m - cum[imin]  # outlet'ten itibaren
+    Lc_m = L_m - cum[imin]
 
-    # ---- harmonik profil: yol boyunca 11 eşit aralıklı kot
-    dem_arr = np.asarray(grid.read_raster(dem_path))  # yeniden oku (inflated silindi)
+    # ---- harmonik profil: yol boyunca 11 eşit aralıklı kot (ham DEM'den)
     prof = []
     for k in range(11):
-        target = L_m * k / 10.0  # H0=outlet (mesafe 0), H10=memba (mesafe L)
+        target = L_m * k / 10.0
         j = min(range(len(cum)), key=lambda i: abs((L_m - cum[i]) - target))
         r, c = path[j]
-        prof.append(float(dem_arr[r, c]))
-    del dem_arr
+        prof.append(float(dem_raw[r, c]))
+    del dem_raw, filled_dem
     gc.collect()
-    # artan olmaya zorla (Excel gereksinimi)
     for i in range(1, 11):
         if prof[i] <= prof[i - 1]:
             prof[i] = prof[i - 1] + 0.1
@@ -313,14 +318,14 @@ def _delineate_once(lat, lon, bbox, river_km2):
     thr = max(30, int(river_km2 / cell_km2))
     riv_mask = (acc_arr >= thr) & catch_arr
     lines = []
-    for r, c in zip(*np.nonzero(riv_mask)):
-        d = int(fdir_arr[r, c])
+    for ri, ci in zip(*np.nonzero(riv_mask)):
+        d = int(fdir_arr[ri, ci])
         if d in D8:
             dr, dc = D8[d]
-            r2, c2 = r + dr, c + dc
-            if 0 <= r2 < grid.shape[0] and 0 <= c2 < grid.shape[1] and riv_mask[r2, c2]:
-                p1 = grid.affine * (c + 0.5, r + 0.5)
-                p2 = grid.affine * (c2 + 0.5, r2 + 0.5)
+            r2, c2 = ri + dr, ci + dc
+            if 0 <= r2 < h and 0 <= c2 < w and riv_mask[r2, c2]:
+                p1 = transform * (ci + 0.5, ri + 0.5)
+                p2 = transform * (c2 + 0.5, r2 + 0.5)
                 lines.append(LineString([p1, p2]))
     rivers = unary_union(lines) if lines else None
     del riv_mask, fdir_arr, acc_arr, catch_arr
