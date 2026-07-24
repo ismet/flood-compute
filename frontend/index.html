@@ -5,7 +5,7 @@
 <title>Taşkın Hesap — Sentetik Yöntemler</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
 <div id="app">
@@ -20,6 +20,11 @@
       </div>
     </header>
 
+    <div id="modeBar">
+      <button id="modeWizard" class="mode-btn active">Tek Havza</button>
+      <button id="modeMulti" class="mode-btn">Ara Havza (Çok Parçalı)</button>
+    </div>
+
     <nav id="steps">
       <button class="step active" data-step="1">1<span>Havza</span></button>
       <button class="step" data-step="2">2<span>Parametre</span></button>
@@ -28,6 +33,29 @@
       <button class="step" data-step="5">5<span>Yağış</span></button>
       <button class="step" data-step="6">6<span>Hesap</span></button>
     </nav>
+
+    <!-- ARA HAVZA MODU -->
+    <section id="multiMode" class="hidden">
+      <p class="hint">Ara havza modu: önce en <b>mansap</b> (çıkış) noktasını, sonra bir veya
+      birkaç <b>memba</b> (üst havza çıkışı) noktasını haritaya ekleyin. Kalan <b>ara havza</b>
+      otomatik hesaplanır; memba hidrografları ara havzanın T<sub>c</sub>'si kadar ötelenip
+      eklenerek en mansaptaki hidrograf bulunur.
+      <b>Önce Adım 4–5'te istasyon ve yağışları yükleyin</b> (paylaşılır; CN & bölge her alt
+      havza için otomatik hesaplanır).</p>
+      <div class="grid2">
+        <button id="btnAddMansap" class="primary">📍 Mansap noktası seç</button>
+        <button id="btnAddMemba" class="primary">➕ Memba noktası ekle</button>
+      </div>
+      <div id="multiPoints"></div>
+      <div class="grid2">
+        <label>Dere eşiği (km²)<input id="multiRivThr" type="number" step="0.1" value="1"></label>
+        <label>Zemin grubu (CN)<select id="multiSoil"><option>A</option><option selected>B</option><option>C</option><option>D</option></select></label>
+        <label>Mansap baz akım Q<sub>baz</sub> (m³/s)<input id="multiQbaz" type="number" step="0.1" value="0"></label>
+      </div>
+      <button id="btnSolveMulti" class="primary big">🔗 Ara Havzayı Çöz ve Hesapla</button>
+      <div id="multiStatus" class="status"></div>
+      <div id="multiResults"></div>
+    </section>
 
     <!-- ADIM 1: Havza -->
     <section class="page" data-page="1">
@@ -52,6 +80,7 @@
       <div class="grid2">
         <label>Bölge sınıfı (YZD)
           <select id="inpRegion"><option>A</option><option>B</option><option>C</option></select>
+          <span id="yzdInfo" class="small"></span>
         </label>
         <label>Baz akım Q<sub>baz</sub> (m³/s)<input id="inpQbaz" type="number" step="0.1" value="0"></label>
       </div>
@@ -115,6 +144,19 @@
           <label>Üs (C_T = C100·(T/100)^üs)<input id="inpUs" type="number" step="0.01" value="0.2"></label>
         </div>
       </details>
+      <details id="snyderBox"><summary>Snyder yöntemi seçenekleri</summary>
+        <label class="chk"><input type="checkbox" id="inpSnyder"> Snyder yöntemini de hesapla</label>
+        <div class="grid2">
+          <label>C<sub>t</sub><input id="inpCt" type="number" step="0.01" value="1.55"></label>
+          <label>C<sub>p</sub><input id="inpCp" type="number" step="0.01" value="0.60"></label>
+          <label>W50 (saat)<input id="inpW50" type="number" step="0.1" placeholder="Şekil 29"></label>
+          <label>W75 (saat)<input id="inpW75" type="number" step="0.1" placeholder="Şekil 29"></label>
+          <label>YALD (24s alansal azaltma)<input id="inpYald" type="number" step="0.001" placeholder="otomatik"></label>
+        </div>
+        <span class="small">t<sub>p</sub>=C<sub>t</sub>·(L·Lc)<sup>0.30</sup>, q<sub>p</sub>=2760·C<sub>p</sub>/t<sub>p</sub>.
+        W50/W75 boşsa tahmini değer kullanılır (Uygulamalı Taşkın Hidrolojisi Şekil 29'dan girin).
+        Q500/1000/10000 ekstrapolasyonla, QOET C<sub>III</sub> ile hesaplanır.</span>
+      </details>
       <button id="btnCompute" class="primary big">▶ HESAPLA</button>
       <div id="compStatus" class="status"></div>
       <div id="results"></div>
@@ -129,6 +171,7 @@
       <div class="dplv-head">
         <b>Yağış Zaman Dağılımı (DPLV)</b>
         <label class="inline">Hazır istasyon: <select id="inpDplv"></select></label>
+        <label class="inline">MGM PLV: <input id="mgmDplv" list="mgmList" placeholder="MGM ara…" style="width:150px"></label>
         <span class="small">— veya 14 oranı Excel'den tabloya yapıştırın</span>
       </div>
       <div id="dplvGrid"></div>
@@ -140,10 +183,33 @@
       </div>
       <canvas id="chart"></canvas>
     </div>
+
+    <div id="cmpWrap" class="hidden">
+      <div class="cmp-head">
+        <b>⚖ Yöntem Karşılaştırma</b>
+        <div class="cmp-tabs">
+          <button class="cmp-tab active" data-tab="pik">Pik Debiler</button>
+          <button class="cmp-tab" data-tab="hidro">Hidrograflar</button>
+        </div>
+        <button id="btnCloseCmp">✕</button>
+      </div>
+      <div class="cmp-ctrl">
+        <span>Tekerrür (yıl):</span>
+        <select id="cmpRP"></select>
+        <span class="cmp-mockusk">Mockus K:
+          <select id="cmpK"><option>K1</option><option>K2</option><option>K3</option></select>
+        </span>
+        <span id="cmpMethods" class="cmp-methods"></span>
+      </div>
+      <div class="cmp-body">
+        <div class="cmp-canvas"><canvas id="cmpChart"></canvas></div>
+        <div id="cmpTable" class="cmp-table"></div>
+      </div>
+    </div>
   </main>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=11"></script>
 </body>
 </html>

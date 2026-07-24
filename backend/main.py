@@ -64,6 +64,18 @@ class DelineateReq(BaseModel):
     river_km2: float = 1.0
 
 
+class MultiDelineateReq(BaseModel):
+    mansap: dict            # {lat, lon}
+    membalar: list         # [{lat, lon}, ...]
+    river_km2: float = 1.0
+
+
+class RouteReq(BaseModel):
+    ara_sonuc: dict                 # engine.compute sonucu (ara havza)
+    memba_sonuclari: list           # [engine.compute sonucu, ...]
+    lag_saat: float                 # öteleme süresi (ara havza Tc'si)
+
+
 class CNReq(BaseModel):
     havza_geojson: dict
     zemin_grubu: str = "B"
@@ -83,7 +95,15 @@ class ComputeReq(BaseModel):
     rasyonel: bool = False
     c100: float = 0.2
     us: float = 0.2       # C_T = C100 * (T/100)^us
+    snyder: bool = False
+    snyder_par: dict | None = None   # {Ct, Cp, W50, W75, YALD?}
     kar: dict | None = None   # {daily_tmax, a_kar_km2, h_kar_m, h_ist_m, melt_rate, period}
+
+
+class ReportReq(BaseModel):
+    girdi: dict
+    sonuc: dict
+    meta: dict | None = None
 
 
 class SaveReq(BaseModel):
@@ -121,7 +141,16 @@ def api_delineate(req: DelineateReq):
         if proc.returncode != 0:
             msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
             raise RuntimeError(msg)
-        return json.loads(proc.stdout.strip().splitlines()[-1])
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        # YZD alansal dağılım bölgesini (A/B/C) havzadan otomatik bul
+        try:
+            from backend.core import yzd_region
+            gj = result.get("havza_geojson")
+            result["yzd_bolge"] = yzd_region.detect(
+                basin_geojson=gj, lat=req.lat, lon=req.lon)
+        except Exception as e:
+            result["yzd_bolge"] = {"bolge": None, "yontem": None, "hata": str(e)}
+        return result
     except subprocess.TimeoutExpired:
         return _err(RuntimeError("Havza çıkarımı zaman aşımına uğradı (4 dk) — DEM indirme çok yavaş olabilir"))
     except Exception as e:
@@ -130,11 +159,75 @@ def api_delineate(req: DelineateReq):
         _delineate_lock.release()
 
 
+@app.post("/api/multi-delineate")
+def api_multi_delineate(req: MultiDelineateReq):
+    """En mansap + memba noktalarından ara havza (ve alt havzalar) çıkarır."""
+    import math
+    pts = [req.mansap] + list(req.membalar)
+    for p in pts:
+        if not (isinstance(p, dict) and -90 <= p.get("lat", 999) <= 90
+                and -180 <= p.get("lon", 999) <= 180):
+            return _err(ValueError("Geçersiz nokta (lat/lon)"))
+    if not req.membalar:
+        return _err(ValueError("En az bir memba noktası gerekli"))
+    acquired = _delineate_lock.acquire(blocking=False)
+    if not acquired:
+        return JSONResponse(status_code=503,
+            content={"hata": "Havza çıkarımı devam ediyor, lütfen bekleyip tekrar deneyin."})
+    try:
+        import subprocess, sys
+        payload = json.dumps({"mansap": req.mansap, "membalar": req.membalar,
+                              "river_km2": req.river_km2})
+        proc = subprocess.run(
+            [sys.executable, "-m", "backend.core._multi_delineate_subprocess"],
+            input=payload, capture_output=True, text=True, timeout=300,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if proc.returncode != 0:
+            msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
+            raise RuntimeError(msg)
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        # ara havza + memba havzaları için YZD bölgesini otomatik ekle
+        try:
+            from backend.core import yzd_region
+            result["ara"]["yzd_bolge"] = yzd_region.detect(basin_geojson=result["ara"]["havza_geojson"])
+            for mb in result["membalar"]:
+                mb["yzd_bolge"] = yzd_region.detect(basin_geojson=mb["havza_geojson"])
+        except Exception:
+            pass
+        return result
+    except subprocess.TimeoutExpired:
+        return _err(RuntimeError("Çok parçalı havza çıkarımı zaman aşımına uğradı (5 dk)"))
+    except Exception as e:
+        return _err(e)
+    finally:
+        _delineate_lock.release()
+
+
+@app.post("/api/route")
+def api_route(req: RouteReq):
+    """Memba hidrograflarını ara havza Tc'si kadar öteleyip mansap hidrografı bulur."""
+    from backend.core import routing
+    try:
+        return routing.route(req.ara_sonuc, req.memba_sonuclari, req.lag_saat)
+    except Exception as e:
+        return _err(e)
+
+
 @app.post("/api/cn")
 def api_cn(req: CNReq):
     from backend.core import corine
     try:
         return corine.cn_from_basin(req.havza_geojson, req.zemin_grubu)
+    except Exception as e:
+        return _err(e)
+
+
+@app.post("/api/yzd-region")
+def api_yzd_region(req: CNReq):
+    """Havza poligonundan YZD alansal dağılım bölgesini (A/B/C) bulur."""
+    from backend.core import yzd_region
+    try:
+        return yzd_region.detect(basin_geojson=req.havza_geojson)
     except Exception as e:
         return _err(e)
 
@@ -224,6 +317,16 @@ def api_dplv():
     return tables.load("dplv_stations")
 
 
+@app.get("/api/mgm-stations")
+def api_mgm_stations():
+    """MGM 2020 PLV: istasyon 24 saatlik tekerrürlü yağışları + PLV oranları."""
+    from backend.core import tables
+    try:
+        return tables.load("mgm_plv_2020")
+    except Exception as e:
+        return _err(e)
+
+
 @app.post("/api/compute")
 def api_compute(req: ComputeReq):
     from backend.core import engine, rational, snowmelt, tables
@@ -244,6 +347,10 @@ def api_compute(req: ComputeReq):
             res["kar"] = kar_res
         if req.rasyonel or g["A_km2"] <= 1.0:
             res["rasyonel"] = rational.compute(g, c100=req.c100, exponent=req.us)
+        if req.snyder and req.snyder_par:
+            from backend.core import snyder
+            sg = {**g, **req.snyder_par}
+            res["snyder"] = snyder.compute(sg)
         return res
     except Exception as e:
         return _err(e)
@@ -254,6 +361,28 @@ def api_yil_ara(req: YilAraReq):
     from backend.core import engine
     t = engine.find_return_period(req.q, req.q10, req.q100)
     return {"tekerrur_yili": t}
+
+
+@app.post("/api/report")
+def api_report(req: ReportReq):
+    """Hesap sonuçlarından Word (.docx) taşkın raporu (Bölüm 4.7.x) üretir."""
+    from fastapi.responses import Response
+    from backend.core import report
+    try:
+        g = dict(req.girdi)
+        if "P24" in g:
+            g["P24"] = {str(k): v for k, v in g["P24"].items()}
+        data = report.build_report(g, req.sonuc, req.meta or {})
+        ad = _safe((req.meta or {}).get("proje_adi") or g.get("ad") or "rapor")
+        # HTTP başlığı ASCII olmalı: Türkçe karakterleri sadeleştir
+        tr = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
+        fn = re.sub(r"[^A-Za-z0-9_.-]+", "_", ad.translate(tr)).strip("_") + "_Taskin_Bolum.docx"
+        return Response(
+            content=data,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+    except Exception as e:
+        return _err(e)
 
 
 # ------------------------------------------------------- proje kayıt (KAY)

@@ -343,3 +343,184 @@ def _delineate_once(lat, lon, bbox, river_km2):
         "kenar_uyarisi": bool(touches),
     }
     return touches, out
+
+
+# ==================== ÇOK PARÇALI HAVZA (ARA HAVZA) ====================
+def _snap_idx(acc, transform, dx, lat, lon, h, w):
+    """Nokta çevresinde ~500 m'de en yüksek birikime kenetle -> (row, col, x, y)."""
+    snap_cells = max(3, int(500.0 / dx))
+    col = int((lon - transform.c) / transform.a)
+    row = int((lat - transform.f) / transform.e)
+    r0, r1 = max(0, row - snap_cells), min(h, row + snap_cells + 1)
+    c0, c1 = max(0, col - snap_cells), min(w, col + snap_cells + 1)
+    win = np.array(acc[r0:r1, c0:c1])
+    rr, cc = np.unravel_index(np.argmax(win), win.shape)
+    row, col = r0 + rr, c0 + cc
+    x, y = transform * (col + 0.5, row + 0.5)
+    return row, col, float(x), float(y)
+
+
+def _params_from_mask(flw, transform, acc_arr, dem_raw, dist_all, mask, outlet_idx,
+                      cell_km2, h, w):
+    """Bir havza maskesinden A, L, Lc, kotlar, poligon ve ana kanal üretir.
+
+    Ana kanal: maske içindeki (outlet'e akış mesafesi en büyük) hücreden outlet'e.
+    """
+    from rasterio import features as rfeatures
+    from shapely.geometry import LineString, shape
+    from shapely.ops import unary_union
+
+    n_cells = int(mask.sum())
+    if n_cells < 4:
+        return None
+    area_km2 = n_cells * cell_km2
+
+    shapes = list(rfeatures.shapes(mask.astype(np.uint8), mask=mask, transform=transform))
+    poly = unary_union([shape(g) for g, v in shapes]).simplify(abs(transform.a) / 2)
+    if poly.geom_type == "MultiPolygon":
+        poly = max(poly.geoms, key=lambda p: p.area)
+
+    d = np.where(mask & np.isfinite(dist_all), dist_all, -1)
+    head_idx = int(np.argmax(d))
+    path_idxs, _ = flw.path(idxs=np.array([head_idx]))
+    path_idxs = np.asarray(path_idxs[0])
+    cut = len(path_idxs) - 1
+    for i in range(len(path_idxs)):
+        if path_idxs[i] == outlet_idx:
+            cut = i
+            break
+    path_idxs = path_idxs[:cut + 1]
+    path = [(int(x) // w, int(x) % w) for x in path_idxs]
+    xs, ys = flw.xy(path_idxs)
+    path_ll = [(float(xs[i]), float(ys[i])) for i in range(len(xs))]
+
+    cum = [0.0]
+    for i in range(1, len(path_ll)):
+        cum.append(cum[-1] + _seg_len_m(*path_ll[i - 1], *path_ll[i]))
+    L_m = cum[-1] or 1.0
+
+    cen = poly.centroid
+    imin = min(range(len(path_ll)),
+               key=lambda i: (path_ll[i][0] - cen.x) ** 2 + (path_ll[i][1] - cen.y) ** 2)
+    Lc_m = L_m - cum[imin]
+
+    prof = []
+    for k in range(11):
+        target = L_m * k / 10.0
+        j = min(range(len(cum)), key=lambda i: abs((L_m - cum[i]) - target))
+        r, c = path[j]
+        prof.append(float(dem_raw[r, c]))
+    for i in range(1, 11):
+        if not np.isfinite(prof[i]) or prof[i] <= prof[i - 1]:
+            prof[i] = prof[i - 1] + 0.1
+
+    return {
+        "alan_km2": round(area_km2, 3),
+        "L_km": round(L_m / 1000.0, 3),
+        "Lc_km": round(Lc_m / 1000.0, 3),
+        "kotlar": [round(p, 1) for p in prof],
+        "havza_geojson": poly.__geo_interface__,
+        "ana_kanal_geojson": LineString(path_ll).__geo_interface__,
+    }
+
+
+def multi_delineate(down, ups, river_km2=1.0):
+    """En mansap noktası (down) ve memba noktaları (ups) için ara havza çözümü.
+
+    down/ups: {"lat":.., "lon":..}. Döner:
+      {"mansap": {outlet, alan_km2, havza_geojson, ...},
+       "membalar": [ {outlet, ...}, ... ],
+       "ara": {alan_km2, L_km, Lc_km, kotlar, havza_geojson, ...},
+       "uyari": [...] }
+    """
+    import gc
+    import pyflwdir
+    import rasterio
+    from shapely.geometry import shape
+    from shapely.ops import unary_union
+
+    lats = [down["lat"]] + [u["lat"] for u in ups]
+    lons = [down["lon"]] + [u["lon"] for u in ups]
+    span = max(max(lats) - min(lats), max(lons) - min(lons))
+    buf = max(0.15, span * 0.6)
+    bbox = (min(lons) - buf, min(lats) - buf, max(lons) + buf, max(lats) + buf)
+
+    dem_path = get_dem_mosaic(bbox)
+    with rasterio.open(dem_path) as src:
+        dem_arr = src.read(1).astype(np.float64)
+        transform = src.transform
+    os.unlink(dem_path)
+    dem_arr[dem_arr <= -1e6] = np.nan
+    dem_raw = dem_arr
+    filled, d8 = pyflwdir.fill_depressions(np.copy(dem_arr), nodata=np.nan)
+    flw = pyflwdir.from_array(d8, ftype="d8", transform=transform, latlon=True)
+    del d8, filled
+    gc.collect()
+    acc = np.array(flw.upstream_area("cell"))
+    h, w = flw.shape
+    dx = abs(transform.a) * 111320.0 * math.cos(math.radians(down["lat"]))
+    dy = abs(transform.e) * 110540.0
+    cell_km2 = dx * dy / 1e6
+    dist_all = np.asarray(flw.stream_distance(unit="m"))
+
+    # mansap havzası
+    dr, dc, xod, yod = _snap_idx(acc, transform, dx, down["lat"], down["lon"], h, w)
+    d_idx = dr * w + dc
+    d_mask = np.asarray(flw.basins(xy=([xod], [yod])) > 0)
+    if d_mask.sum() < 4:
+        raise RuntimeError("Mansap havzası çıkarılamadı (nokta akış yoluna oturmuyor)")
+
+    uyari = []
+    # memba havzaları
+    u_masks, membalar = [], []
+    for k, u in enumerate(ups):
+        ur, uc, xou, you = _snap_idx(acc, transform, dx, u["lat"], u["lon"], h, w)
+        u_idx = ur * w + uc
+        um = np.asarray(flw.basins(xy=([xou], [you])) > 0)
+        if um.sum() < 4:
+            uyari.append(f"{k+1}. memba noktası havza çıkarmadı, atlandı")
+            continue
+        if (um & ~d_mask).sum() > 0.02 * um.sum():
+            uyari.append(f"{k+1}. memba havzası mansap havzasının dışına taşıyor "
+                         "(mansabın üstünde değil olabilir)")
+        um = um & d_mask  # mansap içine kırp
+        pm = _params_from_mask(flw, transform, acc, dem_raw, dist_all, um, u_idx,
+                               cell_km2, h, w)
+        if pm is None:
+            continue
+        pm["outlet"] = {"lat": u["lat"], "lon": u["lon"], "snap_lat": you, "snap_lon": xou}
+        membalar.append(pm)
+        u_masks.append(um)
+
+    # ara havza = mansap − ∪ memba
+    inter_mask = d_mask.copy()
+    for um in u_masks:
+        inter_mask &= ~um
+    ara = _params_from_mask(flw, transform, acc, dem_raw, dist_all, inter_mask, d_idx,
+                            cell_km2, h, w)
+    if ara is None:
+        raise RuntimeError("Ara havza çok küçük (memba noktaları mansaba çok yakın olabilir)")
+    ara["outlet"] = {"lat": down["lat"], "lon": down["lon"], "snap_lat": yod, "snap_lon": xod}
+
+    # mansap havzası poligonu (referans)
+    dshapes = list(__import__("rasterio").features.shapes(
+        d_mask.astype(np.uint8), mask=d_mask, transform=transform))
+    dpoly = unary_union([shape(g) for g, v in dshapes]).simplify(abs(transform.a) / 2)
+    if dpoly.geom_type == "MultiPolygon":
+        dpoly = max(dpoly.geoms, key=lambda p: p.area)
+
+    touches = bool(d_mask[0, :].any() or d_mask[-1, :].any()
+                   or d_mask[:, 0].any() or d_mask[:, -1].any())
+    if touches:
+        uyari.append("Mansap havzası pencere kenarına değiyor; sonuçları kontrol edin")
+
+    return {
+        "mansap": {
+            "outlet": {"lat": down["lat"], "lon": down["lon"], "snap_lat": yod, "snap_lon": xod},
+            "alan_km2": round(int(d_mask.sum()) * cell_km2, 3),
+            "havza_geojson": dpoly.__geo_interface__,
+        },
+        "membalar": membalar,
+        "ara": ara,
+        "uyari": uyari,
+    }

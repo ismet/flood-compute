@@ -8,4 +8,6 @@ pyproj
 rasterio
 pyflwdir
 requests
+python-docx
+matplotlib
 

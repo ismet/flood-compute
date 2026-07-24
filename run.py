@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+cd# -*- coding: utf-8 -*-
 """Uygulamayı başlatır: python run.py  ->  http://127.0.0.1:8737
 
 Ortam değişkenleri: HOST (vars. 127.0.0.1), PORT (vars. 8737),

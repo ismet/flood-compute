@@ -78,3 +78,9 @@ def cn2_to_cn3(cn2):
     """CN Şart II -> Şart III (Excel CNIII sayfası, doğrusal interpolasyon)."""
     t = load("cn2_to_cn3")
     return interp1(cn2, t["cn2"], t["cn3"])
+
+
+def yzdo(ratio, region):
+    """Snyder YZDO zaman dağılımı: T/ΣT oranı -> kümülatif yağış oranı (24 sa=1)."""
+    t = load("yzdo_curves")
+    return interp1(ratio, t["ratios"], t[region])
