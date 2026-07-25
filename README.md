@@ -23,6 +23,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
 | `data/stations/` | Varsayılan istasyon seti (`DMİ.kmz`, 684 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
+| `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 
 ## İş akışı (6 adım)
@@ -59,6 +60,8 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      azaltma + 1.13 maksimizasyon + SCS akış) tr saat kaydırmayla süperpoze edilir.
      Q2–Q100 CII, QOET CIII; Q500/1000/10000 ekstrapolasyon. Parametreler ve
      Q2–Q100 pikleri Excel ile birebir (`backend/tests/test_snyder_golden.py`).
+     W50/W75 girilmezse **ŞEKİL 1 (DSİ Snyder abağı)** formülüyle otomatik okunur:
+     W50=5.87/(Qp/A)^1.08/2.54, W75=3.35/(Qp/A)^1.08/2.54 (qp'den; `snyder.w50_w75`).
    * Hidrograf grafiği, CSV/JSON dışa aktarım, debiden tekerrür yılı bulma
      (`Yıl_Ara` makrosunun analitik çözümü: Q = Q10 + (0.99·log₁₀T − 0.98)·(Q100−Q10)).
    * **⚖ Yöntem Karşılaştırma** (tam ekran): dört yöntemi (DSİ/Mockus/Rasyonel/Snyder)
@@ -78,17 +81,55 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 
 ## Ara Havza (çok parçalı havza) modu
 
-Üst kısımdaki **Ara Havza** düğmesiyle geçilir. Boztepe Bölüm 4.7 metodolojisi:
+Üst kısımdaki **Ara Havza** düğmesiyle geçilir. Panelde net numaralı sıra izlenir
+(Boztepe Bölüm 4.7 metodolojisi):
 
-1. Haritada en **mansap** (çıkış) noktası + bir/birkaç **memba** (üst havza çıkışı) seçilir.
-2. `/api/multi-delineate` tek DEM geçişinde mansap havzasını ve her memba havzasını çıkarır;
-   **ara havza = mansap − ∪memba** (alan korunumu birebir: memba + ara = mansap). Her alt havza
-   için A, L, Lc, 11 kot profili, Tc (Kirpich/DSİ) ve YZD bölgesi otomatik bulunur.
-3. Her alt havza otomatik hesaplanır: Thiessen ağırlıkları (Adım 4 istasyonları) + CORINE-CN
-   + bölge → DSİ hidrografları. Yağış ve DPLV Adım 5'ten paylaşılır; baz akım alan oranıyla dağıtılır.
-4. `/api/route` memba hidrograflarını **ara havzanın Tc'si kadar öteleyip** ara havza hidrografına
-   ekler: `Q_mansap(t) = Q_ara(t) + Σ Q_memba(t − Tc_ara)`. Sonuç: alt havza tablosu, mansap
-   pik debileri, ötelenmiş mansap hidrografları (grafik + CSV). `backend/core/routing.py`, `gis.multi_delineate`.
+1. **Ortak veri** — istasyon (Adım 4) ve yağış (Adım 5) “Tek Havza” modundan paylaşılır;
+   panel üstünde yüklü/eksik durumu gösterilir.
+2. **Noktalar** — haritada önce **mansap** (çıkış), sonra bir/birkaç **memba** (üst havza çıkışı).
+3. **Ayarlar & yöntemler** — dere eşiği, zemin grubu, mansap baz akımı ve **hesaplanacak
+   yöntemler** (DSİ zorunlu; Mockus/Rasyonel/Snyder onay kutuları + Ct/Cp).
+4. **Çöz ve hesapla** — iki aşama:
+   - **① Havzaları Çöz:** `/api/multi-delineate` tek DEM geçişinde mansap ve her memba havzasını
+     çıkarır; **ara havza = mansap − ∪memba** (alan korunumu birebir). Her alt havza için A, L, Lc,
+     11 kot, Tc (Kirpich/DSİ), YZD bölgesi bulunur ve alt havza tablosu gösterilir.
+   - **② Hesapla ve Ötele:** her alt havza seçili yöntemlerle otomatik hesaplanır (Thiessen
+     ağırlıkları + CORINE-CN + bölge; baz akım alan oranıyla dağıtılır), sonra `/api/route`
+     memba hidrograflarını **ara havzanın Tc'si kadar öteleyip** ara havzaya ekler:
+     `Q_mansap(t) = Q_ara(t) + Σ Q_memba(t − Tc_ara)`. **Her yöntem ayrı ötelenir** — DSİ ve
+     Snyder gerçek süperpozisyon, Mockus ve Rasyonel üçgen hidrografla. Sonuç: alt havza tablosu,
+     **yöntem × tekerrür mansap pik tablosu**, seçilen yöntemin hidrograf grafiği + CSV.
+     `backend/core/routing.py` (`route(..., methods)`), `gis.multi_delineate`.
+
+## Rezervuar (Hazne) Taşkın Ötelemesi
+
+Hesap sonuçlarındaki **🏞 Rezervuar Ötelemesi** düğmesiyle açılır (tek havza ve
+ara havza mansap sonuçları için). **Storage-Indication / Modified Puls** yöntemi
+(Söylemez T28 sayfasının birebir karşılığı — `backend/tests/test_reservoir_golden.py`
+ile çıkış piki, maks su kotu, sönümleme makine hassasiyetinde doğrulandı):
+
+    (2S/Δt+O)_{t+1} = (I_t+I_{t+1}) + (2S/Δt−O)_t,  O = φ⁻¹(2S/Δt+O)
+
+- **Girdi hidrografı:** hesaplanan hidrograflardan seçilir (DSİ hakim süre / Snyder /
+  ara havza mansap; yöntem × tekerrür).
+- **Hacim-satıh eğrisi**, **kret kotu** ve **yaklaşım taban kotu** varsayılanları
+  Söylemez'den (`data/tables/soylemez_reservoir.json`, `/api/reservoir-defaults`).
+- **Dolusavak debisi:** ya Söylemez rating tablosu, ya da **geometriden** kontrolsüz
+  dolusavak: Q=C·L_e·He^1.5, L_e=L+2·He·tan(apron giriş açısı).
+- **Çıktı:** ötelenmiş çıkış hidrografı, su kotu, giriş/çıkış pik, **pik sönümleme %**,
+  pik gecikmesi, maks su kotu; grafik + koordinat tablosu + CSV. `backend/core/reservoir.py`.
+
+### Kapaklı (kontrollü) dolusavak — kapak optimizasyonu
+
+Rezervuar panelinde **Tip = Kapaklı** seçilir. Kapak altı akım
+Q=(2/3)√(2g)·C·L_ef·(H1^1.5−H2^1.5)+W1 (Excel `1512_FloodRouting` sayfası; varsayılanlar
+`data/tables/kapakli_reservoir.json`, `/api/reservoir-controlled-defaults`). Kapaklar bir
+**optimizasyon programıyla** işletilir: su kotu **izin verilen maks kotu geçmez**, çıkış
+**girişi aşmaz** (O≤I) ve **çıkış piki minimum** olur — başlangıç kotu (öteleme başlangıç
+kotu, girdi) ile maks kot arasındaki depolama kullanılarak *pik-tavan (peak-shaving)*
+uygulanır (min uygulanabilir tavan ikili aramayla bulunur). Çıktı: ötelenmiş çıkış, su kotu
+ve **kapak açıklığı programı** (grafik + tablo + CSV). `reservoir.route_controlled`,
+`/api/reservoir-controlled`.
 
 ## Excel makrolarının karşılıkları
 

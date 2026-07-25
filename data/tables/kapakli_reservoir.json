@@ -1,0 +1,43 @@
+{
+ "aciklama": "1512 kapaklı dolusavak — kontrollü öteleme varsayılanları.",
+ "nss": 1512.0,
+ "esik_kotu": 1499.0,
+ "lef": 10.5,
+ "taban_debi_W1": 90.0,
+ "hacim_satih": {
+  "kolonlar": [
+   "kot_m",
+   "hacim_hm3"
+  ],
+  "veri": [
+   [
+    1495,
+    345
+   ],
+   [
+    1499.9999,
+    407
+   ],
+   [
+    1505,
+    474
+   ],
+   [
+    1510,
+    554.314
+   ],
+   [
+    1512,
+    590.518
+   ],
+   [
+    1515,
+    656.146
+   ],
+   [
+    1520,
+    763.123
+   ]
+  ]
+ }
+}

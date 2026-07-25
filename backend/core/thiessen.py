@@ -47,10 +47,21 @@ def parse_kmz(data: bytes):
         decls = "".join(f' xmlns:{p}="urn:x-ignore:{p}"' for p in missing)
         txt = re.sub(r"<kml\b", "<kml" + decls, txt, count=1)
     root = ET.fromstring(txt)
+    # ExtendedData/SchemaData'da istasyon adını taşıyan olası alan adları
+    NAME_KEYS = ("istasyonad", "istasyon", "istasyon_adi", "ad", "adi", "name",
+                 "station", "istno", "isim")
     out = []
     for pm in root.findall(".//{*}Placemark"):
         name_el = pm.find("{*}name")
-        name = _sanitize(name_el.text) if name_el is not None else f"IST-{len(out)+1}"
+        name = _sanitize(name_el.text) if name_el is not None and name_el.text else ""
+        if not name:  # <name> yoksa ExtendedData SimpleData'dan çek
+            for sd in pm.findall(".//{*}SimpleData"):
+                key = (sd.get("name") or "").strip().lower()
+                if key in NAME_KEYS and sd.text and sd.text.strip():
+                    name = _sanitize(sd.text)
+                    break
+        if not name:
+            name = f"IST-{len(out) + 1}"
         coord_el = pm.find(".//{*}Point/{*}coordinates")
         if coord_el is None or not coord_el.text:
             continue

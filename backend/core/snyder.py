@@ -34,6 +34,18 @@ def parameters(A_km2, L_km, Lc_km, Ct, Cp):
     return {"tp": tp, "tr": int(tr), "qp": qp, "Qp": Qp, "Tp": int(Tp), "Tb": int(Tb)}
 
 
+def w50_w75(qp):
+    """ŞEKİL 1 (DSİ Snyder abağı) — qp'den birim hidrograf genişlikleri (saat).
+
+    W50 = 5.87/(Qp/A)^1.08/2.54,  W75 = 3.35/(Qp/A)^1.08/2.54
+    Qp/A = qp·10⁻³ (m³/s/km²/cm), qp lt/s/km²/cm. (USACE genişlik bağıntısı.)
+    """
+    q = qp / 1000.0
+    W50 = 5.87 / q ** 1.08 / 2.54
+    W75 = 3.35 / q ** 1.08 / 2.54
+    return W50, W75
+
+
 # ------------------------------------------------------------- birim hidrograf
 def unit_hydrograph(A_km2, par, W50, W75):
     """Saatlik Snyder UH (m³/s/mm), hacmi 1 mm'ye dengelenmiş.
@@ -139,8 +151,9 @@ def compute(inp):
     yald = inp.get("YALD")
     if yald is None:
         yald = tables.yad_abak2(24.0, A) if A > 25 else 1.0
-    W50 = inp.get("W50") or par["Tp"] * 1.45
-    W75 = inp.get("W75") or W50 * 0.586
+    w50_def, w75_def = w50_w75(par["qp"])   # ŞEKİL 1 abağı formülü
+    W50 = inp.get("W50") or w50_def
+    W75 = inp.get("W75") or w75_def
     qbaz = inp.get("Qbaz", 0.0) or 0.0
 
     uh, vol = unit_hydrograph(A, par, W50, W75)
@@ -164,9 +177,20 @@ def compute(inp):
     ext = extrapolate(peaks["10"], peaks["100"])
     t_axis = [float(i) for i in range(max(len(h) for h in hydro.values()))]
 
+    # YZDO (zaman dağılımı) + YAD (alansal azaltma) dökümü — otomatik çekilen değerler
+    n = int(round(24.0 / tr))
+    dagilim = []
+    for k in range(1, n + 1):
+        ratio = min(1.0, k * tr / 24.0)
+        yzdo = 1.0 if ratio >= 1.0 else tables.yzdo(round(ratio, 6), inp["region"])
+        dagilim.append({"blok": k, "sure_sa": k * tr, "oran": round(ratio, 4),
+                        "yzdo": round(yzdo, 4)})
+
     return {
         "parametreler": {**par, "W50": W50, "W75": W75, "YALD": yald,
                          "hacim_mm": vol, "CN2": cn2, "CN3": cn3, "Qbaz": qbaz},
+        "yzdo_yad": {"bolge": inp["region"], "YALD": yald, "tr": tr,
+                     "n_blok": n, "MF": MF, "bloklar": dagilim},
         "birim_hidrograf": uh,
         "hidrograflar": hydro,
         "pikler": {**peaks, "500": ext[500], "1000": ext[1000], "10000": ext[10000]},

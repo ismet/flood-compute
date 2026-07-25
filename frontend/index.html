@@ -5,7 +5,7 @@
 <title>Taşkın Hesap — Sentetik Yöntemler</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="/static/style.css?v=11">
+<link rel="stylesheet" href="/static/style.css?v=26">
 </head>
 <body>
 <div id="app">
@@ -36,23 +36,40 @@
 
     <!-- ARA HAVZA MODU -->
     <section id="multiMode" class="hidden">
-      <p class="hint">Ara havza modu: önce en <b>mansap</b> (çıkış) noktasını, sonra bir veya
-      birkaç <b>memba</b> (üst havza çıkışı) noktasını haritaya ekleyin. Kalan <b>ara havza</b>
-      otomatik hesaplanır; memba hidrografları ara havzanın T<sub>c</sub>'si kadar ötelenip
-      eklenerek en mansaptaki hidrograf bulunur.
-      <b>Önce Adım 4–5'te istasyon ve yağışları yükleyin</b> (paylaşılır; CN & bölge her alt
-      havza için otomatik hesaplanır).</p>
+      <p class="hint">Memba (üst) havzalarının taşkın hidrografları, ara havzanın
+      T<sub>c</sub>'si kadar ötelenip ara havza hidrografına eklenerek en mansaptaki hidrograf
+      bulunur (seçilen tüm yöntemlere göre).</p>
+
+      <div class="mstep"><b>1) Ortak veri</b> — istasyon & yağış (paylaşılır)</div>
+      <div id="multiShared" class="small"></div>
+
+      <div class="mstep"><b>2) Noktalar</b> — önce mansap, sonra memba(lar)</div>
       <div class="grid2">
-        <button id="btnAddMansap" class="primary">📍 Mansap noktası seç</button>
-        <button id="btnAddMemba" class="primary">➕ Memba noktası ekle</button>
+        <button id="btnAddMansap" class="primary">📍 Mansap seç</button>
+        <button id="btnAddMemba" class="primary">➕ Memba ekle</button>
       </div>
       <div id="multiPoints"></div>
+
+      <div class="mstep"><b>3) Ayarlar & yöntemler</b></div>
       <div class="grid2">
         <label>Dere eşiği (km²)<input id="multiRivThr" type="number" step="0.1" value="1"></label>
         <label>Zemin grubu (CN)<select id="multiSoil"><option>A</option><option selected>B</option><option>C</option><option>D</option></select></label>
         <label>Mansap baz akım Q<sub>baz</sub> (m³/s)<input id="multiQbaz" type="number" step="0.1" value="0"></label>
       </div>
-      <button id="btnSolveMulti" class="primary big">🔗 Ara Havzayı Çöz ve Hesapla</button>
+      <div class="mmethods">
+        <label class="chk"><input type="checkbox" class="mmethod" data-m="dsi" checked disabled> DSİ Sentetik</label>
+        <label class="chk"><input type="checkbox" class="mmethod" data-m="mockus" checked> Mockus</label>
+        <label class="chk"><input type="checkbox" class="mmethod" data-m="rasyonel"> Rasyonel</label>
+        <label class="chk"><input type="checkbox" class="mmethod" data-m="snyder"> Snyder</label>
+        <label class="inline">C<sub>t</sub><input id="multiCt" type="number" step="0.01" value="1.55" style="width:60px"></label>
+        <label class="inline">C<sub>p</sub><input id="multiCp" type="number" step="0.01" value="0.60" style="width:60px"></label>
+      </div>
+
+      <div class="mstep"><b>4) Çöz ve hesapla</b></div>
+      <div class="grid2">
+        <button id="btnSolveDelin" class="primary">① Havzaları Çöz</button>
+        <button id="btnSolveCompute" class="primary" disabled>② Hesapla ve Ötele</button>
+      </div>
       <div id="multiStatus" class="status"></div>
       <div id="multiResults"></div>
     </section>
@@ -117,10 +134,10 @@
 
     <!-- ADIM 4: Thiessen -->
     <section class="page hidden" data-page="4">
-      <p class="hint">Varsayılan istasyon seti (<code>data/stations/DMİ.kmz</code>) otomatik
-      kullanılır; isterseniz başka bir KMZ/KML yükleyin. Thiessen poligonları havzaya
-      kesilerek alan ağırlıkları bulunur.</p>
-      <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan (DMİ.kmz)</button>
+      <p class="hint">Varsayılan istasyon seti (<code>data/stations/cikti_verisi.kml</code>, MGM
+      istasyon ağı) otomatik kullanılır; isterseniz başka bir KMZ/KML yükleyin. Thiessen
+      poligonları havzaya kesilerek alan ağırlıkları bulunur.</p>
+      <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan</button>
       <input type="file" id="kmzFile" accept=".kmz,.kml">
       <div id="thStatus" class="status"></div>
       <div id="thTable"></div>
@@ -149,12 +166,15 @@
         <div class="grid2">
           <label>C<sub>t</sub><input id="inpCt" type="number" step="0.01" value="1.55"></label>
           <label>C<sub>p</sub><input id="inpCp" type="number" step="0.01" value="0.60"></label>
-          <label>W50 (saat)<input id="inpW50" type="number" step="0.1" placeholder="Şekil 29"></label>
-          <label>W75 (saat)<input id="inpW75" type="number" step="0.1" placeholder="Şekil 29"></label>
+          <label>W50 (saat)<input id="inpW50" type="number" step="0.1" placeholder="ŞEKİL 1 (oto)"></label>
+          <label>W75 (saat)<input id="inpW75" type="number" step="0.1" placeholder="ŞEKİL 1 (oto)"></label>
           <label>YALD (24s alansal azaltma)<input id="inpYald" type="number" step="0.001" placeholder="otomatik"></label>
         </div>
-        <span class="small">t<sub>p</sub>=C<sub>t</sub>·(L·Lc)<sup>0.30</sup>, q<sub>p</sub>=2760·C<sub>p</sub>/t<sub>p</sub>.
-        W50/W75 boşsa tahmini değer kullanılır (Uygulamalı Taşkın Hidrolojisi Şekil 29'dan girin).
+        <div id="snyWReadout" class="snyw-readout small"></div>
+        <span class="small">C<sub>t</sub> ↔ C<sub>p</sub> abaktan otomatik bağlıdır (birini girince diğeri gelir).
+        t<sub>p</sub>=C<sub>t</sub>·(L·Lc)<sup>0.30</sup>, q<sub>p</sub>=2760·C<sub>p</sub>/t<sub>p</sub>.
+        W50/W75 boşsa <b>ŞEKİL 1 abağından otomatik</b> okunur:
+        W50=5.87/(Q<sub>p</sub>/A)<sup>1.08</sup>/2.54, W75=3.35/(Q<sub>p</sub>/A)<sup>1.08</sup>/2.54.
         Q500/1000/10000 ekstrapolasyonla, QOET C<sub>III</sub> ile hesaplanır.</span>
       </details>
       <button id="btnCompute" class="primary big">▶ HESAPLA</button>
@@ -165,6 +185,10 @@
 
   <main id="mapwrap">
     <div id="map"></div>
+    <div id="mapSearch">
+      <input id="geoQ" type="text" placeholder="🔍 İl / ilçe / mahalle ara…" autocomplete="off">
+      <div id="geoResults" class="hidden"></div>
+    </div>
     <div id="rainDock" class="hidden">
       <div id="rainGrid"></div>
       <div id="rainStatus" class="status"></div>
@@ -206,10 +230,89 @@
         <div id="cmpTable" class="cmp-table"></div>
       </div>
     </div>
+
+    <div id="mcmpWrap" class="hidden">
+      <div class="cmp-head">
+        <b>⚖ Çok Parçalı — Sonuç ve Karşılaştırma</b>
+        <div class="cmp-tabs">
+          <button class="mcmp-tab active" data-tab="bilesen">Bileşenler + Süperpozisyon</button>
+          <button class="mcmp-tab" data-tab="pik">Yöntem Pik</button>
+          <button class="mcmp-tab" data-tab="hidro">Yöntem Hidrograf</button>
+        </div>
+        <button id="btnCloseMcmp">✕</button>
+      </div>
+      <div class="cmp-ctrl">
+        <span>Tekerrür (yıl):</span><select id="mcmpRP"></select>
+        <span class="mcmp-method">Yöntem:<select id="mcmpMethod"></select></span>
+      </div>
+      <div class="cmp-body">
+        <div class="cmp-canvas"><canvas id="mcmpChart"></canvas></div>
+        <div id="mcmpTable" class="cmp-table"></div>
+      </div>
+    </div>
+
+    <div id="resWrap" class="hidden">
+      <div class="cmp-head">
+        <b>🏞 Rezervuar (Hazne) Taşkın Ötelemesi — Storage-Indication</b>
+        <button id="btnCloseRes">✕</button>
+      </div>
+      <div class="cmp-ctrl">
+        <label class="inline">Rezervuar noktası: <select id="resPoint"></select></label>
+        <label class="inline">Yöntem <select id="resMethod"></select></label>
+        <label class="inline">Tekerrür <select id="resRP"></select></label>
+        <label class="inline">Tip
+          <select id="resType"><option value="kontrolsuz">Kontrolsüz</option><option value="kapakli">Kapaklı (kontrollü)</option></select>
+        </label>
+        <span id="resUncon">
+          <label class="inline">Kret kotu (m) <input id="resKret" type="number" step="0.1" style="width:80px"></label>
+          <label class="inline">Dolusavak
+            <select id="resMode"><option value="tablo">Söylemez rating tablosu</option><option value="geom">Geometriden</option></select>
+          </label>
+          <span id="resGeom" class="hidden">
+            <label class="inline">Yak. taban kotu <input id="resYtk" type="number" step="0.1" style="width:70px"></label>
+            <label class="inline">Apron açısı (°) <input id="resApron" type="number" step="1" style="width:55px"></label>
+            <label class="inline">Kret L (m) <input id="resL" type="number" step="1" style="width:60px"></label>
+            <label class="inline"><input type="checkbox" id="resCauto" checked style="width:auto;margin-right:3px">C otomatik (P/h)</label>
+            <label class="inline">C <input id="resC" type="number" step="0.05" style="width:55px"></label>
+            <span id="resPhInfo" class="small"></span>
+          </span>
+        </span>
+        <span id="resCon" class="hidden">
+          <label class="inline">Eşik kotu <input id="resSill" type="number" step="0.1" style="width:75px"></label>
+          <label class="inline">Kapak adedi <input id="resNgate" type="number" min="1" step="1" value="1" style="width:45px"></label>
+          <label class="inline">Kapak gen. L<sub>ef</sub> (m) <input id="resLef" type="number" step="0.1" style="width:55px"></label>
+          <label class="inline">Başl. kotu <input id="resH0" type="number" step="0.1" style="width:75px"></label>
+          <label class="inline">Maks su kotu <input id="resHmax" type="number" step="0.1" style="width:75px"></label>
+          <label class="inline">Taban debi W1 <input id="resW1" type="number" step="1" style="width:60px"></label>
+        </span>
+        <button id="btnResRun" class="primary">▶ Ötele / Optimize et</button>
+      </div>
+      <div id="resPointInfo" class="small" style="padding:2px 0"></div>
+      <div class="cmp-body">
+        <div class="cmp-canvas"><canvas id="resChart"></canvas></div>
+        <div id="resTable" class="cmp-table"></div>
+      </div>
+      <details open style="margin-top:4px"><summary class="small">Rezervuar tabloları — Excel'den kopyalayıp bir hücreye tıklayıp <b>Ctrl+V</b> (boş satırlar yok sayılır)</summary>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:4px">
+          <div>
+            <div class="small"><b>Kot–Hacim tablosu</b></div>
+            <div class="rain-tools"><button id="btnResVolAdd" class="small-btn">+ satır</button>
+              <button id="btnResVolClear" class="small-btn">temizle</button></div>
+            <div id="resVolGrid"></div>
+          </div>
+          <div id="resRatingBox">
+            <div class="small"><b>Dolusavak Rating tablosu</b> (He, Q)</div>
+            <div class="rain-tools"><button id="btnResRatAdd" class="small-btn">+ satır</button>
+              <button id="btnResRatClear" class="small-btn">temizle</button></div>
+            <div id="resRatingGrid"></div>
+          </div>
+        </div>
+      </details>
+    </div>
   </main>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=11"></script>
+<script src="/static/app.js?v=26"></script>
 </body>
 </html>

@@ -33,6 +33,57 @@ const layers = {
   markers: L.layerGroup().addTo(map),
 };
 
+/* ---------------- harita adres arama (il/ilçe/mahalle) ---------------- */
+(function geocodeSearch() {
+  const inp = $("geoQ"), box = $("geoResults");
+  let items = [], active = -1, timer = null, seq = 0, geoMarker = null;
+  const hide = () => { box.classList.add("hidden"); box.innerHTML = ""; active = -1; };
+  function render() {
+    if (!items.length) { box.innerHTML = `<div class="geo-empty">Sonuç yok</div>`; box.classList.remove("hidden"); return; }
+    box.innerHTML = items.map((it, i) =>
+      `<div class="geo-item${i === active ? " active" : ""}" data-i="${i}">
+         <span class="geo-type">${it.tur || ""}</span> ${it.ad}</div>`).join("");
+    box.classList.remove("hidden");
+    box.querySelectorAll(".geo-item").forEach(el =>
+      el.onclick = () => choose(+el.dataset.i));
+  }
+  function choose(i) {
+    const it = items[i]; if (!it) return;
+    inp.value = it.ad; hide();
+    const s = it.sinir;
+    if (s && s.length === 4) map.fitBounds([[+s[0], +s[2]], [+s[1], +s[3]]], { maxZoom: 15 });
+    else map.setView([it.lat, it.lon], 13);
+    if (geoMarker) geoMarker.remove();
+    geoMarker = L.marker([it.lat, it.lon]).addTo(map)
+      .bindTooltip(it.ad, { direction: "top" }).openTooltip();
+  }
+  async function run(q) {
+    const my = ++seq;
+    try {
+      const r = await api("/api/geocode?q=" + encodeURIComponent(q));
+      if (my !== seq) return;                 // eski istek — yoksay
+      items = Array.isArray(r) ? r : []; active = -1; render();
+    } catch (e) { if (my === seq) { items = []; render(); } }
+  }
+  inp.addEventListener("input", () => {
+    const q = inp.value.trim();
+    clearTimeout(timer);
+    if (q.length < 2) { hide(); return; }
+    timer = setTimeout(() => run(q), 350);    // debounce (Nominatim politikası)
+  });
+  inp.addEventListener("keydown", (e) => {
+    if (box.classList.contains("hidden") || !items.length) {
+      if (e.key === "Enter") { e.preventDefault(); if (inp.value.trim().length >= 2) run(inp.value.trim()); }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % items.length; render(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + items.length) % items.length; render(); }
+    else if (e.key === "Enter") { e.preventDefault(); choose(active < 0 ? 0 : active); }
+    else if (e.key === "Escape") { hide(); }
+  });
+  document.addEventListener("click", (e) => { if (!$("mapSearch").contains(e.target)) hide(); });
+})();
+
 /* ---------------- adım gezinme ---------------- */
 const STEP_KEYS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
 document.querySelectorAll(".step").forEach(b => {
@@ -107,6 +158,7 @@ map.on("click", async (ev) => {
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
+    updateSnyderW();
     layers.havza.clearLayers(); layers.havza.addData(r.havza_geojson);
     layers.dere.clearLayers(); if (r.dere_geojson) layers.dere.addData(r.dere_geojson);
     layers.kanal.clearLayers(); layers.kanal.addData(r.ana_kanal_geojson);
@@ -250,6 +302,333 @@ async function loadMgm() {
   } catch (e) { S.mgm = []; }
 }
 loadMgm();
+
+/* ---- Snyder Ct-Cp abağı (log-log, çift yönlü otomatik) ---- */
+let ctcpGuard = false;
+function logInterp(x, xs, ys) {
+  const lx = Math.log(x), LX = xs.map(Math.log), LY = ys.map(Math.log);
+  if (lx <= LX[0]) return Math.exp(LY[0]);
+  if (lx >= LX[LX.length - 1]) return Math.exp(LY[LY.length - 1]);
+  for (let i = 1; i < LX.length; i++)
+    if (lx <= LX[i]) { const t = (lx - LX[i - 1]) / (LX[i] - LX[i - 1]); return Math.exp(LY[i - 1] + t * (LY[i] - LY[i - 1])); }
+  return Math.exp(LY[LY.length - 1]);
+}
+function ctFromCp(cp) { return logInterp(cp, S.ctcp.Cp, S.ctcp.Ct); }
+function cpFromCt(ct) { return logInterp(ct, [...S.ctcp.Ct].reverse(), [...S.ctcp.Cp].reverse()); }
+function wireCtCp(ctId, cpId) {
+  const ct = $(ctId), cp = $(cpId);
+  if (!ct || !cp) return;
+  cp.addEventListener("input", () => { if (ctcpGuard || !S.ctcp || !+cp.value) return; ctcpGuard = true; ct.value = ctFromCp(+cp.value).toFixed(2); ctcpGuard = false; if (ctId === "inpCt") updateSnyderW(); });
+  ct.addEventListener("input", () => { if (ctcpGuard || !S.ctcp || !+ct.value) return; ctcpGuard = true; cp.value = cpFromCt(+ct.value).toFixed(2); ctcpGuard = false; if (ctId === "inpCt") updateSnyderW(); });
+}
+async function loadCtCp() {
+  try { S.ctcp = await api("/api/snyder-ctcp"); wireCtCp("inpCt", "inpCp"); wireCtCp("multiCt", "multiCp"); }
+  catch (e) { S.ctcp = null; }
+}
+loadCtCp();
+
+// ŞEKİL 1'den okunan W50/W75'i Ct/Cp/L/Lc'den canlı hesapla ve göster
+function snyderW(Ct, Cp, L, Lc) {
+  if (!(Ct > 0 && Cp > 0 && L > 0 && Lc > 0)) return null;
+  const tp = Ct * Math.pow(L * Lc, 0.30);
+  const qp = 2760 * Cp / tp;          // lt/s/km²/cm
+  const q = qp / 1000;                // Qp/A (m³/s/km²/cm)
+  return { tp, qp, W50: 5.87 / Math.pow(q, 1.08) / 2.54, W75: 3.35 / Math.pow(q, 1.08) / 2.54 };
+}
+function lin1(x, xs, ys) {
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
+  for (let i = 1; i < xs.length; i++)
+    if (x <= xs[i]) { const t = (x - xs[i - 1]) / (xs[i] - xs[i - 1]); return ys[i - 1] + t * (ys[i] - ys[i - 1]); }
+  return ys[ys.length - 1];
+}
+// YALD (24 sa alansal azaltma) — ABAK2'den; A≤25 ise 1.0 (snyder.compute ile aynı)
+function yaldFromArea(A) {
+  if (!(A > 0) || !S.abak2) return null;
+  if (A <= 25) return 1.0;
+  const col = S.abak2.percent.map(r => r[r.length - 1]);   // 24 sa kolonu
+  return lin1(A, S.abak2.areas_km2, col) / 100;
+}
+async function loadAbak2() {
+  try { S.abak2 = await api("/api/abak2"); updateSnyderW(); } catch (e) { S.abak2 = null; }
+}
+loadAbak2();
+
+function updateSnyderW() {
+  const el = $("snyWReadout"); if (!el) return;
+  const A = +$("inpA").value;
+  const w = snyderW(+$("inpCt").value, +$("inpCp").value, +$("inpL").value, +$("inpLc").value);
+  const yald = yaldFromArea(A);
+  const parts = [];
+  if (w) {
+    $("inpW50").placeholder = w.W50.toFixed(1); $("inpW75").placeholder = w.W75.toFixed(1);
+    parts.push(`t<sub>p</sub>=${w.tp.toFixed(2)} sa, q<sub>p</sub>=${w.qp.toFixed(1)} lt/s/km²/cm → <b>W50=${w.W50.toFixed(1)}</b>, <b>W75=${w.W75.toFixed(1)}</b> saat (ŞEKİL 1)`);
+  } else { $("inpW50").placeholder = "ŞEKİL 1 (oto)"; $("inpW75").placeholder = "ŞEKİL 1 (oto)"; }
+  if (yald != null) {
+    $("inpYald").placeholder = yald.toFixed(3);
+    parts.push(`ADK/<b>YALD</b> (24 sa, A=${A.toFixed(1)} km²) = <b>${yald.toFixed(3)}</b>`);
+  }
+  el.innerHTML = parts.length
+    ? `🔎 <b>Otomatik (abaklar):</b> ${parts.join(" &nbsp;|&nbsp; ")} <span style="color:#6b6762">— boş kutularda bu değerler kullanılır</span>`
+    : "";
+}
+["inpCt", "inpCp", "inpL", "inpLc", "inpA"].forEach(id => { const e = $(id); if (e) e.addEventListener("input", updateSnyderW); });
+{ const sb = $("snyderBox"); if (sb) sb.addEventListener("toggle", updateSnyderW); }
+
+/* ================= REZERVUAR (HAZNE) ÖTELEMESİ ================= */
+async function loadReservoirDefaults() {
+  try { S.resDefaults = await api("/api/reservoir-defaults"); } catch (e) { S.resDefaults = null; }
+  try { S.resConDefaults = await api("/api/reservoir-controlled-defaults"); } catch (e) { S.resConDefaults = null; }
+}
+loadReservoirDefaults();
+
+const RES_RP = ["2", "5", "10", "25", "50", "100", "OET"];
+
+// Rezervuar atanabilecek noktalar: outlet (tek havza), memba/mansap (ara havza)
+function reservoirPoints() {
+  const pts = [];
+  if (S.sonuc && S.sonuc.dsi && S.outlet)
+    pts.push({ ad: "Outlet (havza çıkışı)", ll: { lat: S.outlet.snap_lat ?? S.outlet.lat, lon: S.outlet.snap_lon ?? S.outlet.lon }, kind: "compute", res: S.sonuc });
+  if (S.multiSonuc) {
+    const md = S.multiSonuc.md;
+    S.multiSonuc.membaC.forEach((x, i) => {
+      const o = md.membalar[i].outlet;
+      pts.push({ ad: "Memba " + (i + 1), ll: { lat: o.snap_lat ?? o.lat, lon: o.snap_lon ?? o.lon }, kind: "compute", res: x.res });
+    });
+    const mo = md.mansap.outlet;
+    pts.push({ ad: "Mansap (ötelenmiş)", ll: { lat: mo.snap_lat ?? mo.lat, lon: mo.snap_lon ?? mo.lon }, kind: "routed", rt: S.multiSonuc.rt });
+  }
+  return pts;
+}
+function reservoirMethods(pt) {
+  if (pt.kind === "routed") return Object.keys(pt.rt.yontemler);
+  const m = ["dsi"]; if (pt.res.snyder) m.push("snyder"); return m;
+}
+function reservoirInflow(pt, method, rp) {
+  if (pt.kind === "routed") {
+    const y = pt.rt.yontemler[method];
+    return y && y.hidrograflar[rp] ? { data: y.hidrograflar[rp], dt: y.dt || 0.5 } : null;
+  }
+  if (method === "dsi") {
+    let best = null, pk = -1;
+    [2, 4, 6, 8, 12, 18, 24].forEach(d => { const v = pt.res.kabulet[d] && pt.res.kabulet[d][rp]; if (v != null && v > pk) { pk = v; best = d; } });
+    return best != null ? { data: pt.res.dsi.hidrograflar[best][rp], dt: 0.5, note: `hakim ${best} sa` } : null;
+  }
+  if (method === "snyder" && pt.res.snyder) return { data: pt.res.snyder.hidrograflar[rp], dt: 1 };
+  return null;
+}
+
+function openReservoir() {
+  const pts = reservoirPoints();
+  if (!pts.length) { alert("Önce bir hidrograf hesaplayın (Tek Havza → HESAPLA, veya Ara Havza → Hesapla ve Ötele)"); return; }
+  S.resPoints = pts;
+  $("resPoint").innerHTML = pts.map((p, i) => `<option value="${i}">${p.ad}</option>`).join("");
+  const fillMethodRP = () => {
+    const pt = pts[+$("resPoint").value];
+    const ms = reservoirMethods(pt);
+    $("resMethod").innerHTML = ms.map(m => `<option value="${m}">${M_LABEL[m]}</option>`).join("");
+    $("resRP").innerHTML = RES_RP.map(rp => `<option value="${rp}">Q${rp}</option>`).join("");
+    $("resRP").value = "100";
+    showResMarker(pt);
+  };
+  $("resPoint").onchange = fillMethodRP;
+  fillMethodRP();
+  // rezervuar varsayılanları
+  const D = S.resDefaults, K = S.resConDefaults;
+  if (D) { $("resKret").value = D.kret_kotu; $("resYtk").value = D.yaklasim_taban_kotu; $("resApron").value = D.apron_giris_acisi_derece || 0; $("resL").value = 40; $("resC").value = 2.1; }
+  if (K) { $("resSill").value = K.esik_kotu; $("resLef").value = K.lef; $("resH0").value = K.nss; $("resHmax").value = (K.nss + 3); $("resW1").value = K.taban_debi_W1; }
+  // rating grid (bir kez kur, kalıcı) — He, Q kopyala-yapıştır
+  S.ratGrid = makePasteGrid("resRatingGrid", "btnResRatAdd", "btnResRatClear",
+    ["He (m)", "Q (m³/s)"], (D && D.dolusavak_rating.veri) || []);
+  const buildGrids = () => {
+    const kap = $("resType").value === "kapakli";
+    $("resUncon").classList.toggle("hidden", kap);
+    $("resCon").classList.toggle("hidden", !kap);
+    const volDef = kap ? (K && K.hacim_satih.veri) : (D && D.hacim_satih.veri);
+    S.volGrid = makePasteGrid("resVolGrid", "btnResVolAdd", "btnResVolClear",
+      kap ? ["Kot (m)", "Hacim (hm³)"] : ["Kot (m)", "Alan (km²)", "Hacim (hm³)"], volDef || []);
+    const tablo = !kap && $("resMode").value === "tablo";
+    $("resRatingBox").classList.toggle("hidden", !tablo);
+    $("resGeom").classList.toggle("hidden", kap || $("resMode").value !== "geom");
+  };
+  $("resType").onchange = buildGrids;
+  $("resMode").onchange = buildGrids;
+  buildGrids();
+  // C otomatik (P/h): kutu işaretliyse C alanı kapalı, P canlı gösterilir
+  const updatePh = () => {
+    const auto = $("resCauto").checked;
+    $("resC").disabled = auto;
+    const P = (+$("resKret").value) - (+$("resYtk").value);
+    $("resPhInfo").innerHTML = (auto && isFinite(P) && P > 0)
+      ? `P = kret − yak.taban = <b>${P.toFixed(1)} m</b> → C, USBR P/h eğrisinden türetilir`
+      : (auto ? "P için kret ve yak. taban kotu girin" : "");
+  };
+  $("resCauto").addEventListener("change", updatePh);
+  $("resKret").addEventListener("input", updatePh);
+  $("resYtk").addEventListener("input", updatePh);
+  updatePh();
+  $("btnResRun").onclick = runReservoir;
+  $("resWrap").classList.remove("hidden");
+}
+$("btnCloseRes").onclick = () => $("resWrap").classList.add("hidden");
+
+// seçili rezervuar noktasını haritada işaretle
+function showResMarker(pt) {
+  if (!pt || !pt.ll) { $("resPointInfo").textContent = ""; return; }
+  if (S.resMarker) S.resMarker.remove();
+  S.resMarker = L.marker([pt.ll.lat, pt.ll.lon]).addTo(map).bindTooltip("🏞 Rezervuar: " + pt.ad);
+  $("resPointInfo").innerHTML = `🏞 Rezervuar <b>${pt.ad}</b> noktasına atandı (${pt.ll.lat.toFixed(4)}, ${pt.ll.lon.toFixed(4)}). Bu noktadaki hidrograf haznede ötelenecek.`;
+}
+
+/* ---- Genel editlenebilir + kopyala-yapıştır tablo fabrikası ---- */
+function makePasteGrid(gridId, addId, clearId, headers, data, minRows) {
+  const el = $(gridId);
+  el.dataset.cols = headers.length;
+  function readGrid() {
+    const cols = +el.dataset.cols, map = {};
+    el.querySelectorAll(".resvol-cell").forEach(inp => {
+      const r = +inp.dataset.r, c = +inp.dataset.c;
+      if (!map[r]) map[r] = new Array(cols).fill("");
+      map[r][c] = inp.value.trim();
+    });
+    return Object.keys(map).sort((a, b) => a - b).map(k => map[k]);
+  }
+  function onPaste(e) {
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    if (!text || (!text.includes("\t") && !text.includes("\n"))) return;
+    e.preventDefault();
+    const block = text.replace(/\r/g, "").split("\n").filter(x => x.trim() !== "").map(row => row.split(/[\t;,]/));
+    const r0 = +e.target.dataset.r, c0 = +e.target.dataset.c, cols = +el.dataset.cols;
+    const cur = readGrid();
+    while (cur.length < r0 + block.length) cur.push([]);
+    block.forEach((vals, dr) => vals.forEach((val, dc) => { if (c0 + dc < cols) { if (!cur[r0 + dr]) cur[r0 + dr] = []; cur[r0 + dr][c0 + dc] = val.trim(); } }));
+    render(cur);
+  }
+  function render(d) {
+    const rows = Math.max((d || []).length, minRows || 6);
+    let h = `<table class="tbl rain"><tr>` + headers.map(c => `<th>${c}</th>`).join("") + `</tr>`;
+    for (let r = 0; r < rows; r++) {
+      h += "<tr>";
+      for (let c = 0; c < headers.length; c++) {
+        const v = d && d[r] && d[r][c] != null ? d[r][c] : "";
+        h += `<td><input class="resvol-cell" data-r="${r}" data-c="${c}" value="${v}"></td>`;
+      }
+      h += "</tr>";
+    }
+    el.innerHTML = h + "</table>";
+    el.querySelectorAll(".resvol-cell").forEach(inp => inp.addEventListener("paste", onPaste));
+  }
+  render(data);
+  if ($(addId)) $(addId).onclick = () => render(readGrid().concat([[]]));
+  if ($(clearId)) $(clearId).onclick = () => render([]);
+  return { render, read: readGrid, cols: headers.length };
+}
+function readGridNums(grid, ncol) {
+  return grid.read()
+    .filter(r => r.slice(0, ncol).every(x => x !== "" && x != null && !isNaN(+x)))
+    .map(r => r.slice(0, ncol).map(Number));
+}
+
+async function runReservoir() {
+  try {
+    const pt = S.resPoints[+$("resPoint").value];
+    const src = reservoirInflow(pt, $("resMethod").value, $("resRP").value);
+    if (!src || !src.data || !src.data.length) throw new Error("Seçili nokta/yöntem/tekerrür için hidrograf yok");
+    const kap = $("resType").value === "kapakli";
+    const vol = readGridNums(S.volGrid, kap ? 2 : 3);
+    if (vol.length < 2) throw new Error("Kot–Hacim tablosu geçersiz (en az 2 dolu satır gerekli)");
+    let r;
+    if (kap) {
+      r = await api("/api/reservoir-controlled", {
+        inflow: src.data, dt_saat: src.dt, hacim_satih: vol,
+        esik_kotu: +$("resSill").value, lef: +$("resLef").value,
+        baslangic_kotu: +$("resH0").value, maks_su_kotu: +$("resHmax").value,
+        taban_debi: +$("resW1").value || 0,
+        kapak_adedi: Math.max(1, +$("resNgate").value || 1),
+      });
+      r._kapakli = true;
+    } else {
+      const body = { inflow: src.data, dt_saat: src.dt, kret_kotu: +$("resKret").value, hacim_satih: vol };
+      if ($("resMode").value === "tablo") {
+        const rating = readGridNums(S.ratGrid, 2);
+        if (rating.length < 2) throw new Error("Rating tablosu geçersiz (He, Q — en az 2 dolu satır)");
+        body.rating = rating;
+      } else { body.yaklasim_taban_kotu = +$("resYtk").value; body.apron_giris_acisi = +$("resApron").value || 0; body.kret_uzunlugu = +$("resL").value || 40; body.debi_katsayisi = $("resCauto").checked ? null : (+$("resC").value || 2.1); }
+      r = await api("/api/reservoir-route", body);
+    }
+    const label = `${pt.ad} — ${M_LABEL[$("resMethod").value]} Q${$("resRP").value}${src.note ? " (" + src.note + ")" : ""}`;
+    S.resSonuc = { r, src, label };
+    renderReservoir();
+  } catch (e) { $("resTable").innerHTML = `<div class="small err">Hata: ${e.message}</div>`; }
+}
+
+let resChart = null;
+function renderReservoir() {
+  const { r, label } = S.resSonuc, o = r.ozet;
+  const src = { label };
+  const kap = r._kapakli;
+  const lab = r.t.map(t => t.toFixed(1));
+  const ds = [
+    { label: "Giriş I", data: r.giris, borderColor: "#e07b3a", borderWidth: 1.8, pointRadius: 0, tension: .25 },
+    { label: "Çıkış O (ötelenmiş)", data: r.cikis, borderColor: "#2a9d8f", borderWidth: 2, pointRadius: 0, tension: .25 },
+    { label: "Su kotu (m)", data: r.su_kotu, borderColor: "#7b1fa2", borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, yAxisID: "y2" },
+  ];
+  if (kap) ds.push({ label: "Kapak açıklığı (m)", data: r.kapak_acikligi, borderColor: "#c73e3a", borderWidth: 1.2, borderDash: [2, 2], pointRadius: 0, yAxisID: "y3" });
+  if (resChart) resChart.destroy();
+  resChart = new Chart($("resChart"), {
+    type: "line", data: { labels: lab, datasets: ds },
+    options: {
+      animation: false, maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" }, title: { display: true, text: `${kap ? "Kapaklı (optimize) hazne" : "Hazne"} ötelemesi — ${src.label}` } },
+      scales: {
+        x: { title: { display: true, text: "T (saat)" } },
+        y: { title: { display: true, text: "Q (m³/s)" }, beginAtZero: true },
+        y2: { position: "right", title: { display: true, text: "Su kotu (m)" }, grid: { drawOnChartArea: false } },
+        y3: { display: false },
+      },
+    },
+  });
+  let h = `<h3 class="res">Özet</h3><table class="tbl">
+    <tr><td>Giriş pik</td><td><b>${fmt(o.giris_pik, 1)}</b> m³/s @ ${fmt(o.giris_pik_saat, 0)} sa</td></tr>
+    <tr><td>Çıkış pik (ötelenmiş)</td><td><b>${fmt(o.cikis_pik, 1)}</b> m³/s @ ${fmt(o.cikis_pik_saat, 0)} sa</td></tr>
+    <tr><td>Pik sönümleme</td><td><b>${fmt(o.pik_sonumleme * 100, 1)}%</b></td></tr>`;
+  if (kap) {
+    h += `<tr><td>Optimize min çıkış piki hedefi</td><td><b>${fmt(o.min_cikis_pik_hedef, 1)}</b> m³/s</td></tr>
+    <tr><td>Maks su kotu / izinli</td><td><b>${fmt(o.maks_su_kotu, 2)}</b> / ${fmt(o.H_max, 2)} m ${o.maks_su_kotu <= o.H_max + 0.01 ? "✓" : "⚠ AŞILDI"}</td></tr>
+    <tr><td>Başlangıç kotu</td><td>${fmt(o.H_init, 2)} m</td></tr>
+    <tr><td>Kapak adedi</td><td><b>${o.kapak_adedi || 1}</b> adet</td></tr>
+    <tr><td>Maks kapak açıklığı</td><td><b>${fmt(o.maks_kapak_acikligi, 2)}</b> m</td></tr>`;
+    if (o.asim_uyarisi) h += `<tr><td colspan="2" class="small err">⚠ Depolama yetersiz: pass-through (O=I) bile maks kotu aşıyor; başlangıç kotunu düşürün veya maks kotu yükseltin.</td></tr>`;
+    if (o.girdi_uyarisi) h += `<tr><td colspan="2" class="small err">⚠ ${o.girdi_uyarisi}</td></tr>`;
+  } else {
+    h += `<tr><td>Pik gecikmesi</td><td>${fmt(o.gecikme_saat, 0)} sa</td></tr>
+    <tr><td>Maks su kotu</td><td><b>${fmt(o.maks_su_kotu, 2)}</b> m (kret+${fmt(o.maks_He, 2)} m)</td></tr>`;
+    if (r.dolusavak_C && r.dolusavak_C.length) {
+      // maks He'ye en yakın türetilen C (fiili tepe koşulu)
+      const cAtPeak = r.dolusavak_C.reduce((a, b) =>
+        Math.abs(b[0] - o.maks_He) < Math.abs(a[0] - o.maks_He) ? b : a);
+      h += `<tr><td>Yaklaşım yüks. P</td><td>${fmt(r.yaklasim_P, 1)} m</td></tr>
+      <tr><td>C (P/h, USBR)</td><td><b>${fmt(cAtPeak[1], 3)}</b> @ He=${fmt(cAtPeak[0], 2)} m
+        <span class="small">(He=0.1→C=${fmt(r.dolusavak_C[0][1], 2)})</span></td></tr>`;
+    }
+  }
+  h += `</table>`;
+  if (kap) h += `<div class="small">Kapaklar; su kotu ≤ maks, çıkış ≤ giriş kısıtlarıyla çıkış piki minimum olacak şekilde
+    işletilir (pik-tavan/peak-shaving; başlangıç–maks kotu arası depolama kullanılır).</div>`;
+  h += `<button id="btnResCsv" class="small-btn">⬇ CSV (koordinatlar)</button>
+    <table class="tbl"><tr><th>T (sa)</th><th>Giriş</th><th>Çıkış</th><th>Su kotu</th>${kap ? "<th>Kapak (m)</th>" : ""}</tr>`;
+  const step = r.t.length > 80 ? 2 : 1;
+  for (let i = 0; i < r.t.length; i += step)
+    h += `<tr><td>${fmt(r.t[i], 1)}</td><td>${fmt(r.giris[i], 1)}</td><td>${fmt(r.cikis[i], 1)}</td><td>${fmt(r.su_kotu[i], 2)}</td>${kap ? `<td>${fmt(r.kapak_acikligi[i], 3)}</td>` : ""}</tr>`;
+  h += `</table>`;
+  $("resTable").innerHTML = h;
+  $("btnResCsv").onclick = () => {
+    const head = ["T_sa", "Giris_m3s", "Cikis_m3s", "SuKotu_m"]; if (kap) head.push("Kapak_m");
+    const rows = [head];
+    for (let i = 0; i < r.t.length; i++) { const row = [r.t[i].toFixed(1), r.giris[i].toFixed(2), r.cikis[i].toFixed(2), r.su_kotu[i].toFixed(3)]; if (kap) row.push(r.kapak_acikligi[i].toFixed(3)); rows.push(row); }
+    download(`hazne_oteleme_${src.label.replace(/[^\w]/g, "_")}.csv`, rows.map(x => x.join(";")).join("\n"));
+  };
+}
 
 function mgmFind(name) {
   if (!S.mgmByNorm) return null;
@@ -525,6 +904,15 @@ function renderResults() {
       <button id="btnSnyChart">📈 Snyder hidrograflarını göster</button>
       <div class="small">Q500/1000/10000 ekstrapolasyon (Q10–Q100), QOET C<sub>III</sub> ile;
       24 sa sağanak ${sn.hidrograflar["2"] ? Math.round(24 / p.tr) : "?"} bloğa bölünüp süperpoze edilmiştir.</div>`;
+    if (sn.yzdo_yad) {
+      const yy = sn.yzdo_yad;
+      h += `<div class="small" style="margin-top:4px"><b>Otomatik çekilen YZDO & YAD</b> —
+        bölge <b>${yy.bolge}</b> | ADK/YALD (24 sa alansal azaltma) = <b>${fmt(yy.YALD, 3)}</b> |
+        MF=${fmt(yy.MF, 2)} | ${yy.n_blok}×${yy.tr} sa blok</div>
+        <table class="tbl"><tr><th>Blok</th>` + yy.bloklar.map(b => `<th>${b.sure_sa} sa</th>`).join("") + `</tr>
+        <tr><td>T/ΣT</td>` + yy.bloklar.map(b => `<td>${fmt(b.oran, 3)}</td>`).join("") + `</tr>
+        <tr><td>YZDO (${yy.bolge})</td>` + yy.bloklar.map(b => `<td>${fmt(b.yzdo, 3)}</td>`).join("") + `</tr></table>`;
+    }
   }
   if (r.kar) h += `<div class="small">Kar erimesi piki: ${fmt(r.kar.Qkar_pik, 1)} m³/s (OET hidrografına eklendi)</div>`;
 
@@ -532,6 +920,7 @@ function renderResults() {
     <div class="grid2"><label>Debi (m³/s)<input id="yilQ" type="number" step="0.1"></label>
     <button id="btnYil">Ara</button></div><div id="yilRes" class="status"></div>
     <div class="export-row"><button id="btnCompare" class="primary">⚖ Yöntemleri Karşılaştır</button>
+      <button id="btnReservoir" class="primary">🏞 Rezervuar Ötelemesi</button>
       <button id="btnCSV">⬇ CSV</button><button id="btnJSON">⬇ JSON</button></div>
     <div class="export-row" style="align-items:center;flex-wrap:wrap">
       <span class="small">Rapora dahil yöntemler:</span>
@@ -554,6 +943,7 @@ function renderResults() {
 
   $("btnChart").onclick = () => showChart(+$("selDur").value);
   $("btnCompare").onclick = () => openCompare();
+  $("btnReservoir").onclick = openReservoir;
   $("btnReport").onclick = downloadReport;
   if (r.snyder) $("btnSnyChart").onclick = () => showSnyderChart();
   $("btnYil").onclick = () => {
@@ -633,7 +1023,18 @@ function setMode(mode) {
   if (multi) document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
   $("multiMode").classList.toggle("hidden", !multi);
   $("rainDock").classList.add("hidden");
-  if (multi) { multiLayers.poly.addTo(map); multiLayers.pts.addTo(map); drawMultiPoints(); }
+  if (multi) {
+    // Mansap noktası varsayılan: tek havzadaki outlet (kullanıcı elle değiştirmediyse hep senkron)
+    if (S.outlet && (!S.multi.mansap || S.multi.mansapAuto)) {
+      const nm = { lat: +(S.outlet.snap_lat ?? S.outlet.lat).toFixed(6),
+                   lon: +(S.outlet.snap_lon ?? S.outlet.lon).toFixed(6) };
+      if (!S.multi.mansap || S.multi.mansap.lat !== nm.lat || S.multi.mansap.lon !== nm.lon) {
+        S.multi.mansap = nm; S.multi.mansapAuto = true; invalidateMultiSolve();
+      }
+    }
+    multiLayers.poly.addTo(map); multiLayers.pts.addTo(map);
+    renderMultiPoints(); updateMultiShared();
+  }
   else {
     multiLayers.poly.remove(); multiLayers.pts.remove();
     document.querySelector('.step[data-step="1"]').click();
@@ -642,18 +1043,37 @@ function setMode(mode) {
 $("modeWizard").onclick = () => setMode("wizard");
 $("modeMulti").onclick = () => setMode("multi");
 
+// 1) Ortak veri durumu (istasyon + yağış) — Adım 4-5'ten paylaşılır
+function updateMultiShared() {
+  const nSt = (S.istasyonlar || []).length;
+  const nRain = S.rainValues ? Object.values(S.rainValues).filter(v => v && v.slice(0, 6).every(x => x != null)).length : 0;
+  const ok = nSt > 0 && nRain > 0;
+  $("multiShared").innerHTML = ok
+    ? `✓ İstasyonlar: ${nSt} yüklü — Yağış: ${nRain} istasyon dolu. (Değiştirmek için “Tek Havza” → Adım 4–5.)`
+    : `⚠ Eksik: ${nSt ? "" : "istasyon (Adım 4) "}${nRain ? "" : "yağış (Adım 5)"} — “Tek Havza” moduna geçip Adım 4–5'i doldurun.`;
+  $("multiShared").className = "small " + (ok ? "" : "err");
+}
+function selectedMethods() {
+  return Array.from(document.querySelectorAll(".mmethod:checked")).map(x => x.dataset.m);
+}
+
 $("btnAddMansap").onclick = () => { S.multi.place = "mansap"; multiHint("Haritada MANSAP (çıkış) noktasına tıklayın"); };
 $("btnAddMemba").onclick = () => { S.multi.place = "memba"; multiHint("Haritada bir MEMBA (üst havza çıkışı) noktasına tıklayın"); };
 function multiHint(msg) { setStatus("multiStatus", msg, ""); map.getContainer().style.cursor = "crosshair"; }
 
 function multiAddPoint(latlng) {
   const p = { lat: +latlng.lat.toFixed(6), lon: +latlng.lng.toFixed(6) };
-  if (S.multi.place === "mansap") S.multi.mansap = p;
+  if (S.multi.place === "mansap") { S.multi.mansap = p; S.multi.mansapAuto = false; }
   else S.multi.membalar.push(p);
   S.multi.place = null;
   map.getContainer().style.cursor = "";
   setStatus("multiStatus", "", "");
+  invalidateMultiSolve();
   renderMultiPoints();
+}
+function invalidateMultiSolve() {
+  S.multiMd = null;
+  const b = $("btnSolveCompute"); if (b) b.disabled = true;
 }
 
 function renderMultiPoints() {
@@ -661,6 +1081,7 @@ function renderMultiPoints() {
   if (S.multi.mansap)
     h += `<div class="mpt-row"><span class="dot" style="background:#c73e3a"></span>
       Mansap: ${S.multi.mansap.lat.toFixed(4)}, ${S.multi.mansap.lon.toFixed(4)}
+      ${S.multi.mansapAuto ? '<span class="small" style="color:#6b6762">(tek havza outlet\'i)</span>' : ""}
       <button data-t="mansap">✕</button></div>`;
   S.multi.membalar.forEach((m, i) => {
     h += `<div class="mpt-row"><span class="dot" style="background:#1e88e5"></span>
@@ -669,8 +1090,9 @@ function renderMultiPoints() {
   });
   $("multiPoints").innerHTML = h || `<div class="small">Henüz nokta eklenmedi.</div>`;
   $("multiPoints").querySelectorAll("button").forEach(b => b.onclick = () => {
-    if (b.dataset.t === "mansap") S.multi.mansap = null;
+    if (b.dataset.t === "mansap") { S.multi.mansap = null; S.multi.mansapAuto = false; }
     else S.multi.membalar.splice(+b.dataset.i, 1);
+    invalidateMultiSolve();
     renderMultiPoints();
   });
   drawMultiPoints();
@@ -685,16 +1107,14 @@ function drawMultiPoints() {
       .addTo(multiLayers.pts).bindTooltip("Memba " + (i + 1)));
 }
 
-// bir alt havza poligonunu (multi-delineate çıktısı) tam otomatik hesaplar
-async function autoComputeSub(sub, qbazTotal, aMansap) {
+// bir alt havza poligonunu seçili yöntemlerle tam otomatik hesaplar
+async function autoComputeSub(sub, qbazTotal, aMansap, methods) {
   const w = await api("/api/thiessen", { havza_geojson: sub.havza_geojson, istasyonlar: S.istasyonlar });
   const act = w.sonuc.filter(t => t.agirlik > 0);
   const T = [2, 5, 10, 25, 50, 100];
   const P24 = {}; let OET = 0, oetOk = true;
   T.forEach((tt, j) => {
-    P24[tt] = act.reduce((a, t) => {
-      const rv = S.rainValues[t.name]; return a + (rv ? t.agirlik * rv[j] : 0);
-    }, 0);
+    P24[tt] = act.reduce((a, t) => { const rv = S.rainValues[t.name]; return a + (rv ? t.agirlik * rv[j] : 0); }, 0);
   });
   act.forEach(t => { const rv = S.rainValues[t.name]; if (!rv || rv[6] == null) oetOk = false; else OET += t.agirlik * rv[6]; });
   const cn = await api("/api/cn", { havza_geojson: sub.havza_geojson, zemin_grubu: $("multiSoil").value });
@@ -704,91 +1124,279 @@ async function autoComputeSub(sub, qbazTotal, aMansap) {
     elevations: sub.kotlar, Qbaz: qbazTotal * (sub.alan_km2 / aMansap),
     P24, P24_OET: oetOk ? OET : 0, dplv_ratios: dplvRatios(),
   };
-  const res = await api("/api/compute", { girdi });
+  const snyderOn = methods.includes("snyder");
+  const res = await api("/api/compute", {
+    girdi, rasyonel: methods.includes("rasyonel"), c100: 0.45,
+    snyder: snyderOn, snyder_par: snyderOn ? { Ct: +$("multiCt").value || 1.55, Cp: +$("multiCp").value || 0.6 } : null,
+  });
   return { girdi, res, cn, thiessen: act };
 }
 
-$("btnSolveMulti").onclick = async () => {
+// ① Havzaları çöz (delineate + çiz + alt havza tablosu)
+$("btnSolveDelin").onclick = async () => {
   try {
     if (!S.multi.mansap) throw new Error("Mansap noktası seçin");
     if (!S.multi.membalar.length) throw new Error("En az bir memba noktası ekleyin");
-    if (!S.istasyonlar || !S.istasyonlar.length) throw new Error("Önce Adım 4'te istasyonları yükleyin");
-    if (!S.rainValues || !Object.keys(S.rainValues).length) throw new Error("Önce Adım 5'te yağışları girin");
-    if (!S.dplvList) throw new Error("DPLV listesi yüklenmedi");
     setStatus("multiStatus", "Ara havza çıkarılıyor… (DEM işleniyor)", "loading");
     const md = await api("/api/multi-delineate", {
       mansap: S.multi.mansap, membalar: S.multi.membalar, river_km2: +$("multiRivThr").value || 1,
     });
-    // poligonları çiz
     multiLayers.poly.clearLayers();
-    const addPoly = (gj, c) => { gj = JSON.parse(JSON.stringify(gj)); multiLayers.poly.addData({ type: "Feature", properties: { c }, geometry: gj }); };
+    const addPoly = (gj, c) => multiLayers.poly.addData({ type: "Feature", properties: { c }, geometry: JSON.parse(JSON.stringify(gj)) });
     addPoly(md.ara.havza_geojson, "#2a9d8f");
     md.membalar.forEach(mb => addPoly(mb.havza_geojson, "#1e88e5"));
     map.fitBounds(multiLayers.poly.getBounds(), { padding: [30, 30] });
+    S.multiMd = md;
+    let h = `<h3 class="res">Alt Havzalar (çıkarıldı)</h3><table class="tbl">
+      <tr><th>Havza</th><th>A (km²)</th><th>L (km)</th><th>Lc</th><th>Bölge</th><th>Tc (sa)</th></tr>`;
+    md.membalar.forEach((mb, i) => h += `<tr><td>Memba ${i + 1}</td><td>${fmt(mb.alan_km2, 2)}</td><td>${fmt(mb.L_km, 2)}</td><td>${fmt(mb.Lc_km, 2)}</td><td>${(mb.yzd_bolge || {}).bolge || "—"}</td><td>${fmt(mb.Tc_saat, 2)}</td></tr>`);
+    h += `<tr><td><b>Ara havza</b></td><td>${fmt(md.ara.alan_km2, 2)}</td><td>${fmt(md.ara.L_km, 2)}</td><td>${fmt(md.ara.Lc_km, 2)}</td><td>${(md.ara.yzd_bolge || {}).bolge || "—"}</td><td><b>${fmt(md.ara.Tc_saat, 2)}</b></td></tr>`;
+    h += `<tr><td colspan="6"><b>Mansap:</b> A=${fmt(md.mansap.alan_km2, 2)} km² | öteleme = ara Tc = ${fmt(md.ara.Tc_saat, 2)} sa</td></tr></table>`;
+    if (md.uyari && md.uyari.length) h += `<div class="small err">⚠ ${md.uyari.join("; ")}</div>`;
+    $("multiResults").innerHTML = h;
+    $("btnSolveCompute").disabled = false;
+    setStatus("multiStatus", "Havzalar çıkarıldı. Şimdi ② Hesapla ve Ötele.", "ok");
+  } catch (e) { setStatus("multiStatus", "Hata: " + e.message, "err"); $("btnSolveCompute").disabled = true; }
+};
 
-    const qbaz = +$("multiQbaz").value || 0, aMansap = md.mansap.alan_km2;
+// ② Hesapla ve ötele (seçili yöntemlerle her alt havza + routing)
+$("btnSolveCompute").onclick = async () => {
+  try {
+    if (!S.multiMd) throw new Error("Önce ① Havzaları Çöz");
+    if (!S.istasyonlar || !S.istasyonlar.length) throw new Error("İstasyon yok — Tek Havza → Adım 4");
+    if (!S.rainValues || !Object.keys(S.rainValues).length) throw new Error("Yağış yok — Tek Havza → Adım 5");
+    const methods = selectedMethods();
+    if (!methods.length) throw new Error("En az bir yöntem seçin");
+    const md = S.multiMd, qbaz = +$("multiQbaz").value || 0, aMansap = md.mansap.alan_km2;
     setStatus("multiStatus", "Alt havzalar hesaplanıyor (CN, Thiessen, hidrograf)…", "loading");
-    const araC = await autoComputeSub(md.ara, qbaz, aMansap);
+    const araC = await autoComputeSub(md.ara, qbaz, aMansap, methods);
     const membaC = [];
-    for (const mb of md.membalar) membaC.push({ mb, ...(await autoComputeSub(mb, qbaz, aMansap)) });
-
-    setStatus("multiStatus", `Öteleme (ara T_c=${fmt(md.ara.Tc_saat, 2)} sa)…`, "loading");
+    for (const mb of md.membalar) membaC.push({ mb, ...(await autoComputeSub(mb, qbaz, aMansap, methods)) });
+    setStatus("multiStatus", `Öteleme (ara Tc=${fmt(md.ara.Tc_saat, 2)} sa)…`, "loading");
     const rt = await api("/api/route", {
-      ara_sonuc: araC.res, memba_sonuclari: membaC.map(x => x.res), lag_saat: md.ara.Tc_saat,
+      ara_sonuc: araC.res, memba_sonuclari: membaC.map(x => x.res),
+      lag_saat: md.ara.Tc_saat, yontemler: methods,
     });
-    S.multiSonuc = { md, araC, membaC, rt };
+    S.multiSonuc = { md, araC, membaC, rt, methods };
     renderMultiResults();
     setStatus("multiStatus", "Tamamlandı", "ok");
   } catch (e) { setStatus("multiStatus", "Hata: " + e.message, "err"); }
 };
 
 const MRP = ["2", "5", "10", "25", "50", "100", "OET"];
+const M_LABEL = { dsi: "DSİ Sentetik", snyder: "Snyder", mockus: "Mockus", rasyonel: "Rasyonel" };
 function _envPeak(res, rp) {
   let mx = null;
   ["2", "4", "6", "8", "12", "18", "24"].forEach(d => { const v = res.kabulet[d] && res.kabulet[d][rp]; if (v != null) mx = mx == null ? v : Math.max(mx, v); });
   return mx;
 }
 function renderMultiResults() {
-  const { md, araC, membaC, rt } = S.multiSonuc;
+  const { md, araC, membaC, rt, methods } = S.multiSonuc;
+  // 1) alt havza tablosu
   let h = `<h3 class="res">Alt Havzalar</h3><table class="tbl">
-    <tr><th>Havza</th><th>A (km²)</th><th>L (km)</th><th>Lc</th><th>CN</th><th>Bölge</th><th>Tc (sa)</th><th>Q100 pik</th></tr>`;
-  const rowFor = (ad, sub, comp, tc) =>
-    `<tr><td>${ad}</td><td>${fmt(sub.alan_km2, 2)}</td><td>${fmt(sub.L_km, 2)}</td><td>${fmt(sub.Lc_km, 2)}</td>
-     <td>${fmt(comp.cn.CN2, 0)}</td><td>${(sub.yzd_bolge && sub.yzd_bolge.bolge) || "—"}</td>
-     <td>${fmt(tc, 2)}</td><td>${fmt(_envPeak(comp.res, "100"), 1)}</td></tr>`;
+    <tr><th>Havza</th><th>A (km²)</th><th>L (km)</th><th>Lc</th><th>CN</th><th>Bölge</th><th>Tc (sa)</th><th>DSİ Q100</th></tr>`;
+  const rowFor = (ad, sub, comp, tc, bold) => {
+    const t = `<td>${fmt(sub.alan_km2, 2)}</td><td>${fmt(sub.L_km, 2)}</td><td>${fmt(sub.Lc_km, 2)}</td>
+      <td>${fmt(comp.cn.CN2, 0)}</td><td>${(sub.yzd_bolge && sub.yzd_bolge.bolge) || "—"}</td>
+      <td>${fmt(tc, 2)}</td><td>${fmt(_envPeak(comp.res, "100"), 1)}</td>`;
+    return `<tr><td>${bold ? "<b>" + ad + "</b>" : ad}</td>${t}</tr>`;
+  };
   membaC.forEach((x, i) => h += rowFor("Memba " + (i + 1), x.mb, x, x.mb.Tc_saat));
-  h += rowFor("Ara havza", md.ara, araC, md.ara.Tc_saat);
-  h += `<tr><td colspan="7"><b>Mansap (toplam)</b> — A=${fmt(md.mansap.alan_km2, 2)} km²,
-     öteleme=${fmt(md.ara.Tc_saat, 2)} sa (${rt.shift_adim} adım)</td>
-     <td><b>${fmt(rt.pikler["100"], 1)}</b></td></tr></table>`;
-  if (md.uyari && md.uyari.length) h += `<div class="small">⚠ ${md.uyari.join("; ")}</div>`;
+  h += rowFor("Ara havza", md.ara, araC, md.ara.Tc_saat, true);
+  h += `</table>`;
+  if (md.uyari && md.uyari.length) h += `<div class="small err">⚠ ${md.uyari.join("; ")}</div>`;
 
-  h += `<h3 class="res">Mansap Taşkın Pikleri (öteleme sonrası, m³/s)</h3><table class="tbl"><tr>` +
-    MRP.map(rp => `<th>Q${rp}</th>`).join("") + `</tr><tr>` +
-    MRP.map(rp => `<td>${fmt(rt.pikler[rp], 1)}</td>`).join("") + `</tr>
-    <tr class="small"><td colspan="${MRP.length}">Bileşen (Q100): ara ${fmt(rt.bilesenler["100"].ara_pik, 1)} + memba ` +
-    rt.bilesenler["100"].memba_pikleri.map(v => fmt(v, 1)).join(", ") + ` (ötelenmiş) → ${fmt(rt.pikler["100"], 1)}</td></tr></table>
-    <div class="export-row"><button id="btnMultiChart" class="primary">📈 Mansap hidrografları</button>
+  // 2) mansap pikleri — yöntem × tekerrür
+  h += `<h3 class="res">Mansap Taşkın Pikleri (öteleme=${fmt(md.ara.Tc_saat, 2)} sa, m³/s)</h3>
+    <table class="tbl"><tr><th>Yöntem</th>` + MRP.map(rp => `<th>Q${rp}</th>`).join("") + `</tr>`;
+  methods.forEach(m => {
+    const y = rt.yontemler[m]; if (!y) return;
+    const syn = (m === "mockus" || m === "rasyonel") ? " *" : "";
+    h += `<tr><td>${M_LABEL[m]}${syn}</td>` +
+      MRP.map(rp => `<td>${y.pikler[rp] == null ? "—" : fmt(y.pikler[rp], 1)}</td>`).join("") + `</tr>`;
+  });
+  h += `</table><div class="small">* Mockus ve Rasyonel pik yöntemidir; öteleme üçgen hidrografla yapılır.
+    DSİ ve Snyder gerçek süperpozisyon hidrograflarıdır.</div>`;
+
+  // 3) Q100 bileşen dökümü (seçili ilk gerçek yöntem)
+  const dm = methods.includes("dsi") ? "dsi" : methods[0];
+  const comp = rt.yontemler[dm] && rt.yontemler[dm].bilesenler["100"];
+  if (comp) h += `<div class="small">${M_LABEL[dm]} Q100 bileşen: ara ${fmt(comp.ara_pik, 1)} +
+    memba ${comp.memba_pikleri.map(v => fmt(v, 1)).join(", ")} (ötelenmiş) → ${fmt(rt.yontemler[dm].pikler["100"], 1)} m³/s</div>`;
+
+  h += `<div class="export-row" style="align-items:center">
+    <button id="btnMcmp" class="primary">⚖ Sonuç ve Karşılaştırma (tam ekran)</button>
+    <button id="btnResMulti" class="primary">🏞 Rezervuar Ötelemesi</button>
+    <label class="inline" style="flex-direction:row;gap:4px">Grafik yöntem
+      <select id="multiChartM">${methods.map(m => `<option value="${m}">${M_LABEL[m]}</option>`).join("")}</select></label>
+    <button id="btnMultiChart" class="primary">📈 Mansap hidrografları</button>
     <button id="btnMultiCsv">⬇ CSV</button></div>`;
   $("multiResults").innerHTML = h;
-  $("btnMultiChart").onclick = showMultiChart;
-  $("btnMultiCsv").onclick = () => {
-    const rows = [["T(saat)", ...MRP.map(rp => "Q" + rp)]];
-    const n = Math.max(...MRP.map(rp => rt.hidrograflar[rp].length));
-    for (let i = 0; i < n; i++) rows.push([(i * 0.5).toFixed(1), ...MRP.map(rp => (rt.hidrograflar[rp][i] ?? "").toString())]);
-    download("mansap_hidrograflari.csv", rows.map(r => r.join(";")).join("\n"));
+  $("btnMcmp").onclick = openMcmp;
+  $("btnResMulti").onclick = openReservoir;
+  $("btnMultiChart").onclick = () => showMultiChart($("multiChartM").value);
+  $("btnMultiCsv").onclick = exportMultiCsv;
+}
+
+/* ---- Çok parçalı: bileşen + yöntem karşılaştırma tam ekran ---- */
+let mcmpChart = null;
+const mcmpState = { tab: "bilesen", rp: "100", method: "dsi" };
+const M_COLORS = { dsi: "#2a9d8f", snyder: "#c73e3a", mockus: "#e07b3a", rasyonel: "#7b1fa2" };
+
+function openMcmp() {
+  const { methods } = S.multiSonuc;
+  mcmpState.method = methods.includes("dsi") ? "dsi" : methods[0];
+  $("mcmpMethod").innerHTML = methods.map(m => `<option value="${m}">${M_LABEL[m]}</option>`).join("");
+  $("mcmpMethod").value = mcmpState.method;
+  $("mcmpMethod").onchange = () => { mcmpState.method = $("mcmpMethod").value; renderMcmp(); };
+  $("mcmpRP").onchange = () => { mcmpState.rp = $("mcmpRP").value; renderMcmp(); };
+  document.querySelectorAll(".mcmp-tab").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".mcmp-tab").forEach(x => x.classList.remove("active"));
+    b.classList.add("active"); mcmpState.tab = b.dataset.tab; renderMcmp();
+  });
+  $("mcmpWrap").classList.remove("hidden");
+  renderMcmp();
+}
+$("btnCloseMcmp").onclick = () => $("mcmpWrap").classList.add("hidden");
+
+function mcmpRpOptions() {
+  // bileşen/hidro sekmesinde yöntemde mevcut tekerrürler
+  const y = S.multiSonuc.rt.yontemler[mcmpState.method];
+  const rps = MRP.filter(rp => (S.multiSonuc.rt.yontemler[mcmpState.method]?.hidrograflar || {})[rp]);
+  return (mcmpState.tab === "pik") ? MRP : (rps.length ? rps : MRP);
+}
+function renderMcmp() {
+  const opts = mcmpRpOptions();
+  if (!opts.includes(mcmpState.rp)) mcmpState.rp = opts.includes("100") ? "100" : opts[0];
+  $("mcmpRP").innerHTML = opts.map(rp => `<option value="${rp}" ${rp === mcmpState.rp ? "selected" : ""}>Q${rp}</option>`).join("");
+  document.querySelector(".mcmp-method").style.display = mcmpState.tab === "bilesen" ? "" : "none";
+  if (mcmpState.tab === "bilesen") renderMcmpBilesen();
+  else if (mcmpState.tab === "pik") renderMcmpPik();
+  else renderMcmpHidro();
+}
+
+function _mkChart(datasets, title, parsing) {
+  if (mcmpChart) mcmpChart.destroy();
+  mcmpChart = new Chart($("mcmpChart"), {
+    type: parsing === "bar" ? "bar" : "line",
+    data: parsing === "bar" ? datasets : { datasets },
+    options: {
+      animation: false, maintainAspectRatio: false, parsing: parsing === "bar" ? undefined : false,
+      plugins: { legend: { position: "bottom", display: parsing !== "bar" }, title: { display: true, text: title } },
+      scales: parsing === "bar"
+        ? { y: { title: { display: true, text: "Q (m³/s)" }, beginAtZero: true } }
+        : { x: { type: "linear", title: { display: true, text: "T (saat)" } }, y: { title: { display: true, text: "Q (m³/s)" }, beginAtZero: true } },
+    },
+  });
+}
+
+// Bileşenler: ara + ötelenmiş membalar + mansap (toplam), seçili yöntem + tekerrür
+function renderMcmpBilesen() {
+  const { rt, md } = S.multiSonuc, m = mcmpState.method, rp = mcmpState.rp;
+  const y = rt.yontemler[m], b = y.bilesenler[rp], dt = y.dt, shift = y.shift_adim;
+  const ds = [];
+  ds.push({ label: "Ara havza", data: b.ara_h.map((v, i) => ({ x: i * dt, y: v })), borderColor: "#2a9d8f", borderWidth: 1.6, pointRadius: 0, tension: .25 });
+  b.memba_hs.forEach((uh, k) => ds.push({
+    label: `Memba ${k + 1} (ötelenmiş ${fmt(md.ara.Tc_saat, 1)} sa)`,
+    data: uh.map((v, i) => ({ x: (i + shift) * dt, y: v })),
+    borderColor: "#1e88e5", borderWidth: 1.4, borderDash: [5, 3], pointRadius: 0, tension: .25,
+  }));
+  ds.push({ label: "MANSAP (toplam)", data: y.hidrograflar[rp].map((v, i) => ({ x: i * dt, y: v })), borderColor: "#c73e3a", borderWidth: 2.2, pointRadius: 0, tension: .25 });
+  _mkChart(ds, `${M_LABEL[m]} — Q${rp}: bileşenler ve süperpozisyon`);
+
+  // koordinat tablosu (additif döküm): T | Ara | Memba_k(ötel.) | Mansap
+  const comb = y.hidrograflar[rp];
+  let h = `<h3 class="res">Koordinatlar (Q${rp}, ${M_LABEL[m]})</h3>
+    <button id="btnMcmpCsv" class="small-btn">⬇ CSV</button>
+    <table class="tbl"><tr><th>T (sa)</th><th>Ara</th>` +
+    b.memba_hs.map((_, k) => `<th>Memba ${k + 1}↦</th>`).join("") + `<th>Mansap</th></tr>`;
+  const rows = [];
+  for (let i = 0; i < comb.length; i++) {
+    const ara = b.ara_h[i] ?? "";
+    const mem = b.memba_hs.map(uh => (i - shift >= 0 && i - shift < uh.length) ? uh[i - shift] : 0);
+    rows.push([(i * dt).toFixed(1), ara === "" ? "" : (+ara).toFixed(2), ...mem.map(v => v.toFixed(2)), comb[i].toFixed(2)]);
+    h += `<tr><td>${fmt(i * dt, 1)}</td><td>${ara === "" ? "—" : fmt(ara, 2)}</td>` +
+      mem.map(v => `<td>${fmt(v, 2)}</td>`).join("") + `<td><b>${fmt(comb[i], 2)}</b></td></tr>`;
+  }
+  h += `</table>`;
+  $("mcmpTable").innerHTML = h;
+  $("btnMcmpCsv").onclick = () => {
+    const head = ["T(sa)", "Ara", ...b.memba_hs.map((_, k) => "Memba" + (k + 1) + "_otel"), "Mansap"];
+    download(`bilesen_Q${rp}_${m}.csv`, [head, ...rows].map(r => r.join(";")).join("\n"));
   };
 }
 
-function showMultiChart() {
-  const rt = S.multiSonuc.rt;
+// Yöntem pik: seçili tekerrürde yöntemler bar + yöntem×tekerrür tablo
+function renderMcmpPik() {
+  const { rt, methods } = S.multiSonuc, rp = mcmpState.rp;
+  const labels = methods.map(m => M_LABEL[m]);
+  const data = methods.map(m => (rt.yontemler[m].pikler || {})[rp] ?? null);
+  _mkChart({ labels, datasets: [{ label: `Q${rp} mansap piki`, data, backgroundColor: methods.map(m => M_COLORS[m]) }] },
+    `Mansap Q${rp} pik debileri (öteleme sonrası)`, "bar");
+  let h = `<h3 class="res">Mansap Pikleri — yöntem × tekerrür (m³/s)</h3>
+    <table class="tbl"><tr><th>Yöntem</th>` + MRP.map(t => `<th>Q${t}</th>`).join("") + `</tr>`;
+  methods.forEach(m => {
+    const p = rt.yontemler[m].pikler || {};
+    h += `<tr><td style="border-left:4px solid ${M_COLORS[m]}">${M_LABEL[m]}</td>` +
+      MRP.map(t => `<td class="${t === rp ? "max" : ""}">${p[t] == null ? "—" : fmt(p[t], 1)}</td>`).join("") + `</tr>`;
+  });
+  h += `</table><div class="small">Mockus/Rasyonel üçgen hidrografla ötelenmiştir. Rasyonel'de OET yoktur.</div>`;
+  $("mcmpTable").innerHTML = h;
+}
+
+// Yöntem hidrograf: seçili tekerrürde yöntemlerin mansap hidrografları üst üste + koordinat
+function renderMcmpHidro() {
+  const { rt, methods } = S.multiSonuc, rp = mcmpState.rp;
+  const ds = [];
+  const series = [];
+  methods.forEach(m => {
+    const y = rt.yontemler[m]; const arr = (y.hidrograflar || {})[rp]; if (!arr) return;
+    const dt = y.dt, pts = arr.map((v, i) => ({ x: i * dt, y: v }));
+    ds.push({ label: M_LABEL[m], data: pts, borderColor: M_COLORS[m], borderWidth: 1.8, pointRadius: 0, tension: .25 });
+    series.push({ m, pts });
+  });
+  _mkChart(ds, `Mansap Q${rp} taşkın hidrografları — yöntem karşılaştırması`);
+  // koordinat tablosu: ortak zaman ekseni (1 sa) interpolasyon
+  const maxT = Math.max(...series.map(s => s.pts[s.pts.length - 1].x), 0);
+  const step = maxT > 60 ? 2 : 1;
+  let h = `<h3 class="res">Koordinatlar (Q${rp})</h3><button id="btnMcmpCsv2" class="small-btn">⬇ CSV</button>
+    <table class="tbl"><tr><th>T (sa)</th>` + series.map(s => `<th>${M_LABEL[s.m]}</th>`).join("") + `</tr>`;
+  const rows = [];
+  for (let t = 0; t <= maxT + 1e-9; t += step) {
+    const vals = series.map(s => cmpInterp(s.pts, t));
+    rows.push([t.toFixed(1), ...vals.map(v => v == null ? "" : v.toFixed(2))]);
+    h += `<tr><td>${fmt(t, 1)}</td>` + vals.map(v => `<td>${v == null ? "—" : fmt(v, 2)}</td>`).join("") + `</tr>`;
+  }
+  h += `</table>`;
+  $("mcmpTable").innerHTML = h;
+  $("btnMcmpCsv2").onclick = () => {
+    const head = ["T(sa)", ...series.map(s => M_LABEL[s.m])];
+    download(`mansap_hidrograf_Q${rp}.csv`, [head, ...rows].map(r => r.join(";")).join("\n"));
+  };
+}
+
+function exportMultiCsv() {
+  const { rt, methods } = S.multiSonuc;
+  const rows = [["Yontem", ...MRP.map(rp => "Q" + rp)]];
+  methods.forEach(m => {
+    const y = rt.yontemler[m]; if (!y) return;
+    rows.push([M_LABEL[m], ...MRP.map(rp => y.pikler[rp] == null ? "" : y.pikler[rp].toFixed(2))]);
+  });
+  download("mansap_pikleri_yontemler.csv", rows.map(r => r.join(";")).join("\n"));
+}
+
+function showMultiChart(method) {
+  const y = S.multiSonuc.rt.yontemler[method];
+  if (!y) return;
   $("chartwrap").classList.remove("hidden");
-  $("chartDur").innerHTML = `<option>Mansap taşkın hidrografları (öteleme sonrası)</option>`;
+  $("chartDur").innerHTML = `<option>${M_LABEL[method]} — mansap hidrografları (öteleme sonrası)</option>`;
   $("chartDur").onchange = null;
   const colors = { "2": "#9db5b2", "5": "#64b5aa", "10": "#2a9d8f", "25": "#d9a441", "50": "#e07b3a", "100": "#c73e3a", "OET": "#5e2d48" };
-  const ds = MRP.map(rp => ({ label: "Q" + rp, data: rt.hidrograflar[rp], borderColor: colors[rp], borderWidth: 1.6, pointRadius: 0, tension: .25 }));
-  const n = Math.max(...MRP.map(rp => rt.hidrograflar[rp].length));
-  const labels = Array.from({ length: n }, (_, i) => (i * 0.5).toFixed(1));
+  const dt = y.dt || 0.5;
+  const rps = MRP.filter(rp => y.hidrograflar[rp]);
+  const ds = rps.map(rp => ({ label: "Q" + rp, data: y.hidrograflar[rp], borderColor: colors[rp], borderWidth: 1.6, pointRadius: 0, tension: .25 }));
+  const n = Math.max(...rps.map(rp => y.hidrograflar[rp].length));
+  const labels = Array.from({ length: n }, (_, i) => (i * dt).toFixed(1));
   if (chart) chart.destroy();
   chart = new Chart($("chart"), {
     type: "line", data: { labels, datasets: ds },
@@ -1077,6 +1685,10 @@ function showSnyderChart() {
 $("btnCloseChart").onclick = () => $("chartwrap").classList.add("hidden");
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    const rw = $("resWrap");
+    if (rw && !rw.classList.contains("hidden")) { rw.classList.add("hidden"); return; }
+    const mcmp = $("mcmpWrap");
+    if (mcmp && !mcmp.classList.contains("hidden")) { mcmp.classList.add("hidden"); return; }
     const cmp = $("cmpWrap");
     if (cmp && !cmp.classList.contains("hidden")) { cmp.classList.add("hidden"); return; }
     const cw = $("chartwrap");

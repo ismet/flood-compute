@@ -74,6 +74,32 @@ class RouteReq(BaseModel):
     ara_sonuc: dict                 # engine.compute sonucu (ara havza)
     memba_sonuclari: list           # [engine.compute sonucu, ...]
     lag_saat: float                 # öteleme süresi (ara havza Tc'si)
+    yontemler: list | None = None   # ["dsi","snyder","mockus","rasyonel"]
+
+
+class ReservoirReq(BaseModel):
+    inflow: list                    # giriş hidrografı [m³/s]
+    dt_saat: float = 1.0
+    kret_kotu: float                # dolusavak kret kotu (m)
+    hacim_satih: list               # [[kot_m, alan_km2, hacim_hm3], ...]
+    rating: list | None = None      # [[He_m, Q_m3s], ...] verilirse kullanılır
+    # rating yoksa geometriden hesap:
+    yaklasim_taban_kotu: float | None = None
+    apron_giris_acisi: float = 0.0  # derece
+    kret_uzunlugu: float = 40.0     # m (L)
+    debi_katsayisi: float | None = None  # C; None ⇒ USBR P/He eğrisinden türet
+
+
+class ReservoirControlledReq(BaseModel):
+    inflow: list                    # giriş hidrografı [m³/s]
+    dt_saat: float = 1.0
+    hacim_satih: list               # [[kot_m, hacim_hm3], ...]
+    esik_kotu: float                # kapak eşik (DSEK) kotu (m)
+    lef: float                      # efektif kapak genişliği (m)
+    baslangic_kotu: float           # öteleme başlangıç su kotu (m)
+    maks_su_kotu: float             # izin verilen maksimum su kotu (m)
+    taban_debi: float = 0.0         # W1 — kapak kapalıyken taban/serbest debi (m³/s)
+    kapak_adedi: int = 1            # n — kapak adedi (her biri lef genişlikte)
 
 
 class CNReq(BaseModel):
@@ -208,7 +234,7 @@ def api_route(req: RouteReq):
     """Memba hidrograflarını ara havza Tc'si kadar öteleyip mansap hidrografı bulur."""
     from backend.core import routing
     try:
-        return routing.route(req.ara_sonuc, req.memba_sonuclari, req.lag_saat)
+        return routing.route(req.ara_sonuc, req.memba_sonuclari, req.lag_saat, req.yontemler)
     except Exception as e:
         return _err(e)
 
@@ -323,6 +349,117 @@ def api_mgm_stations():
     from backend.core import tables
     try:
         return tables.load("mgm_plv_2020")
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/geocode")
+def api_geocode(q: str = ""):
+    """İl/ilçe/mahalle adres araması — OSM Nominatim proxy'si (Türkiye).
+
+    Sunucu tarafından tek User-Agent'la çağrılır (Nominatim kullanım
+    politikası); CORS/rate sorunlarını önler. [{ad, lat, lon, tur}].
+    """
+    import requests
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": q, "format": "jsonv2", "countrycodes": "tr",
+                    "addressdetails": 1, "accept-language": "tr", "limit": 8},
+            headers={"User-Agent": "TaskinHesap/1.0 (flood-compute)"},
+            timeout=12)
+        r.raise_for_status()
+        out = []
+        for it in r.json():
+            out.append({
+                "ad": it.get("display_name", ""),
+                "lat": float(it["lat"]), "lon": float(it["lon"]),
+                "tur": it.get("addresstype") or it.get("type", ""),
+                "sinir": it.get("boundingbox"),  # [s, n, w, e]
+            })
+        return out
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/snyder-ctcp")
+def api_snyder_ctcp():
+    """Snyder Ct-Cp abağı (metrik) — Cp↔Ct log-log interpolasyonu için tablo."""
+    from backend.core import tables
+    try:
+        return tables.load("snyder_ct_cp")
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/abak2")
+def api_abak2():
+    """ABAK2 alansal azaltma (YAD/ADK) tablosu — canlı YALD gösterimi için."""
+    from backend.core import tables
+    try:
+        return tables.load("abak2_yad")
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/reservoir-defaults")
+def api_reservoir_defaults():
+    """Söylemez haznesi varsayılan değerleri (hacim-satıh, rating, kret, taban)."""
+    from backend.core import tables
+    try:
+        return tables.load("soylemez_reservoir")
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/reservoir-controlled-defaults")
+def api_reservoir_controlled_defaults():
+    """Kapaklı (kontrollü) dolusavak varsayılanları (1512 sayfası)."""
+    from backend.core import tables
+    try:
+        return tables.load("kapakli_reservoir")
+    except Exception as e:
+        return _err(e)
+
+
+@app.post("/api/reservoir-controlled")
+def api_reservoir_controlled(req: ReservoirControlledReq):
+    """Kapaklı dolusavak ötelemesi + kapak optimizasyonu (min çıkış piki)."""
+    from backend.core import reservoir
+    try:
+        return reservoir.route_controlled(
+            req.inflow, req.dt_saat, req.hacim_satih, req.esik_kotu, req.lef,
+            req.baslangic_kotu, req.maks_su_kotu, W1=req.taban_debi,
+            n_kapak=req.kapak_adedi)
+    except Exception as e:
+        return _err(e)
+
+
+@app.post("/api/reservoir-route")
+def api_reservoir_route(req: ReservoirReq):
+    """Hazne (rezervuar) taşkın ötelemesi — Storage-Indication."""
+    from backend.core import reservoir
+    try:
+        rating = req.rating
+        P = None
+        if not rating:
+            if req.yaklasim_taban_kotu is not None:
+                P = req.kret_kotu - req.yaklasim_taban_kotu
+            rating = reservoir.rating_from_geometry(
+                req.kret_kotu, req.apron_giris_acisi, req.kret_uzunlugu,
+                C=req.debi_katsayisi, P=P)
+        res = reservoir.route(req.inflow, req.dt_saat, req.kret_kotu,
+                              req.hacim_satih, rating)
+        res["kullanilan_rating"] = rating
+        if not req.rating and req.debi_katsayisi is None:
+            # C, P/He eğrisinden türetildi — He başına C'yi de döndür
+            res["yaklasim_P"] = P
+            res["dolusavak_C"] = [[he, round(reservoir.coeff_from_ph(P, he), 3)]
+                                  for he, _ in rating[1:]]
+        return res
     except Exception as e:
         return _err(e)
 
