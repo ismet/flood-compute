@@ -11,8 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Heavy GIS modules (pyflwdir→numba, rasterio) are
-# imported lazily inside endpoints to keep startup memory low enough for the
-# 512 MB free plan. Python caches in sys.modules, so repeated imports are free.
+# imported lazily inside endpoints to keep startup memory low.
+# Python caches in sys.modules, so repeated imports are free.
 
 import threading
 _delineate_lock = threading.Lock()

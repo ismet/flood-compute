@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 # Ağır kütüphaneler (numpy, pyproj, shapely) fonksiyon içinden yüklenir
-# — 512 MB planında bellek tasarrufu için.
+# — bellek tasarrufu için.
 # import numpy as np
 # from pyproj import Transformer
 # from shapely.geometry import Polygon, shape

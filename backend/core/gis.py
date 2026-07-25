@@ -70,19 +70,17 @@ def _download_cop30(lat_i, lon_i):
     return dest
 
 
-def get_dem_mosaic(bbox, target_resolution_deg=0.001):
+def get_dem_mosaic(bbox, target_resolution_deg=0.00027):
     """bbox (w,s,e,n) kapsayan DEM mozaiğini geçici GeoTIFF olarak döner.
 
     Önce data/dem altındaki yerel dosyalara bakar; kapsam eksikse
     Copernicus GLO-30 karolarını indirir (data/dem/cache).
 
-    target_resolution_deg: hedef piksel boyutu (derece). Varsayılan 0.001° ≈ 110 m
-    (Copernicus GLO-30 orijinali ~0.00027° ≈ 30 m). 3x alt-örnekleme = 9x daha az
-    bellek — pyflwdir+numba ile birlikte sığması için gerekli.
+    target_resolution_deg: hedef piksel boyutu (derece). Varsayılan 0.00027° ≈ 30 m
+    (Copernicus GLO-30 orijinal çözünürlüğü).
     """
     import rasterio
     from rasterio.merge import merge
-    from rasterio.transform import Affine
     from shapely.geometry import shape, box as sbox
     from shapely.ops import unary_union
 
@@ -116,16 +114,6 @@ def get_dem_mosaic(bbox, target_resolution_deg=0.001):
         for d in dss:
             d.close()
 
-    # Alt-örnekleme (downsample): hedef çözünürlüğe nearest-neighbor ile
-    src_h, src_w = arr.shape[1], arr.shape[2]
-    src_res = abs(transform.a)
-    if src_res < target_resolution_deg:
-        step = max(1, int(round(target_resolution_deg / src_res)))
-        arr = arr[:, ::step, ::step]
-        transform = Affine(
-            transform.a * step, transform.b, transform.c,
-            transform.d, transform.e * step, transform.f)
-
     meta = {
         "height": arr.shape[1], "width": arr.shape[2], "transform": transform,
         "driver": "GTiff", "count": 1, "dtype": "float32", "crs": "EPSG:4326",
@@ -155,22 +143,6 @@ def _seg_len_m(lon1, lat1, lon2, lat2):
 
 def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=3):
     """Outlet (lat, lon) için havza çıkarımı. GeoJSON + fiziksel parametreler döner."""
-    # Bellek kontrolü
-    try:
-        import resource
-        mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
-        if mem_mb > 350:
-            import gc
-            gc.collect()
-            mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
-            if mem_mb > 450:
-                raise RuntimeError(
-                    f"Yetersiz bellek ({mem_mb:.0f} MB kullanımda). "
-                    "Render Starter planına (2 GB RAM) yükseltin veya yerel DEM kullanın.")
-    except RuntimeError:
-        raise
-    except Exception:
-        pass
     out = None
     for attempt in range(max_tries):
         buf = buffer_deg * (2 ** attempt)
