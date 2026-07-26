@@ -70,14 +70,11 @@ def _download_cop30(lat_i, lon_i):
     return dest
 
 
-def get_dem_mosaic(bbox, target_resolution_deg=0.00027):
+def get_dem_mosaic(bbox):
     """bbox (w,s,e,n) kapsayan DEM mozaiğini geçici GeoTIFF olarak döner.
 
     Önce data/dem altındaki yerel dosyalara bakar; kapsam eksikse
     Copernicus GLO-30 karolarını indirir (data/dem/cache).
-
-    target_resolution_deg: hedef piksel boyutu (derece). Varsayılan 0.00027° ≈ 30 m
-    (Copernicus GLO-30 orijinal çözünürlüğü).
     """
     import rasterio
     from rasterio.merge import merge

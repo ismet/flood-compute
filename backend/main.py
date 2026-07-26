@@ -137,6 +137,20 @@ class SaveReq(BaseModel):
     durum: dict
 
 
+class DilekceReq(BaseModel):
+    il: str = ""
+    istasyonlar: list = []          # [{no, ad, aralik}]
+    veri_turleri: list | None = None
+    eposta: str = ""
+    gsm: str = ""
+    adres: str = ""
+    imza: str = ""
+    kase: str = ""
+    format: str = "docx"           # "docx" | "pdf"
+    imza_b64: str = ""             # yüklenen imza/kaşe görseli (data URL veya base64)
+    use_default_imza: bool = True  # görsel yoksa varsayılan imza/kaşe kullanılsın mı
+
+
 class YilAraReq(BaseModel):
     q: float
     q10: float
@@ -522,6 +536,53 @@ def api_report(req: ReportReq):
         return _err(e)
 
 
+@app.get("/api/dilekce-defaults")
+def api_dilekce_defaults():
+    """Dilekçe için varsayılan iletişim bilgileri + varsayılan imza/kaşe var mı."""
+    from backend.core import dilekce
+    return {**dilekce.DEFAULTS,
+            "veri_turleri": dilekce.DEFAULT_VERI,
+            "imza_var": bool(dilekce.default_imza_bytes())}
+
+
+@app.get("/api/dilekce-imza")
+def api_dilekce_imza():
+    """Varsayılan imza/kaşe görselini döndürür (önizleme için)."""
+    from fastapi.responses import Response
+    from backend.core import dilekce
+    data = dilekce.default_imza_bytes()
+    if not data:
+        raise HTTPException(404, "Varsayılan imza/kaşe yok")
+    return Response(content=data, media_type="image/png")
+
+
+@app.post("/api/dilekce")
+def api_dilekce(req: DilekceReq):
+    """MGM veri talebi dilekçesi (.docx / .pdf) üretir (örnek biçimi)."""
+    import base64
+    from fastapi.responses import Response
+    from backend.core import dilekce
+    try:
+        imza = None
+        if req.imza_b64:
+            b = req.imza_b64.split(",", 1)[-1]          # data URL ön ekini at
+            imza = base64.b64decode(b)
+        elif req.use_default_imza:
+            imza = dilekce.default_imza_bytes()
+        fmt = "pdf" if (req.format or "").lower() == "pdf" else "docx"
+        data = dilekce.build(req.model_dump(), imza_bytes=imza, fmt=fmt)
+        sts = req.istasyonlar or []
+        base_ad = (str(sts[0].get("ad")) if sts and sts[0].get("ad") else req.il) or "MGM"
+        tr = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
+        fn = re.sub(r"[^A-Za-z0-9_.-]+", "_", base_ad.translate(tr)).strip("_") + "_MGM_Dilekce." + fmt
+        media = ("application/pdf" if fmt == "pdf"
+                 else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        return Response(content=data, media_type=media,
+                        headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+    except Exception as e:
+        return _err(e)
+
+
 # ------------------------------------------------------- proje kayıt (KAY)
 def _safe(name):
     return re.sub(r"[^\w\-çğıöşüÇĞİÖŞÜ ]", "_", name).strip() or "proje"
@@ -551,6 +612,15 @@ def api_load(ad: str):
         raise HTTPException(404, "Proje bulunamadı")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+@app.delete("/api/project/{ad}")
+def api_delete(ad: str):
+    path = os.path.join(PROJECTS, _safe(ad) + ".json")
+    if not os.path.exists(path):
+        raise HTTPException(404, "Proje bulunamadı")
+    os.remove(path)
+    return {"tamam": True, "silinen": _safe(ad)}
 
 
 # ------------------------------------------------------------------ frontend

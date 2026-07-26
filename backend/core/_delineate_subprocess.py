@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """Havza çıkarımı — alt süreç (subprocess) sürümü.
 
-pyflwdir+numba ~150 MB bellek kullanır. Bu modül, delineate() fonksiyonunu
-ayrı bir Python sürecinde çalıştırır; süreç çıkışında tüm bellek işletim
-sistemine iade edilir.
+Bu modül, delineate() fonksiyonunu ayrı bir Python sürecinde çalıştırır;
+süreç çıkışında tüm bellek işletim sistemine iade edilir.
 """
 import json
 import sys

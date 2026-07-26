@@ -48,27 +48,43 @@ def parse_kmz(data: bytes):
         txt = re.sub(r"<kml\b", "<kml" + decls, txt, count=1)
     root = ET.fromstring(txt)
     # ExtendedData/SchemaData'da istasyon adını taşıyan olası alan adları
-    NAME_KEYS = ("istasyonad", "istasyon", "istasyon_adi", "ad", "adi", "name",
-                 "station", "istno", "isim")
+    # (öncelik sırası): MGM şeması "istasyonAd", DSİ şeması "IST_AD".
+    NAME_KEYS = ("istasyonad", "ist_ad", "istasyon", "istasyon_adi", "ad", "adi",
+                 "name", "station", "istno", "isim")
+    # kurum (DMİ/MGM vs DSİ) tespiti için ayırt edici alanlar
+    DSI_KEYS = ("ist_ad", "ist_tip", "havza_no", "ist_no", "rasat_tip", "bolge_no")
+    DMI_KEYS = ("istasyonad", "grub", "mgm_bolgem")
     out = []
     for pm in root.findall(".//{*}Placemark"):
+        # tüm SimpleData'yı küçük-harf anahtarlı sözlüğe topla
+        sd = {}
+        for el in pm.findall(".//{*}SimpleData"):
+            key = (el.get("name") or "").strip().lower()
+            if key and el.text and el.text.strip():
+                sd[key] = el.text.strip()
         name_el = pm.find("{*}name")
         name = _sanitize(name_el.text) if name_el is not None and name_el.text else ""
-        if not name:  # <name> yoksa ExtendedData SimpleData'dan çek
-            for sd in pm.findall(".//{*}SimpleData"):
-                key = (sd.get("name") or "").strip().lower()
-                if key in NAME_KEYS and sd.text and sd.text.strip():
-                    name = _sanitize(sd.text)
+        if not name:  # <name> yoksa uygun SimpleData alanından çek
+            for k in NAME_KEYS:
+                if sd.get(k):
+                    name = _sanitize(sd[k])
                     break
         if not name:
             name = f"IST-{len(out) + 1}"
+        # kurum: DSİ şeması alanları varsa DSİ, MGM şeması varsa DMİ
+        if any(k in sd for k in DSI_KEYS):
+            kurum = "DSİ"
+        elif any(k in sd for k in DMI_KEYS):
+            kurum = "DMİ"
+        else:
+            kurum = ""
         coord_el = pm.find(".//{*}Point/{*}coordinates")
         if coord_el is None or not coord_el.text:
             continue
         first = coord_el.text.strip().split()[0]
         parts = first.split(",")
         lon, lat = float(parts[0]), float(parts[1])
-        out.append({"name": name, "lat": lat, "lon": lon})
+        out.append({"name": name, "lat": lat, "lon": lon, "kurum": kurum})
     return out
 
 
