@@ -138,7 +138,7 @@ def _seg_len_m(lon1, lat1, lon2, lat2):
     return d
 
 
-def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=3):
+def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=5):
     """Outlet (lat, lon) için havza çıkarımı. GeoJSON + fiziksel parametreler döner."""
     out = None
     for attempt in range(max_tries):

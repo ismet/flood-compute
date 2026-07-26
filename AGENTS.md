@@ -147,7 +147,7 @@ tools/
 | `GET /api/abak2` | ABAK2 areal reduction table |
 | `GET /api/reservoir-defaults` | Söylemez reservoir defaults |
 | `GET /api/reservoir-controlled-defaults` | Gated spillway defaults |
-| `GET /api/yzd-region` | YZD region classification from basin polygon |
+| `POST /api/yzd-region` | YZD region classification from basin polygon |
 | `POST /api/project/save` | Save project to JSON |
 | `GET /api/project/list` | List saved projects |
 | `GET /api/project/load/{ad}` | Load saved project |
