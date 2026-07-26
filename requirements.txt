@@ -12,3 +12,4 @@ python-docx
 matplotlib
 
 fpdf2
+Pillow

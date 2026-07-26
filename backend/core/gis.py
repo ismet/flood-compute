@@ -280,7 +280,7 @@ def _delineate_once(lat, lon, bbox, river_km2):
     del dem_raw, filled_dem
     gc.collect()
     for i in range(1, 11):
-        if prof[i] <= prof[i - 1]:
+        if not np.isfinite(prof[i]) or prof[i] <= prof[i - 1]:
             prof[i] = prof[i - 1] + 0.1
 
     # ---- dere ağı
