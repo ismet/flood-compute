@@ -198,3 +198,13 @@ h3.res { font-size: 15px; font-weight: 700; color: #0d5c63; margin-top: 12px; pa
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Dilekçe imza/kaşe önizleme */
+.dil-imza { display: flex; gap: 12px; align-items: flex-start; margin: 4px 0; }
+.dil-imza img { max-width: 200px; max-height: 120px; border: 1px solid #e3e9ef; border-radius: 4px; background: #fff; object-fit: contain; }
+.dil-imza > div { display: flex; flex-direction: column; gap: 6px; }
+
+/* Thiessen istasyon kurumu lejandı (DMİ/MGM vs DSİ) */
+.th-legend { display: flex; gap: 14px; align-items: center; margin: 4px 0 6px; font-size: 12px; }
+.th-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.th-legend i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }

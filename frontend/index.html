@@ -5,7 +5,7 @@
 <title>Taşkın Hesap — Sentetik Yöntemler</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="/static/style.css?v=26">
+<link rel="stylesheet" href="/static/style.css?v=28">
 </head>
 <body>
 <div id="app">
@@ -17,12 +17,14 @@
         <input id="projName" placeholder="Proje adı (dere adı)">
         <button id="btnSave" title="Projeyi kaydet">💾</button>
         <select id="projList" title="Kayıtlı projeler"><option value="">— yükle —</option></select>
+        <button id="btnDelete" title="Seçili/adı girilen projeyi sil">🗑</button>
       </div>
     </header>
 
     <div id="modeBar">
       <button id="modeWizard" class="mode-btn active">Tek Havza</button>
-      <button id="modeMulti" class="mode-btn">Ara Havza (Çok Parçalı)</button>
+      <button id="modeMulti" class="mode-btn">Ara Havza</button>
+      <button id="modeDilekce" class="mode-btn">Dilekçe</button>
     </div>
 
     <nav id="steps">
@@ -72,6 +74,46 @@
       </div>
       <div id="multiStatus" class="status"></div>
       <div id="multiResults"></div>
+    </section>
+
+    <!-- DİLEKÇE MODU -->
+    <section id="dilekceMode" class="hidden">
+      <p class="hint">MGM'ye <b>veri talebi dilekçesi</b>. İstasyon(lar)ı, ölçüm dönemini (yıl)
+      ve iletişim/imza bilgilerini girin; <b>Dilekçe oluştur</b> ile Word'e aktarın
+      (Ayvalık örneği biçiminde).</p>
+      <label>İl<input id="dilIl" placeholder="ör. Balıkesir"></label>
+      <div class="mstep"><b>İstasyonlar</b> — No, Ad, Ölçüm aralığı (yıl). Excel'den yapıştırılabilir.</div>
+      <div class="rain-tools">
+        <button id="btnDilFromTh" class="small-btn">Thiessen istasyonlarını getir</button>
+        <button id="btnDilStAdd" class="small-btn">+ satır</button>
+        <button id="btnDilStClear" class="small-btn">temizle</button>
+      </div>
+      <div id="dilStGrid"></div>
+      <label>İstenen veri türleri (her satır bir madde)
+        <textarea id="dilVeri" rows="3"></textarea></label>
+      <div class="grid2">
+        <label>E-posta<input id="dilEposta" placeholder="ad@kurum.gov.tr"></label>
+        <label>GSM (telefon)<input id="dilGsm" placeholder="05xx xxx xx xx"></label>
+      </div>
+      <label>Fatura adresi<textarea id="dilAdres" rows="4"></textarea></label>
+      <div class="mstep"><b>İmza / Kaşe</b> — varsayılan (Balıkesir örneği) gömülür; değiştirmek için görsel yükleyin.</div>
+      <div class="dil-imza">
+        <img id="dilImzaPrev" alt="imza/kaşe önizleme">
+        <div>
+          <input type="file" id="dilImzaFile" accept="image/*">
+          <button id="btnDilImzaReset" class="small-btn">Varsayılana dön</button>
+          <div class="small">Boş bırakılırsa varsayılan imza/kaşe kullanılır.</div>
+        </div>
+      </div>
+      <div class="grid2">
+        <label>İmza altı yazı (opsiyonel)<input id="dilImza" placeholder="görsel varsa boş bırakın"></label>
+        <label>Kaşe yazısı (opsiyonel)<input id="dilKase" placeholder="görsel varsa boş bırakın"></label>
+      </div>
+      <div class="grid2">
+        <label>Çıktı biçimi<select id="dilFormat"><option value="pdf">PDF</option><option value="docx">Word (.docx)</option></select></label>
+        <button id="btnDilekce" class="primary">📄 Dilekçe oluştur</button>
+      </div>
+      <div id="dilStatus" class="status"></div>
     </section>
 
     <!-- ADIM 1: Havza -->
@@ -134,7 +176,7 @@
 
     <!-- ADIM 4: Thiessen -->
     <section class="page hidden" data-page="4">
-      <p class="hint">Varsayılan istasyon seti (<code>data/stations/cikti_verisi.kml</code>, MGM
+      <p class="hint">Varsayılan istasyon seti (<code>data/stations/bir_cikti.kml</code>, MGM
       istasyon ağı) otomatik kullanılır; isterseniz başka bir KMZ/KML yükleyin. Thiessen
       poligonları havzaya kesilerek alan ağırlıkları bulunur.</p>
       <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan</button>
@@ -313,6 +355,6 @@
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=26"></script>
+<script src="/static/app.js?v=28"></script>
 </body>
 </html>

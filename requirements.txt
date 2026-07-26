@@ -11,3 +11,4 @@ requests
 python-docx
 matplotlib
 
+fpdf2

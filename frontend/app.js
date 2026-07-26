@@ -16,6 +16,8 @@ const api = async (url, body, isForm) => {
   return j;
 };
 const fmt = (x, d = 2) => (x === null || x === undefined || isNaN(x)) ? "—" : (+x).toFixed(d);
+// istasyon kurumuna göre renk (DMİ/MGM vs DSİ)
+const kurumColor = (k) => k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0" : "#7d6e4f";
 
 /* ---------------- harita ---------------- */
 const map = L.map("map").setView([39.2, 32.8], 6);
@@ -26,7 +28,13 @@ const sat = L.tileLayer(
   { maxZoom: 19, attribution: "Esri World Imagery" });
 L.control.layers({ "Harita": osm, "Uydu": sat }).addTo(map);
 const layers = {
-  havza: L.geoJSON(null, { style: { color: "#0d5c63", weight: 2, fillOpacity: .08 } }).addTo(map),
+  havza: L.geoJSON(null, {
+    style: { color: "#0d5c63", weight: 2, fillOpacity: .08 },
+    onEachFeature: (f, layer) => {
+      layer.on("click", onHavzaClick);
+      layer.bindTooltip("🗑 Havzayı sil (tıkla) — parametre, yağış, hidrograf dahil", { sticky: true });
+    },
+  }).addTo(map),
   dere: L.geoJSON(null, { style: { color: "#3b8ea5", weight: 1.5 } }).addTo(map),
   kanal: L.geoJSON(null, { style: { color: "#c73e3a", weight: 2.5, dashArray: "6 4" } }).addTo(map),
   thiessen: L.geoJSON(null, { style: { color: "#7d6e4f", weight: 1.5, fillOpacity: .05, dashArray: "3 3" } }).addTo(map),
@@ -226,12 +234,17 @@ async function runThiessen(stations, kaynak) {
     layers.markers.clearLayers();
     if (S.outlet) L.marker([S.outlet.snap_lat, S.outlet.snap_lon]).addTo(layers.markers).bindPopup("Outlet");
     const aktif = S.thiessen.filter(t => t.agirlik > 0);
-    let h = `<table class="tbl"><tr><th>İstasyon</th><th>Ağırlık</th><th>Alan (km²)</th></tr>`;
+    let h = `<div class="th-legend">
+      <span><i style="background:#1565c0"></i> DMİ/MGM</span>
+      <span><i style="background:#e65100"></i> DSİ</span></div>
+      <table class="tbl"><tr><th>İstasyon</th><th>Kurum</th><th>Ağırlık</th><th>Alan (km²)</th></tr>`;
     aktif.forEach(t => {
       if (t.poligon_geojson) layers.thiessen.addData(t.poligon_geojson);
-      L.circleMarker([t.lat, t.lon], { radius: 6, color: "#7d6e4f", fillOpacity: .8 })
-        .addTo(layers.markers).bindPopup(`${t.name} (w=${(t.agirlik * 100).toFixed(1)}%)`);
-      h += `<tr class="sel"><td>${t.name}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td></tr>`;
+      const col = kurumColor(t.kurum);
+      L.circleMarker([t.lat, t.lon], { radius: 6, color: col, fillColor: col, fillOpacity: .8 })
+        .addTo(layers.markers)
+        .bindPopup(`${t.name}${t.kurum ? " [" + t.kurum + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)`);
+      h += `<tr class="sel"><td>${t.name}</td><td>${t.kurum || "—"}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td></tr>`;
     });
     $("thTable").innerHTML = h + "</table>";
     setStatus("thStatus",
@@ -476,8 +489,11 @@ $("btnCloseRes").onclick = () => $("resWrap").classList.add("hidden");
 function showResMarker(pt) {
   if (!pt || !pt.ll) { $("resPointInfo").textContent = ""; return; }
   if (S.resMarker) S.resMarker.remove();
-  S.resMarker = L.marker([pt.ll.lat, pt.ll.lon]).addTo(map).bindTooltip("🏞 Rezervuar: " + pt.ad);
-  $("resPointInfo").innerHTML = `🏞 Rezervuar <b>${pt.ad}</b> noktasına atandı (${pt.ll.lat.toFixed(4)}, ${pt.ll.lon.toFixed(4)}). Bu noktadaki hidrograf haznede ötelenecek.`;
+  // rezervuar atanan nokta mor gösterilir
+  S.resMarker = L.circleMarker([pt.ll.lat, pt.ll.lon], {
+    radius: 9, color: "#6a1b9a", weight: 3, fillColor: "#9c27b0", fillOpacity: .85,
+  }).addTo(map).bindTooltip("🏞 Rezervuar: " + pt.ad, { permanent: false });
+  $("resPointInfo").innerHTML = `🏞 Rezervuar <b>${pt.ad}</b> noktasına atandı (${pt.ll.lat.toFixed(4)}, ${pt.ll.lon.toFixed(4)}). Bu noktadaki hidrograf haznede ötelenecek. <span style="color:#6a1b9a">●</span> nokta harita üzerinde <b>mor</b> ile işaretlendi.`;
 }
 
 /* ---- Genel editlenebilir + kopyala-yapıştır tablo fabrikası ---- */
@@ -1009,19 +1025,29 @@ async function downloadReport() {
 /* ================= ARA HAVZA (ÇOK PARÇALI) ================= */
 S.multi = { mansap: null, membalar: [], place: null };
 const multiLayers = {
-  poly: L.geoJSON(null, { style: f => ({ color: f.properties && f.properties.c || "#7b1fa2", weight: 2, fillOpacity: .12 }) }).addTo(map),
+  poly: L.geoJSON(null, {
+    style: f => ({ color: f.properties && f.properties.c || "#7b1fa2", weight: 2, fillOpacity: .12 }),
+    onEachFeature: (f, layer) => {
+      const p = f.properties || {};
+      layer.on("click", () => onMultiPolyClick(p));
+      layer.bindTooltip(p.kind === "memba" ? `🗑 Memba ${(+p.i || 0) + 1} havzasını sil (tıkla)`
+        : "Ara havza — çözümü temizlemek için tıkla", { sticky: true });
+    },
+  }).addTo(map),
   pts: L.layerGroup().addTo(map),
 };
 multiLayers.poly.remove(); multiLayers.pts.remove(); // varsayılan gizli
 
 function setMode(mode) {
   S.mode = mode;
-  const multi = mode === "multi";
-  $("modeWizard").classList.toggle("active", !multi);
+  const multi = mode === "multi", dil = mode === "dilekce", wiz = mode === "wizard";
+  $("modeWizard").classList.toggle("active", wiz);
   $("modeMulti").classList.toggle("active", multi);
-  $("steps").classList.toggle("hidden", multi);
-  if (multi) document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+  $("modeDilekce").classList.toggle("active", dil);
+  $("steps").classList.toggle("hidden", !wiz);
+  if (!wiz) document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
   $("multiMode").classList.toggle("hidden", !multi);
+  $("dilekceMode").classList.toggle("hidden", !dil);
   $("rainDock").classList.add("hidden");
   if (multi) {
     // Mansap noktası varsayılan: tek havzadaki outlet (kullanıcı elle değiştirmediyse hep senkron)
@@ -1037,11 +1063,78 @@ function setMode(mode) {
   }
   else {
     multiLayers.poly.remove(); multiLayers.pts.remove();
-    document.querySelector('.step[data-step="1"]').click();
+    if (wiz) document.querySelector('.step[data-step="1"]').click();
   }
+  if (dil) initDilekce();
 }
 $("modeWizard").onclick = () => setMode("wizard");
 $("modeMulti").onclick = () => setMode("multi");
+$("modeDilekce").onclick = () => setMode("dilekce");
+
+/* ---------------- DİLEKÇE (MGM veri talebi) ---------------- */
+let dilStGrid = null, dilInited = false;
+let dilImzaB64 = "";   // kullanıcı görsel yüklerse; boşsa backend varsayılanı kullanır
+async function initDilekce() {
+  if (!dilStGrid) {
+    dilStGrid = makePasteGrid("dilStGrid", "btnDilStAdd", "btnDilStClear",
+      ["İst. No", "İstasyon Adı", "Ölçüm aralığı (yıl)"], [], 3);
+  }
+  if (dilInited) return;
+  dilInited = true;
+  try {
+    const d = await api("/api/dilekce-defaults");
+    if (!$("dilEposta").value) $("dilEposta").value = d.eposta || "";
+    if (!$("dilGsm").value) $("dilGsm").value = d.gsm || "";
+    if (!$("dilAdres").value.trim()) $("dilAdres").value = d.adres || "";
+    if (!$("dilVeri").value.trim()) $("dilVeri").value = (d.veri_turleri || []).join("\n");
+    if (d.imza_var) $("dilImzaPrev").src = "/api/dilekce-imza?" + Date.now();
+  } catch (e) { setStatus("dilStatus", "Varsayılanlar yüklenemedi: " + e.message, "err"); }
+}
+$("dilImzaFile").onchange = () => {
+  const f = $("dilImzaFile").files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { dilImzaB64 = rd.result; $("dilImzaPrev").src = rd.result; };
+  rd.readAsDataURL(f);
+};
+$("btnDilImzaReset").onclick = () => {
+  dilImzaB64 = ""; $("dilImzaFile").value = "";
+  $("dilImzaPrev").src = "/api/dilekce-imza?" + Date.now();
+};
+$("btnDilFromTh").onclick = () => {
+  const act = (S.thiessen || []).filter(t => t.agirlik > 0);
+  if (!act.length) return alert("Önce Thiessen hesaplayın (Tek Havza → Adım 4)");
+  if (!dilStGrid) initDilekce();
+  dilStGrid.render(act.map(t => ["", t.name, ""]));
+};
+$("btnDilekce").onclick = async () => {
+  try {
+    const rows = dilStGrid ? dilStGrid.read() : [];
+    const istasyonlar = rows
+      .filter(r => (r[1] || "").trim() || (r[0] || "").trim())
+      .map(r => ({ no: (r[0] || "").trim(), ad: (r[1] || "").trim(), aralik: (r[2] || "").trim() }));
+    if (!istasyonlar.length) throw new Error("En az bir istasyon girin (Ad)");
+    const veri = $("dilVeri").value.split("\n").map(x => x.trim()).filter(Boolean);
+    const fmt = $("dilFormat").value === "pdf" ? "pdf" : "docx";
+    const body = {
+      il: $("dilIl").value.trim(), istasyonlar, veri_turleri: veri.length ? veri : null,
+      eposta: $("dilEposta").value.trim(), gsm: $("dilGsm").value.trim(),
+      adres: $("dilAdres").value.trim(), imza: $("dilImza").value.trim(), kase: $("dilKase").value.trim(),
+      format: fmt, imza_b64: dilImzaB64 || "", use_default_imza: true,
+    };
+    setStatus("dilStatus", "Dilekçe oluşturuluyor…", "loading");
+    const resp = await fetch("/api/dilekce", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!resp.ok) { const j = await resp.json().catch(() => ({})); throw new Error(j.hata || j.detail || resp.statusText); }
+    const blob = await resp.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (istasyonlar[0].ad || body.il || "MGM").replace(/[^\wçğıöşüÇĞİÖŞÜ]+/g, "_") + "_MGM_Dilekce." + fmt;
+    a.click(); URL.revokeObjectURL(a.href);
+    setStatus("dilStatus", "Dilekçe indirildi.", "ok");
+  } catch (e) { setStatus("dilStatus", "Hata: " + e.message, "err"); }
+};
 
 // 1) Ortak veri durumu (istasyon + yağış) — Adım 4-5'ten paylaşılır
 function updateMultiShared() {
@@ -1142,9 +1235,9 @@ $("btnSolveDelin").onclick = async () => {
       mansap: S.multi.mansap, membalar: S.multi.membalar, river_km2: +$("multiRivThr").value || 1,
     });
     multiLayers.poly.clearLayers();
-    const addPoly = (gj, c) => multiLayers.poly.addData({ type: "Feature", properties: { c }, geometry: JSON.parse(JSON.stringify(gj)) });
-    addPoly(md.ara.havza_geojson, "#2a9d8f");
-    md.membalar.forEach(mb => addPoly(mb.havza_geojson, "#1e88e5"));
+    const addPoly = (gj, c, meta) => multiLayers.poly.addData({ type: "Feature", properties: { c, ...(meta || {}) }, geometry: JSON.parse(JSON.stringify(gj)) });
+    addPoly(md.ara.havza_geojson, "#2a9d8f", { kind: "ara" });
+    md.membalar.forEach((mb, i) => addPoly(mb.havza_geojson, "#1e88e5", { kind: "memba", i }));
     map.fitBounds(multiLayers.poly.getBounds(), { padding: [30, 30] });
     S.multiMd = md;
     let h = `<h3 class="res">Alt Havzalar (çıkarıldı)</h3><table class="tbl">
@@ -1709,6 +1802,68 @@ function exportCSV() {
     rows.push([rp, ...DURS.map(d => fmt(r.kabulet[d][rp], 3))]));
   download("kabulet.csv", rows.map(x => x.join(";")).join("\n"));
 }
+
+/* ---------------- havza silme (haritadan tıkla) ---------------- */
+function clearSingleBasin() {
+  // durum
+  S.outlet = null; S.havza = null; S.kotlar = Array(11).fill("");
+  S.thiessen = []; S.istasyonlar = []; S.yzdBolge = null;
+  S.rainValues = {}; S.P24w = null; S.OETw = null; S.yagis = [];
+  S.sonuc = null; S.girdi = null; S.dplvList = null;
+  S.resPoints = null; S.resSonuc = null;
+  if (S.resMarker) { S.resMarker.remove(); S.resMarker = null; }
+  // harita katmanları
+  ["havza", "dere", "kanal", "thiessen", "markers"].forEach(k => layers[k].clearLayers());
+  // giriş alanları
+  ["inpA", "inpL", "inpLc", "inpCN3"].forEach(id => { if ($(id)) $(id).value = ""; });
+  $("inpCN2").value = "75";
+  $("yzdInfo").textContent = "";
+  ["cnTable", "thTable", "results"].forEach(id => { if ($(id)) $(id).innerHTML = ""; });
+  ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus"].forEach(id => { if ($(id)) setStatus(id, "", ""); });
+  document.querySelectorAll(".step").forEach(s => s.classList.remove("done"));
+  renderKotlar(); renderRainTable(); renderDplvGrid(); updateComputeReady();
+  // çok parçalı: mansap tek havza outlet'ine bağlıysa onu da düşür
+  if (S.multi) { if (S.multi.mansapAuto) { S.multi.mansap = null; S.multi.mansapAuto = false; } invalidateMultiSolve(); }
+  activateStep(1);
+  setStatus("delinStatus", "Havza ve bağlı tüm veriler silindi. Yeni outlet seçebilirsiniz.", "");
+}
+function onHavzaClick() {
+  if (!S.havza) return;
+  if (!confirm("Bu havzayı ve ona bağlı TÜM verileri (parametreler, CN, Thiessen, yağış, hidrograflar) silmek istiyor musunuz?")) return;
+  clearSingleBasin();
+}
+function onMultiPolyClick(p) {
+  if (!p) return;
+  if (p.kind === "memba") {
+    const i = +p.i || 0;
+    if (!confirm(`Memba ${i + 1} havzasını silmek istiyor musunuz? Ara havza yeniden hesaplanacak; bu membaya bağlı sonuçlar silinecek.`)) return;
+    S.multi.membalar.splice(i, 1);
+    S.multiSonuc = null; $("multiResults").innerHTML = "";
+    invalidateMultiSolve();
+    multiLayers.poly.clearLayers();
+    renderMultiPoints();
+    if (S.multi.membalar.length) $("btnSolveDelin").click();   // ara havzayı yeniden çöz
+    else setStatus("multiStatus", "Memba silindi. En az bir memba ekleyip tekrar çözün.", "");
+  } else if (p.kind === "ara") {
+    if (!confirm("Ara havza mansap−membalardan otomatik türetilir, tek başına silinemez. Tüm çok parçalı çözümü temizlemek ister misiniz?")) return;
+    S.multiMd = null; S.multiSonuc = null;
+    multiLayers.poly.clearLayers(); $("multiResults").innerHTML = "";
+    invalidateMultiSolve();
+    setStatus("multiStatus", "Çok parçalı çözüm temizlendi.", "");
+  }
+}
+
+$("btnDelete").onclick = async () => {
+  const ad = ($("projList").value || $("projName").value).trim();
+  if (!ad) return alert("Silinecek projeyi listeden seçin veya adını girin");
+  if (!confirm(`"${ad}" projesi kalıcı olarak silinsin mi?`)) return;
+  const r = await fetch("/api/project/" + encodeURIComponent(ad), { method: "DELETE" });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); return alert("Silinemedi: " + (j.detail || r.statusText)); }
+  await loadProjects();
+  $("projList").value = "";
+  if ($("projName").value.trim() === ad) $("projName").value = "";
+  alert(`"${ad}" silindi`);
+};
 
 $("btnSave").onclick = async () => {
   const ad = $("projName").value.trim();
