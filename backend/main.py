@@ -62,12 +62,16 @@ class DelineateReq(BaseModel):
     lat: float
     lon: float
     river_km2: float = 1.0
+    snap_m: float = 500.0   # tıklanan noktayı kanala kenetleme yarıçapı (m)
+    dem_source: str = "auto"  # auto | yerel (ASTER) | copernicus
 
 
 class MultiDelineateReq(BaseModel):
     mansap: dict            # {lat, lon}
     membalar: list         # [{lat, lon}, ...]
     river_km2: float = 1.0
+    snap_m: float = 500.0
+    dem_source: str = "auto"
 
 
 class RouteReq(BaseModel):
@@ -75,6 +79,7 @@ class RouteReq(BaseModel):
     memba_sonuclari: list           # [engine.compute sonucu, ...]
     lag_saat: float                 # öteleme süresi (ara havza Tc'si)
     yontemler: list | None = None   # ["dsi","snyder","mockus","rasyonel"]
+    rezervuarlar: list | None = None  # membalarla aynı sırada; dolu olan noktada hazne ötelemesi
 
 
 class ReservoirReq(BaseModel):
@@ -100,6 +105,7 @@ class ReservoirControlledReq(BaseModel):
     maks_su_kotu: float             # izin verilen maksimum su kotu (m)
     taban_debi: float = 0.0         # W1 — kapak kapalıyken taban/serbest debi (m³/s)
     kapak_adedi: int = 1            # n — kapak adedi (her biri lef genişlikte)
+    pik_sonrasi_bosalt: bool = True  # pik geçince O > I serbest (hazneyi boşalt)
 
 
 class CNReq(BaseModel):
@@ -110,6 +116,7 @@ class CNReq(BaseModel):
 class ThiessenReq(BaseModel):
     havza_geojson: dict
     istasyonlar: list
+    min_agirlik: float = 0.05   # payı bunun altındaki istasyonlar elenir (0 = eleme yok)
 
 
 class RainParseReq(BaseModel):
@@ -175,8 +182,10 @@ def api_delineate(req: DelineateReq):
         import subprocess, sys
         proc = subprocess.run(
             [sys.executable, "-m", "backend.core._delineate_subprocess",
-             str(req.lat), str(req.lon), str(req.river_km2)],
-            capture_output=True, text=True, timeout=480,
+             str(req.lat), str(req.lon), str(req.river_km2), "0.08", str(req.snap_m),
+             str(req.dem_source)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=480,
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         if proc.returncode != 0:
             msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
@@ -193,6 +202,63 @@ def api_delineate(req: DelineateReq):
         return result
     except subprocess.TimeoutExpired:
         return _err(RuntimeError("Havza çıkarımı zaman aşımına uğradı (8 dk) — DEM indirme çok yavaş olabilir"))
+    except Exception as e:
+        return _err(e)
+    finally:
+        _delineate_lock.release()
+
+
+@app.post("/api/import-basin")
+async def api_import_basin(file: UploadFile = File(...),
+                           dere_file: UploadFile | None = File(None),
+                           river_km2: float = 1.0, dem_source: str = "auto"):
+    """Dışarıdan çizilmiş havza sınırı (+dere) dosyasını okur ve kalan
+    parametreleri (A, L, Lc, kotlar, dere ağı, çıkış noktası) DEM'den üretir."""
+    from backend.core import vektor
+    acquired = _delineate_lock.acquire(blocking=False)
+    if not acquired:
+        return JSONResponse(status_code=503,
+            content={"hata": "Havza çıkarımı devam ediyor, lütfen bekleyip tekrar deneyin."})
+    try:
+        veri = await file.read()
+        gj = vektor.oku(veri, file.filename or "")
+        # ayrı dere dosyası verildiyse onun çizgilerini kullan
+        if dere_file is not None and getattr(dere_file, "filename", ""):
+            dgj = vektor.oku(await dere_file.read(), dere_file.filename or "", poligon_zorunlu=False)
+            if dgj.get("dereler"):
+                gj["dereler"] = dgj["dereler"]
+                gj["cizgi_sayisi"] = dgj["cizgi_sayisi"]
+        import subprocess, sys
+        payload = json.dumps({"havza": gj["havza"], "river_km2": river_km2,
+                              "dem_source": dem_source, "dere": gj.get("dereler")})
+        proc = subprocess.run(
+            [sys.executable, "-m", "backend.core._import_basin_subprocess"],
+            input=payload, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=480,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if proc.returncode != 0:
+            msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
+            raise RuntimeError(msg)
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        # kullanıcı dere ağı da verdiyse DEM'den türetilen yerine onu göster
+        if gj.get("dereler"):
+            result["dere_geojson"] = gj["dereler"]
+            result["dere_kaynagi"] = "ice_aktarim"
+        else:
+            result["dere_kaynagi"] = "dem"
+        result["ice_aktarim"] = {"poligon_sayisi": gj["poligon_sayisi"],
+                                 "cizgi_sayisi": gj["cizgi_sayisi"],
+                                 "dosya": file.filename}
+        try:
+            from backend.core import yzd_region
+            result["yzd_bolge"] = yzd_region.detect(
+                basin_geojson=result.get("havza_geojson"),
+                lat=result["outlet"]["lat"], lon=result["outlet"]["lon"])
+        except Exception as e:
+            result["yzd_bolge"] = {"bolge": None, "yontem": None, "hata": str(e)}
+        return result
+    except subprocess.TimeoutExpired:
+        return _err(RuntimeError("İşlem zaman aşımına uğradı (8 dk)"))
     except Exception as e:
         return _err(e)
     finally:
@@ -217,10 +283,12 @@ def api_multi_delineate(req: MultiDelineateReq):
     try:
         import subprocess, sys
         payload = json.dumps({"mansap": req.mansap, "membalar": req.membalar,
-                              "river_km2": req.river_km2})
+                              "river_km2": req.river_km2, "snap_m": req.snap_m,
+                              "dem_source": req.dem_source})
         proc = subprocess.run(
             [sys.executable, "-m", "backend.core._multi_delineate_subprocess"],
-            input=payload, capture_output=True, text=True, timeout=300,
+            input=payload, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=300,
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         if proc.returncode != 0:
             msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
@@ -248,7 +316,8 @@ def api_route(req: RouteReq):
     """Memba hidrograflarını ara havza Tc'si kadar öteleyip mansap hidrografı bulur."""
     from backend.core import routing
     try:
-        return routing.route(req.ara_sonuc, req.memba_sonuclari, req.lag_saat, req.yontemler)
+        return routing.route(req.ara_sonuc, req.memba_sonuclari, req.lag_saat,
+                             req.yontemler, rezervuarlar=req.rezervuarlar)
     except Exception as e:
         return _err(e)
 
@@ -309,7 +378,9 @@ async def api_stations(file: UploadFile = File(...)):
 def api_thiessen(req: ThiessenReq):
     from backend.core import thiessen
     try:
-        return {"sonuc": thiessen.weights(req.havza_geojson, req.istasyonlar)}
+        sonuc, elenen = thiessen.weights(req.havza_geojson, req.istasyonlar,
+                                         min_agirlik=req.min_agirlik)
+        return {"sonuc": sonuc, "elenen": elenen}
     except Exception as e:
         return _err(e)
 
@@ -447,7 +518,8 @@ def api_reservoir_controlled(req: ReservoirControlledReq):
         return reservoir.route_controlled(
             req.inflow, req.dt_saat, req.hacim_satih, req.esik_kotu, req.lef,
             req.baslangic_kotu, req.maks_su_kotu, W1=req.taban_debi,
-            n_kapak=req.kapak_adedi)
+            n_kapak=req.kapak_adedi,
+            pik_sonrasi_bosalt=req.pik_sonrasi_bosalt)
     except Exception as e:
         return _err(e)
 
@@ -629,4 +701,10 @@ app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(FRONTEND, "index.html"))
+    # index.html önbelleğe alınmamalı: içindeki ?v= sürüm damgaları yalnız
+    # app.js/style.css'i tazeler, HTML'in kendisi eski kalırsa yeni eklenen
+    # alanlar (ör. DEM kaynağı seçici) arayüzde hiç görünmez.
+    return FileResponse(
+        os.path.join(FRONTEND, "index.html"),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate",
+                 "Pragma": "no-cache", "Expires": "0"})

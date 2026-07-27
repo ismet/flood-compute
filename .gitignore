@@ -13,3 +13,6 @@ data/projects/
 
 # data/stations/DMİ.kmz is the canonical copy; root is a local fallback
 /DMİ.kmz
+
+.commandcode/
+aster30M/

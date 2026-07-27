@@ -17,7 +17,54 @@ const api = async (url, body, isForm) => {
 };
 const fmt = (x, d = 2) => (x === null || x === undefined || isNaN(x)) ? "—" : (+x).toFixed(d);
 // istasyon kurumuna göre renk (DMİ/MGM vs DSİ)
-const kurumColor = (k) => k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0" : "#7d6e4f";
+const kurumColor = (k) => k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0"
+  : k === "Elle" ? "#2e7d32" : "#7d6e4f";
+
+/* ---- Thiessen poligonlarını yağış miktarına göre mavi tonlarıyla boya ----
+   Az yağış = açık mavi, çok yağış = koyu mavi. Boyama, seçili tekerrür
+   sütunundaki (vars. 100 yıl) değerlere göre yapılır.                        */
+const RAIN_BLUES = ["#e3f2fd", "#bbdefb", "#90caf9", "#64b5f6", "#42a5f5",
+                    "#2196f3", "#1e88e5", "#1976d2", "#1565c0", "#0d47a1"];
+function rainRange() {
+  // seçili sütunda dolu değeri olan aktif istasyonlardan min/max
+  const c = S.rainColorCol ?? 5;
+  const vals = (S.thiessen || []).filter(t => t.agirlik > 0)
+    .map(t => (S.rainValues && S.rainValues[t.name] || [])[c])
+    .filter(v => v != null && !isNaN(v)).map(Number);
+  if (!vals.length) return null;
+  return { min: Math.min(...vals), max: Math.max(...vals), n: vals.length, col: c };
+}
+function rainColor(name) {
+  const rng = rainRange();
+  if (!rng) return null;
+  const v = (S.rainValues && S.rainValues[name] || [])[rng.col];
+  if (v == null || isNaN(v)) return null;
+  const t = rng.max > rng.min ? (v - rng.min) / (rng.max - rng.min) : 0.6;
+  return RAIN_BLUES[Math.min(RAIN_BLUES.length - 1,
+    Math.max(0, Math.round(t * (RAIN_BLUES.length - 1))))];
+}
+function thiessenStyle(f) {
+  const ad = f && f.properties && f.properties.name;
+  const col = ad ? rainColor(ad) : null;
+  if (!col) return { color: "#7d6e4f", weight: 1.5, fillOpacity: .05, dashArray: "3 3" };
+  return { color: "#0d47a1", weight: 1.5, fillColor: col, fillOpacity: .65, dashArray: null };
+}
+function recolorThiessen() {
+  if (layers.thiessen) layers.thiessen.setStyle(thiessenStyle);
+  renderRainLegend();
+}
+function renderRainLegend() {
+  const el = $("rainLegend");
+  if (!el) return;
+  const rng = rainRange();
+  if (!rng) { el.innerHTML = ""; return; }
+  const etiket = RAIN_COLS[rng.col] === "OEY" ? "OEY" : "P" + RAIN_COLS[rng.col];
+  el.innerHTML = `<span class="small">Alan boyaması — ${etiket} yağışı (mm):</span>
+    <span class="small">${rng.min.toFixed(1)}</span>` +
+    RAIN_BLUES.map(c => `<i style="background:${c}"></i>`).join("") +
+    `<span class="small">${rng.max.toFixed(1)}</span>
+     <span class="small">(${rng.n} istasyon)</span>`;
+}
 
 /* ---------------- harita ---------------- */
 const map = L.map("map").setView([39.2, 32.8], 6);
@@ -37,7 +84,7 @@ const layers = {
   }).addTo(map),
   dere: L.geoJSON(null, { style: { color: "#3b8ea5", weight: 1.5 } }).addTo(map),
   kanal: L.geoJSON(null, { style: { color: "#c73e3a", weight: 2.5, dashArray: "6 4" } }).addTo(map),
-  thiessen: L.geoJSON(null, { style: { color: "#7d6e4f", weight: 1.5, fillOpacity: .05, dashArray: "3 3" } }).addTo(map),
+  thiessen: L.geoJSON(null, { style: (f) => thiessenStyle(f) }).addTo(map),
   markers: L.layerGroup().addTo(map),
 };
 
@@ -150,7 +197,67 @@ document.addEventListener("keydown", (e) => {
     map.getContainer().style.cursor = "";
     setStatus("delinStatus", "İptal edildi", "");
   }
+  if (e.key === "Escape" && S.stPlace) {
+    S.stPlace = false;
+    map.getContainer().style.cursor = "";
+    setStatus("thStatus", "İptal edildi", "");
+  }
 });
+/* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
+   Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
+   (dere verilmediyse) dere ağı DEM'den üretilir.                          */
+async function importBasinFiles() {
+  const f = $("basinFile").files[0];
+  if (!f) { setStatus("delinStatus", "Önce havza (poligon) dosyası seçin", "err"); return; }
+  const fd2 = $("riverFile").files[0];
+  setStatus("delinStatus", `“${f.name}”${fd2 ? " + “" + fd2.name + "”" : ""} okunuyor, parametreler üretiliyor…`, "loading");
+  try {
+    const fd = new FormData(); fd.append("file", f);
+    if (fd2) fd.append("dere_file", fd2);
+    const q = `?river_km2=${+$("inpRivThr").value || 1}&dem_source=${encodeURIComponent($("inpDem").value)}`;
+    const r = await api("/api/import-basin" + q, fd, true);
+    applyBasinResult(r, `İçe aktarıldı: ${f.name}${fd2 ? " + " + fd2.name : ""}`);
+  } catch (e) {
+    setStatus("delinStatus", "Hata: " + e.message, "err");
+  }
+}
+$("btnImport").onclick = importBasinFiles;
+$("basinFile").onchange = () => { if (!$("riverFile").files[0]) importBasinFiles(); };
+
+// delineate / import sonucunu arayüze uygular (ikisi de aynı biçimde döner)
+function applyBasinResult(r, baslik) {
+  S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
+  $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
+  updateSnyderW();
+  layers.havza.clearLayers(); layers.havza.addData(r.havza_geojson);
+  layers.dere.clearLayers(); if (r.dere_geojson) layers.dere.addData(r.dere_geojson);
+  layers.kanal.clearLayers(); if (r.ana_kanal_geojson) layers.kanal.addData(r.ana_kanal_geojson);
+  layers.markers.clearLayers();
+  if (r.outlet) L.marker([r.outlet.snap_lat ?? r.outlet.lat, r.outlet.snap_lon ?? r.outlet.lon])
+    .addTo(layers.markers).bindPopup("Çıkış noktası (DEM'den bulundu)");
+  map.fitBounds(layers.havza.getBounds(), { padding: [30, 30] });
+  renderKotlar();
+  let yzdMsg = "";
+  if (r.yzd_bolge && r.yzd_bolge.bolge) {
+    S.yzdBolge = r.yzd_bolge;
+    $("inpRegion").value = r.yzd_bolge.bolge;
+    yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem}) — otomatik seçildi`;
+    $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})`;
+  }
+  const ia = r.ice_aktarim;
+  const detay = ia ? `\n${ia.poligon_sayisi} poligon, ${ia.cizgi_sayisi} çizgi okundu` +
+    ` | dere ağı: ${r.dere_kaynagi === "ice_aktarim" ? "dosyadan" : "DEM'den türetildi"}` +
+    `
+L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DERE AĞINDAN" : "DEM akış yollarından"}` +
+    `\nAlan poligondan (jeodezik); L, Lc ve kotlar DEM'den üretildi (${r.cozunurluk_m} m).` : "";
+  const uy = (r.uyarilar || []).length ? "\n⚠ " + r.uyarilar.join("\n⚠ ") : "";
+  setStatus("delinStatus",
+    `${baslik}\nHavza: ${r.alan_km2} km² | L=${r.L_km} km | Lc=${r.Lc_km} km` + detay + yzdMsg + uy,
+    uy ? "err" : "ok");
+  markDone(1);
+  updateComputeReady();
+}
+
 map.on("click", (ev) => {
   if (S.multi && S.multi.place) { multiAddPoint(ev.latlng); return; }
 });
@@ -159,10 +266,12 @@ map.on("click", async (ev) => {
   picking = false;
   $("btnPick").classList.remove("picking");
   map.getContainer().style.cursor = "";
-  setStatus("delinStatus", "Havza çıkarılıyor… (DEM işleniyor, birkaç saniye sürebilir)", "loading");
+  setStatus("delinStatus", "Havza çıkarılıyor… DEM işleniyor: küçük havzada birkaç saniye, " +
+    "büyük havzada (binlerce km²) pencere büyütülüp DEM indirildiği için 1–3 dakika sürebilir.", "loading");
   try {
     const r = await api("/api/delineate", {
       lat: ev.latlng.lat, lon: ev.latlng.lng, river_km2: +$("inpRivThr").value || 1,
+      snap_m: +$("inpSnap").value || 500, dem_source: $("inpDem").value,
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
@@ -184,10 +293,17 @@ map.on("click", async (ev) => {
       const ovTxt = ov ? " | örtüşme: " + Object.entries(ov).map(([k, v]) => `${k}=${(v * 100).toFixed(0)}%`).join(" ") : "";
       $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})${ovTxt}`;
     }
+    // teşhis: çözünürlük + kenetleme mesafesi (havza beklenenden küçükse ipucu)
+    let dgn = "";
+    if (r.cozunurluk_m) dgn += `\nDEM çözünürlüğü: ${r.cozunurluk_m} m`;
+    if (r.snap_mesafe_m != null) dgn += ` | kanala kenetleme: ${r.snap_mesafe_m} m`;
+    if (r.snap_mesafe_m != null && r.snap_mesafe_m > 0.8 * (+$("inpSnap").value || 500))
+      dgn += `\n⚠ Tıklanan nokta kanaldan uzak (${r.snap_mesafe_m} m) — yanlış/küçük bir kola oturmuş olabilir.` +
+             ` Havza beklenenden küçükse dere ağına daha yakın tıklayın veya "Kanala kenetleme" değerini artırın.`;
     setStatus("delinStatus",
       `Havza: ${r.alan_km2} km² | L=${r.L_km} km | Lc=${r.Lc_km} km` +
       (r.kenar_uyarisi ? "\n⚠ Havza pencere kenarına değiyor, sonuçları kontrol edin!" : "") +
-      yzdMsg, "ok");
+      dgn + yzdMsg, "ok");
     markDone(1);
     updateComputeReady();
   } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
@@ -223,36 +339,140 @@ $("btnCN").onclick = async () => {
 };
 
 /* ---------------- ADIM 4: Thiessen ---------------- */
+/* ---- istasyon listesi yönetimi (çıkarma / elle ekleme) ----
+   S.stBase   : kaynaktan (KML/KMZ) gelen tam liste
+   S.stExclude: kullanıcının çıkardığı istasyon anahtarları
+   S.stExtra  : haritadan elle eklenen istasyonlar
+   Etkin liste = (temel − çıkarılanlar) + elle eklenenler                      */
+const stKey = (s) => `${s.name}|${(+s.lat).toFixed(5)}|${(+s.lon).toFixed(5)}`;
+S.stExclude = new Set();
+S.stExtra = [];
+function effectiveStations() {
+  const base = (S.stBase || []).filter(s => !S.stExclude.has(stKey(s)));
+  return base.concat(S.stExtra);
+}
+// yeni kaynak yüklendiğinde: temel listeyi kur, çıkarma/eklemeleri sıfırla
+async function loadStationSet(list, kaynak) {
+  S.stBase = list;
+  S.stExclude = new Set();
+  S.stExtra = [];
+  await runThiessen(effectiveStations(), kaynak);
+}
+async function recomputeThiessen() {
+  if (!S.stBase && !S.stExtra.length) return;
+  await runThiessen(effectiveStations(), S.stKaynak || "Güncel liste");
+}
+function renderExcluded() {
+  const el = $("thExcluded");
+  if (!el) return;
+  const list = (S.stBase || []).filter(s => S.stExclude.has(stKey(s)));
+  const elenen = S.thElenen || [];
+  if (!list.length && !S.stExtra.length && !elenen.length) { el.innerHTML = ""; return; }
+  let h = "";
+  if (elenen.length)
+    h += `<div class="small"><b>Küçük pay eşiğinin altında elenenler:</b> ` +
+      elenen.map(x => `${x.name} (%${(x.agirlik * 100).toFixed(1)})`).join(", ") +
+      ` — alanları komşu istasyonlara dağıtıldı.</div>`;
+  if (S.stExtra.length)
+    h += `<div class="small"><b>Elle eklenenler:</b> ` + S.stExtra.map((s, i) =>
+      `${s.name} <button class="link-btn" data-x="${i}" title="Kaldır">✕</button>`).join(", ") + `</div>`;
+  if (list.length)
+    h += `<div class="small"><b>Çıkarılanlar:</b> ` + list.map(s =>
+      `${s.name} <button class="link-btn" data-r="${stKey(s)}" title="Geri al">↺</button>`).join(", ") + `</div>`;
+  el.innerHTML = h;
+  el.querySelectorAll("button[data-r]").forEach(b => b.onclick = () => {
+    S.stExclude.delete(b.dataset.r); recomputeThiessen();
+  });
+  el.querySelectorAll("button[data-x]").forEach(b => b.onclick = () => {
+    S.stExtra.splice(+b.dataset.x, 1); recomputeThiessen();
+  });
+}
+
 async function runThiessen(stations, kaynak) {
   if (!S.havza) return setStatus("thStatus", "Önce havzayı çıkarın (Adım 1)", "err");
   setStatus("thStatus", "Thiessen hesaplanıyor…", "loading");
   try {
     S.istasyonlar = stations;
-    const r2 = await api("/api/thiessen", { havza_geojson: S.havza, istasyonlar: S.istasyonlar });
+    S.stKaynak = kaynak;
+    if (!S.stBase) S.stBase = stations;   // doğrudan çağrılırsa temel liste bu olsun
+    const minW = Math.max(0, (+$("inpMinW").value || 0) / 100);
+    const r2 = await api("/api/thiessen", { havza_geojson: S.havza, istasyonlar: S.istasyonlar,
+                                            min_agirlik: minW });
     S.thiessen = r2.sonuc;
+    S.thElenen = r2.elenen || [];
     layers.thiessen.clearLayers();
     layers.markers.clearLayers();
     if (S.outlet) L.marker([S.outlet.snap_lat, S.outlet.snap_lon]).addTo(layers.markers).bindPopup("Outlet");
     const aktif = S.thiessen.filter(t => t.agirlik > 0);
     let h = `<div class="th-legend">
       <span><i style="background:#1565c0"></i> DMİ/MGM</span>
-      <span><i style="background:#e65100"></i> DSİ</span></div>
-      <table class="tbl"><tr><th>İstasyon</th><th>Kurum</th><th>Ağırlık</th><th>Alan (km²)</th></tr>`;
+      <span><i style="background:#e65100"></i> DSİ</span>
+      <span><i style="background:#2e7d32"></i> Elle eklenen</span></div>
+      <table class="tbl"><tr><th>İstasyon</th><th>Kurum</th><th>Ağırlık</th><th>Alan (km²)</th><th></th></tr>`;
     aktif.forEach(t => {
-      if (t.poligon_geojson) layers.thiessen.addData(t.poligon_geojson);
+      if (t.poligon_geojson) layers.thiessen.addData(
+        { type: "Feature", properties: { name: t.name }, geometry: t.poligon_geojson });
       const col = kurumColor(t.kurum);
-      L.circleMarker([t.lat, t.lon], { radius: 6, color: col, fillColor: col, fillOpacity: .8 })
+      const mk = L.circleMarker([t.lat, t.lon], { radius: 6, color: col, fillColor: col, fillOpacity: .8 })
         .addTo(layers.markers)
-        .bindPopup(`${t.name}${t.kurum ? " [" + t.kurum + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)`);
-      h += `<tr class="sel"><td>${t.name}</td><td>${t.kurum || "—"}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td></tr>`;
+        .bindPopup(`${t.name}${t.kurum ? " [" + t.kurum + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)`
+          + `<br><button class="link-btn" data-pop-del="1">✕ Bu istasyonu çıkar</button>`);
+      const key = stKey(t);
+      mk.on("popupopen", (ev) => {
+        const btn = ev.popup.getElement().querySelector("button[data-pop-del]");
+        if (btn) btn.onclick = () => removeStation(key);
+      });
+      h += `<tr class="sel"><td>${t.name}</td><td>${t.kurum || "—"}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td>`
+        + `<td><button class="link-btn" data-del="${stKey(t)}" title="Bu istasyonu çıkar">✕</button></td></tr>`;
     });
     $("thTable").innerHTML = h + "</table>";
+    $("thTable").querySelectorAll("button[data-del]").forEach(b =>
+      b.onclick = () => removeStation(b.dataset.del));
+    renderExcluded();
+    recolorThiessen();
+    const nEk = S.stExtra.length, nCik = S.stExclude.size, nEle = (S.thElenen || []).length;
     setStatus("thStatus",
-      `${kaynak}: ${stations.length} istasyondan ${aktif.length} tanesi havzada pay alıyor`, "ok");
+      `${kaynak}: ${stations.length} istasyondan ${aktif.length} tanesi havzada pay alıyor`
+      + (nCik ? ` | ${nCik} elle çıkarıldı` : "") + (nEk ? ` | ${nEk} elle eklendi` : "")
+      + (nEle ? ` | ${nEle} istasyon küçük pay eşiğinin altında kaldığı için elendi` : ""), "ok");
     markDone(4);
     renderRainTable();
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
+
+// istasyonu Thiessen'den çıkar (haritadaki açılır pencereden de çağrılır)
+function removeStation(key) {
+  S.stExclude.add(key);
+  const i = S.stExtra.findIndex(s => stKey(s) === key);
+  if (i >= 0) S.stExtra.splice(i, 1);   // elle eklenmişse listeden sil
+  map.closePopup();
+  recomputeThiessen();
+}
+
+// haritaya tıklayarak elle istasyon ekle
+$("btnAddStation").onclick = () => {
+  if (!S.havza) return setStatus("thStatus", "Önce havzayı çıkarın (Adım 1)", "err");
+  S.stPlace = true;
+  map.getContainer().style.cursor = "crosshair";
+  setStatus("thStatus", "Yeni istasyonun yerine haritada tıklayın (Esc ile iptal)", "");
+};
+$("btnResetStations").onclick = () => {
+  if (!S.stExclude.size) return;
+  S.stExclude = new Set();
+  recomputeThiessen();
+};
+// eşik değişince Thiessen'i yeniden kur
+$("inpMinW").addEventListener("change", () => { if (S.thiessen && S.thiessen.length) recomputeThiessen(); });
+map.on("click", (ev) => {
+  if (!S.stPlace) return;
+  S.stPlace = false;
+  map.getContainer().style.cursor = "";
+  const ad = (prompt("İstasyon adı:", "Yeni İstasyon") || "").trim();
+  if (!ad) return setStatus("thStatus", "İptal edildi", "");
+  S.stExtra.push({ name: ad, lat: +ev.latlng.lat.toFixed(6), lon: +ev.latlng.lng.toFixed(6),
+                   kurum: "Elle" });
+  recomputeThiessen();
+});
 
 async function useDefaultStations() {
   setStatus("thStatus", "Varsayılan istasyonlar yükleniyor…", "loading");
@@ -260,7 +480,7 @@ async function useDefaultStations() {
     const r = await api("/api/stations/default");
     if (!r.istasyonlar.length)
       return setStatus("thStatus", "Varsayılan KMZ bulunamadı (data/stations/)", "err");
-    await runThiessen(r.istasyonlar, r.dosya);
+    await loadStationSet(r.istasyonlar, r.dosya);
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
 $("btnDefaultSt").onclick = useDefaultStations;
@@ -272,7 +492,7 @@ $("kmzFile").onchange = async () => {
   try {
     const fd = new FormData(); fd.append("file", f);
     const r1 = await api("/api/stations", fd, true);
-    await runThiessen(r1.istasyonlar, f.name);
+    await loadStationSet(r1.istasyonlar, f.name);
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 };
 
@@ -406,7 +626,7 @@ function reservoirPoints() {
     const md = S.multiSonuc.md;
     S.multiSonuc.membaC.forEach((x, i) => {
       const o = md.membalar[i].outlet;
-      pts.push({ ad: "Memba " + (i + 1), ll: { lat: o.snap_lat ?? o.lat, lon: o.snap_lon ?? o.lon }, kind: "compute", res: x.res });
+      pts.push({ ad: "Memba " + (i + 1), ll: { lat: o.snap_lat ?? o.lat, lon: o.snap_lon ?? o.lon }, kind: "compute", res: x.res, membaIndex: i });
     });
     const mo = md.mansap.outlet;
     pts.push({ ad: "Mansap (ötelenmiş)", ll: { lat: mo.snap_lat ?? mo.lat, lon: mo.snap_lon ?? mo.lon }, kind: "routed", rt: S.multiSonuc.rt });
@@ -481,6 +701,7 @@ function openReservoir() {
   $("resYtk").addEventListener("input", updatePh);
   updatePh();
   $("btnResRun").onclick = runReservoir;
+  $("btnResAssign").onclick = assignReservoirToMemba;
   $("resWrap").classList.remove("hidden");
 }
 $("btnCloseRes").onclick = () => $("resWrap").classList.add("hidden");
@@ -561,6 +782,7 @@ async function runReservoir() {
         baslangic_kotu: +$("resH0").value, maks_su_kotu: +$("resHmax").value,
         taban_debi: +$("resW1").value || 0,
         kapak_adedi: Math.max(1, +$("resNgate").value || 1),
+        pik_sonrasi_bosalt: $("resDrain").checked,
       });
       r._kapakli = true;
     } else {
@@ -576,6 +798,62 @@ async function runReservoir() {
     S.resSonuc = { r, src, label };
     renderReservoir();
   } catch (e) { $("resTable").innerHTML = `<div class="small err">Hata: ${e.message}</div>`; }
+}
+
+/* ---- Çok parçalı: memba noktasına hazne atama ----
+   Hazne, o memba noktasının çıkışını sönümler; sönümlenmiş hidrograf
+   mansaba taşındığı için aşağıdaki tüm noktaları etkiler.                  */
+function buildResCfg() {
+  const kap = $("resType").value === "kapakli";
+  const vol = readGridNums(S.volGrid, kap ? 2 : 3);
+  if (vol.length < 2) throw new Error("Kot–Hacim tablosu geçersiz (en az 2 dolu satır)");
+  if (kap) {
+    return { tip: "kapakli", hacim_satih: vol,
+      esik_kotu: +$("resSill").value, lef: +$("resLef").value,
+      baslangic_kotu: +$("resH0").value, maks_su_kotu: +$("resHmax").value,
+      taban_debi: +$("resW1").value || 0,
+      kapak_adedi: Math.max(1, +$("resNgate").value || 1),
+      pik_sonrasi_bosalt: $("resDrain").checked };
+  }
+  const cfg = { tip: "kontrolsuz", hacim_satih: vol, kret_kotu: +$("resKret").value };
+  if ($("resMode").value === "tablo") {
+    const rating = readGridNums(S.ratGrid, 2);
+    if (rating.length < 2) throw new Error("Rating tablosu geçersiz (He, Q — en az 2 dolu satır)");
+    cfg.rating = rating;
+  } else {
+    cfg.yaklasim_taban_kotu = +$("resYtk").value;
+    cfg.apron_giris_acisi = +$("resApron").value || 0;
+    cfg.kret_uzunlugu = +$("resL").value || 40;
+    cfg.debi_katsayisi = $("resCauto").checked ? null : (+$("resC").value || 2.1);
+  }
+  return cfg;
+}
+async function assignReservoirToMemba() {
+  const st = $("resMultiStatus");
+  try {
+    const pt = S.resPoints[+$("resPoint").value];
+    if (!pt || pt.membaIndex == null)
+      throw new Error("Bu özellik yalnız çok parçalı moddaki MEMBA noktaları içindir");
+    if (!S.multiSonuc) throw new Error("Önce Ara Havza → ② Hesapla ve Ötele");
+    S.multiRes = S.multiRes || {};
+    S.multiRes[pt.membaIndex] = buildResCfg();
+    st.textContent = "Hazne atandı, mansap yeniden ötelenıyor…";
+    await reRouteMulti();
+    st.textContent = `✓ ${pt.ad} noktasına hazne atandı; mansap hidrografı güncellendi.`;
+  } catch (e) { st.textContent = "Hata: " + e.message; }
+}
+// atanmış hazneleri kullanarak ötelemeyi yeniden yapar (havzalar yeniden hesaplanmaz)
+async function reRouteMulti() {
+  if (!S.multiSonuc) return;
+  const { md, araC, membaC, methods } = S.multiSonuc;
+  const rez = membaC.map((_, i) => (S.multiRes && S.multiRes[i]) || null);
+  const rt = await api("/api/route", {
+    ara_sonuc: araC.res, memba_sonuclari: membaC.map(x => x.res),
+    lag_saat: (+$("multiLag").value || md.ara.Tc_saat), yontemler: methods,
+    rezervuarlar: rez.some(Boolean) ? rez : null,
+  });
+  S.multiSonuc.rt = rt;
+  renderMultiResults();
 }
 
 let resChart = null;
@@ -613,6 +891,7 @@ function renderReservoir() {
     <tr><td>Maks su kotu / izinli</td><td><b>${fmt(o.maks_su_kotu, 2)}</b> / ${fmt(o.H_max, 2)} m ${o.maks_su_kotu <= o.H_max + 0.01 ? "✓" : "⚠ AŞILDI"}</td></tr>
     <tr><td>Başlangıç kotu</td><td>${fmt(o.H_init, 2)} m</td></tr>
     <tr><td>Kapak adedi</td><td><b>${o.kapak_adedi || 1}</b> adet</td></tr>
+    <tr><td>Pik sonrası boşaltma</td><td>${o.pik_sonrasi_bosalt ? "açık — pik sonrası O>I serbest, hazne başlangıç kotuna çekilir" : "kapalı — çıkış her zaman ≤ giriş"}</td></tr>
     <tr><td>Maks kapak açıklığı</td><td><b>${fmt(o.maks_kapak_acikligi, 2)}</b> m</td></tr>`;
     if (o.asim_uyarisi) h += `<tr><td colspan="2" class="small err">⚠ Depolama yetersiz: pass-through (O=I) bile maks kotu aşıyor; başlangıç kotunu düşürün veya maks kotu yükseltin.</td></tr>`;
     if (o.girdi_uyarisi) h += `<tr><td colspan="2" class="small err">⚠ ${o.girdi_uyarisi}</td></tr>`;
@@ -714,7 +993,12 @@ function renderRainTable() {
   }
   if (!S.rainValues) S.rainValues = {};
   let h = `<div class="rain-tools"><button id="btnMgmAuto" class="small-btn">🗂 MGM'den otomatik eşleştir</button>
-    <span class="small">veya her satırda MGM istasyonu seçerek P2–P100'ü doldurun (OEY elle girilir)</span></div>
+    <span class="small">veya her satırda MGM istasyonu seçerek P2–P100'ü doldurun (OEY elle girilir)</span>
+    <label class="inline" title="Haritadaki Thiessen alanları, seçilen tekerrürün yağışına göre mavi tonlarıyla boyanır (az yağış açık, çok yağış koyu).">Alan boyaması
+      <select id="rainColorCol">` +
+    RAIN_COLS.map((c, i) => `<option value="${i}"${i === (S.rainColorCol ?? 5) ? " selected" : ""}>${c === "OEY" ? "OEY" : "P" + c}</option>`).join("") +
+    `</select></label></div>
+    <div id="rainLegend" class="rain-legend"></div>
     <table class="tbl rain st"><tr><th colspan="9">Yinelenmeli Yağışlar (24 Saatlik)</th></tr>
     <tr><th>İstasyon (w)</th><th>MGM istasyonu</th>` + RAIN_COLS.map(c => `<th>${c}</th>`).join("") + `</tr>`;
   w.forEach((t, r) => {
@@ -734,6 +1018,9 @@ function renderRainTable() {
     inp.addEventListener("input", readRainGrid);
     inp.addEventListener("paste", onRainPaste);
   });
+  const sel = $("rainColorCol");
+  if (sel) sel.onchange = () => { S.rainColorCol = +sel.value; recolorThiessen(); };
+  recolorThiessen();
   div.querySelectorAll(".mgm-pick").forEach(inp => inp.addEventListener("change", () => {
     const st = mgmFind(inp.value);
     const r = +inp.dataset.r;
@@ -781,6 +1068,7 @@ function readRainGrid() {
 }
 
 function recalcRain() {
+  recolorThiessen();
   const w = activeStations();
   const sums = Array(7).fill(null);
   for (let c = 0; c < 7; c++) {
@@ -1166,6 +1454,8 @@ function multiAddPoint(latlng) {
 }
 function invalidateMultiSolve() {
   S.multiMd = null;
+  S.multiRes = {};        // memba indeksleri değişebilir; hazne atamalarını düşür
+  S.multiQbazVals = {};   // aynı nedenle elle girilen baz akımları da
   const b = $("btnSolveCompute"); if (b) b.disabled = true;
 }
 
@@ -1201,8 +1491,60 @@ function drawMultiPoints() {
 }
 
 // bir alt havza poligonunu seçili yöntemlerle tam otomatik hesaplar
-async function autoComputeSub(sub, qbazTotal, aMansap, methods) {
-  const w = await api("/api/thiessen", { havza_geojson: sub.havza_geojson, istasyonlar: S.istasyonlar });
+/* ---- Alt havza baz akımları ----
+   Varsayılan: mansap toplamı alan oranıyla dağıtılır. Kullanıcı her havza
+   için (memba_i / ara) elle değer girerse o kullanılır.                    */
+function qbazOran(sub, aMansap) {
+  const tot = +$("multiQbaz").value || 0;
+  return aMansap > 0 ? tot * (sub.alan_km2 / aMansap) : 0;
+}
+function qbazDegeri(anahtar, sub, aMansap) {
+  const el = $("qb_" + anahtar);
+  if (el && el.value !== "" && !isNaN(+el.value)) return +el.value;
+  return qbazOran(sub, aMansap);
+}
+function renderMultiQbaz() {
+  const box = $("multiQbazBox");
+  if (!box) return;
+  const md = S.multiMd;
+  if (!md) { box.innerHTML = ""; return; }
+  const aM = md.mansap.alan_km2;
+  const satir = (anahtar, ad, sub) => {
+    const onceki = S.multiQbazVals ? S.multiQbazVals[anahtar] : undefined;
+    const oran = qbazOran(sub, aM);
+    return `<tr><td>${ad}</td><td>${fmt(sub.alan_km2, 1)}</td>
+      <td>${fmt(oran, 2)}</td>
+      <td><input class="qbaz-cell" id="qb_${anahtar}" type="number" step="0.1"
+           value="${onceki != null ? onceki : ""}" placeholder="${oran.toFixed(2)}"></td></tr>`;
+  };
+  let h = `<div class="mstep"><b>Baz akımlar</b> — boş bırakılırsa alan oranıyla dağıtılan
+    değer kullanılır (gri yazı)</div>
+    <table class="tbl"><tr><th>Havza</th><th>A (km²)</th><th>Alan oranıyla</th>
+    <th>Elle (m³/s)</th></tr>`;
+  md.membalar.forEach((mb, i) => h += satir("m" + i, "Memba " + (i + 1), mb));
+  h += satir("ara", "Ara havza", md.ara);
+  h += `</table><div class="small" id="qbazToplam"></div>`;
+  box.innerHTML = h;
+  const guncelle = () => {
+    S.multiQbazVals = {};
+    box.querySelectorAll(".qbaz-cell").forEach(inp => {
+      if (inp.value !== "") S.multiQbazVals[inp.id.slice(3)] = +inp.value;
+    });
+    let t = qbazDegeri("ara", md.ara, aM);
+    md.membalar.forEach((mb, i) => t += qbazDegeri("m" + i, mb, aM));
+    $("qbazToplam").textContent =
+      `Mansapta toplanacak baz akım: ${t.toFixed(2)} m³/s (girilen mansap toplamı: ` +
+      `${(+$("multiQbaz").value || 0).toFixed(2)} m³/s)`;
+  };
+  box.querySelectorAll(".qbaz-cell").forEach(inp => inp.addEventListener("input", guncelle));
+  // atama ile bağla — addEventListener her render'da birikirdi
+  $("multiQbaz").oninput = () => renderMultiQbaz();
+  guncelle();
+}
+
+async function autoComputeSub(sub, qbaz, methods) {
+  const w = await api("/api/thiessen", { havza_geojson: sub.havza_geojson, istasyonlar: S.istasyonlar,
+                                        min_agirlik: Math.max(0, (+$("inpMinW").value || 0) / 100) });
   const act = w.sonuc.filter(t => t.agirlik > 0);
   const T = [2, 5, 10, 25, 50, 100];
   const P24 = {}; let OET = 0, oetOk = true;
@@ -1214,7 +1556,7 @@ async function autoComputeSub(sub, qbazTotal, aMansap, methods) {
   const girdi = {
     ad: "alt", A_km2: sub.alan_km2, L_km: sub.L_km, Lc_km: sub.Lc_km,
     CN2: cn.CN2, CN3: cn.CN3, region: (sub.yzd_bolge && sub.yzd_bolge.bolge) || "B",
-    elevations: sub.kotlar, Qbaz: qbazTotal * (sub.alan_km2 / aMansap),
+    elevations: sub.kotlar, Qbaz: qbaz,
     P24, P24_OET: oetOk ? OET : 0, dplv_ratios: dplvRatios(),
   };
   const snyderOn = methods.includes("snyder");
@@ -1230,9 +1572,11 @@ $("btnSolveDelin").onclick = async () => {
   try {
     if (!S.multi.mansap) throw new Error("Mansap noktası seçin");
     if (!S.multi.membalar.length) throw new Error("En az bir memba noktası ekleyin");
-    setStatus("multiStatus", "Ara havza çıkarılıyor… (DEM işleniyor)", "loading");
+    setStatus("multiStatus", "Ara havza çıkarılıyor… DEM işleniyor; havzalar büyükse " +
+      "birkaç dakika sürebilir.", "loading");
     const md = await api("/api/multi-delineate", {
       mansap: S.multi.mansap, membalar: S.multi.membalar, river_km2: +$("multiRivThr").value || 1,
+      snap_m: +$("inpSnap").value || 500, dem_source: $("inpDem").value,
     });
     multiLayers.poly.clearLayers();
     const addPoly = (gj, c, meta) => multiLayers.poly.addData({ type: "Feature", properties: { c, ...(meta || {}) }, geometry: JSON.parse(JSON.stringify(gj)) });
@@ -1247,6 +1591,8 @@ $("btnSolveDelin").onclick = async () => {
     h += `<tr><td colspan="6"><b>Mansap:</b> A=${fmt(md.mansap.alan_km2, 2)} km² | öteleme = ara Tc = ${fmt(md.ara.Tc_saat, 2)} sa</td></tr></table>`;
     if (md.uyari && md.uyari.length) h += `<div class="small err">⚠ ${md.uyari.join("; ")}</div>`;
     $("multiResults").innerHTML = h;
+    if (!$("multiLag").value && md.ara.Tc_saat) $("multiLag").value = md.ara.Tc_saat.toFixed(2);
+    renderMultiQbaz();
     $("btnSolveCompute").disabled = false;
     setStatus("multiStatus", "Havzalar çıkarıldı. Şimdi ② Hesapla ve Ötele.", "ok");
   } catch (e) { setStatus("multiStatus", "Hata: " + e.message, "err"); $("btnSolveCompute").disabled = true; }
@@ -1260,15 +1606,20 @@ $("btnSolveCompute").onclick = async () => {
     if (!S.rainValues || !Object.keys(S.rainValues).length) throw new Error("Yağış yok — Tek Havza → Adım 5");
     const methods = selectedMethods();
     if (!methods.length) throw new Error("En az bir yöntem seçin");
-    const md = S.multiMd, qbaz = +$("multiQbaz").value || 0, aMansap = md.mansap.alan_km2;
+    const md = S.multiMd, aMansap = md.mansap.alan_km2;
     setStatus("multiStatus", "Alt havzalar hesaplanıyor (CN, Thiessen, hidrograf)…", "loading");
-    const araC = await autoComputeSub(md.ara, qbaz, aMansap, methods);
+    const araC = await autoComputeSub(md.ara, qbazDegeri("ara", md.ara, aMansap), methods);
     const membaC = [];
-    for (const mb of md.membalar) membaC.push({ mb, ...(await autoComputeSub(mb, qbaz, aMansap, methods)) });
+    for (let i = 0; i < md.membalar.length; i++) {
+      const mb = md.membalar[i];
+      membaC.push({ mb, ...(await autoComputeSub(mb, qbazDegeri("m" + i, mb, aMansap), methods)) });
+    }
     setStatus("multiStatus", `Öteleme (ara Tc=${fmt(md.ara.Tc_saat, 2)} sa)…`, "loading");
+    const rez0 = membaC.map((_, i) => (S.multiRes && S.multiRes[i]) || null);
     const rt = await api("/api/route", {
       ara_sonuc: araC.res, memba_sonuclari: membaC.map(x => x.res),
-      lag_saat: md.ara.Tc_saat, yontemler: methods,
+      lag_saat: (+$("multiLag").value || md.ara.Tc_saat), yontemler: methods,
+      rezervuarlar: rez0.some(Boolean) ? rez0 : null,
     });
     S.multiSonuc = { md, araC, membaC, rt, methods };
     renderMultiResults();
@@ -1283,8 +1634,196 @@ function _envPeak(res, rp) {
   ["2", "4", "6", "8", "12", "18", "24"].forEach(d => { const v = res.kabulet[d] && res.kabulet[d][rp]; if (v != null) mx = mx == null ? v : Math.max(mx, v); });
   return mx;
 }
+
+/* ---- Alt havza fiziksel parametreleri ekranı ----
+   Çok parçalı çözümde her alt havza için DEM/CORINE/Thiessen'den baştan
+   hesaplanan tüm girdiler tek ekranda toplanır.                            */
+/* Kot profili tanılaması: harmonik eğim S=(10/Σ√(l/Δh))² en düz segmente
+   aşırı duyarlıdır. Her segmentin toplamdaki payını çıkarıp, eğimi tek bir
+   segmentin belirlediği veya profilin gerçekdışı düz olduğu durumları
+   işaretler.                                                               */
+function profilTani(elevations, L_km) {
+  const e = elevations || [];
+  if (e.length !== 11 || !(L_km > 0)) return null;
+  const l = (L_km * 1000) / 10;
+  const dh = [], term = [];
+  for (let i = 1; i <= 10; i++) {
+    const d = e[i] - e[i - 1];
+    dh.push(d);
+    term.push(d > 0 ? Math.sqrt(l / d) : Infinity);
+  }
+  const toplam = term.reduce((a, b) => a + b, 0);
+  const S_harm = Math.pow(10 / toplam, 2);
+  const paylar = term.map(t => t / toplam);
+  const enBuyukPay = Math.max(...paylar);
+  const enBuyukIdx = paylar.indexOf(enBuyukPay);
+  const dhTop = e[10] - e[0];
+  const S_ort = dhTop / (L_km * 1000);
+  const oran = S_harm > 0 ? S_ort / S_harm : Infinity;   // ortalama/harmonik
+  const uyarilar = [];
+  if (enBuyukPay > 0.35)
+    uyarilar.push(`Eğimi tek segment belirliyor: <b>H${enBuyukIdx}–H${enBuyukIdx + 1}</b> ` +
+      `harmonik eğim toplamının %${(enBuyukPay * 100).toFixed(0)}'ini oluşturuyor ` +
+      `(Δh=${dh[enBuyukIdx].toFixed(1)} m). Bu segment T<sub>c</sub>'yi tek başına şişirir.`);
+  if (oran > 5)
+    uyarilar.push(`Harmonik eğim, ortalama eğimin <b>${oran.toFixed(1)} katı</b> altında ` +
+      `(harmonik %${(S_harm * 100).toFixed(3)} — ortalama %${(S_ort * 100).toFixed(3)}); ` +
+      `profilde düz bölümler baskın.`);
+  if (S_harm < 0.0005)
+    uyarilar.push(`Harmonik eğim çok düşük (%${(S_harm * 100).toFixed(4)}) — ` +
+      `T<sub>c</sub> gerçekçi olmayacak kadar büyük çıkar.`);
+  if (dhTop < L_km * 0.5)
+    uyarilar.push(`Toplam kot farkı ${dhTop.toFixed(1)} m, ${L_km.toFixed(1)} km uzunluk için ` +
+      `çok az (ortalama eğim %${(S_ort * 100).toFixed(3)}). DEM profili kusurlu olabilir.`);
+  const kucukler = dh.filter(d => d <= 0.5).length;
+  if (kucukler)
+    uyarilar.push(`${kucukler} segmentte kot artışı ≤0,5 m — düz/yamalı profil.`);
+  return { dh, paylar, S_harm, S_ort, oran, dhTop, enBuyukIdx, enBuyukPay, uyarilar };
+}
+
+let parChart = null;
+function openParams() {
+  if (!S.multiSonuc) { alert("Önce ② Hesapla ve Ötele"); return; }
+  const { md, araC, membaC } = S.multiSonuc;
+  const satirlar = membaC.map((x, i) => ({ ad: "Memba " + (i + 1), sub: x.mb, c: x }));
+  satirlar.push({ ad: "Ara havza", sub: md.ara, c: araC });
+  const S_of = (c) => (c.res && c.res.girdi_ozeti && c.res.girdi_ozeti.S_harmonik);
+
+  let h = `<p class="hint">Her alt havza için <b>tüm fiziksel parametreler baştan hesaplanır</b>:
+    A/L/Lc ve 11 noktalı kot profili DEM'den, CN CORINE'den, yağış Thiessen ağırlıklarıyla.
+    T<sub>c</sub> Kirpich formülüyle harmonik eğimden bulunur; harmonik eğim
+    <b>en düz segmente çok duyarlıdır</b>, bu yüzden kot profilini kontrol edin.</p>`;
+
+  h += `<h3 class="res">Geometri ve Hesap Parametreleri</h3><table class="tbl">
+    <tr><th>Havza</th><th>A (km²)</th><th>L (km)</th><th>Lc (km)</th><th>S harmonik</th>
+    <th>Tc (sa)</th><th>CN II</th><th>CN III</th><th>YZD</th><th>Qbaz</th></tr>`;
+  satirlar.forEach(r => {
+    const g = r.c.girdi, sh = S_of(r.c);
+    h += `<tr><td>${r.ad}</td><td>${fmt(g.A_km2, 2)}</td><td>${fmt(g.L_km, 2)}</td>
+      <td>${fmt(g.Lc_km, 2)}</td><td>${sh == null ? "—" : sh.toFixed(5) + " (%" + (sh * 100).toFixed(3) + ")"}</td>
+      <td>${fmt(r.sub.Tc_saat, 2)}</td><td>${fmt(g.CN2, 1)}</td><td>${fmt(g.CN3, 1)}</td>
+      <td>${g.region || "—"}</td><td>${fmt(g.Qbaz, 2)}</td></tr>`;
+  });
+  h += `</table>`;
+
+  h += `<h3 class="res">Kot Profili (outlet → memba, 11 nokta, m)</h3><table class="tbl">
+    <tr><th>Havza</th>` + Array.from({ length: 11 }, (_, i) => `<th>H${i}</th>`).join("") +
+    `<th>Δh top.</th></tr>`;
+  satirlar.forEach(r => {
+    const e = r.c.girdi.elevations || [];
+    const dh = (e.length === 11) ? e[10] - e[0] : null;
+    h += `<tr><td>${r.ad}</td>` + e.map(v => `<td>${fmt(v, 1)}</td>`).join("") +
+      `<td>${dh == null ? "—" : fmt(dh, 1)}</td></tr>`;
+  });
+  h += `</table>`;
+
+  // profil grafiği + segment payları + uyarılar
+  h += `<h3 class="res">Kot Profili Grafiği</h3>
+    <div style="height:280px;position:relative"><canvas id="parChartC"></canvas></div>
+    <div class="small">Yatay eksen: çıkıştan yukarı doğru mesafe (km). Profil düz seyrediyorsa
+    harmonik eğim düşer ve T<sub>c</sub> büyür.</div>`;
+
+  const taniLar = satirlar.map(r => ({ ad: r.ad, t: profilTani(r.c.girdi.elevations, r.c.girdi.L_km) }));
+  h += `<h3 class="res">Segment Eğim Payları (harmonik eğime katkı)</h3><table class="tbl">
+    <tr><th>Havza</th>` + Array.from({ length: 10 }, (_, i) => `<th>H${i}–H${i + 1}</th>`).join("") + `</tr>`;
+  taniLar.forEach(x => {
+    if (!x.t) { h += `<tr><td>${x.ad}</td><td colspan="10">—</td></tr>`; return; }
+    h += `<tr><td>${x.ad}</td>` + x.t.paylar.map((p, i) =>
+      `<td${p > 0.35 ? ' class="max"' : ""}>%${(p * 100).toFixed(0)}</td>`).join("") + `</tr>`;
+  });
+  h += `</table><div class="small">Bir segmentin payı %35'i aşıyorsa (sarı) eğimi —dolayısıyla
+    T<sub>c</sub>'yi— tek başına o segment belirliyordur.</div>`;
+
+  const uyarili = taniLar.filter(x => x.t && x.t.uyarilar.length);
+  if (uyarili.length) {
+    h += `<h3 class="res">⚠ Profil Uyarıları</h3>`;
+    uyarili.forEach(x => {
+      h += `<div class="small err" style="margin-bottom:6px"><b>${x.ad}</b><ul style="margin-left:18px">` +
+        x.t.uyarilar.map(u => `<li>${u}</li>`).join("") + `</ul></div>`;
+    });
+    h += `<div class="small">Çözüm: kot profili gerçeği yansıtmıyorsa <i>Öteleme süresi</i> alanına
+      elle makul bir değer girin, ya da havzayı daha ince DEM çözünürlüğüyle (Copernicus /
+      daha küçük pencere) yeniden çözün.</div>`;
+  } else {
+    h += `<div class="small" style="color:#3b7a4e">✓ Kot profillerinde anormallik bulunmadı.</div>`;
+  }
+
+  h += `<h3 class="res">Thiessen İstasyonları ve Ağırlıkları</h3><table class="tbl">
+    <tr><th>Havza</th><th>İstasyonlar (ağırlık)</th></tr>`;
+  satirlar.forEach(r => {
+    const t = r.c.thiessen || [];
+    h += `<tr><td>${r.ad}</td><td style="text-align:left">` +
+      (t.length ? t.map(x => `${x.name} %${(x.agirlik * 100).toFixed(1)}`).join(" · ") : "—") +
+      `</td></tr>`;
+  });
+  h += `</table>`;
+
+  const RPL = [2, 5, 10, 25, 50, 100];
+  h += `<h3 class="res">Ağırlıklı 24 Saatlik Yağış (mm)</h3><table class="tbl">
+    <tr><th>Havza</th>` + RPL.map(t => `<th>P${t}</th>`).join("") + `<th>OEY</th></tr>`;
+  satirlar.forEach(r => {
+    const g = r.c.girdi;
+    h += `<tr><td>${r.ad}</td>` + RPL.map(t => `<td>${fmt((g.P24 || {})[t], 1)}</td>`).join("") +
+      `<td>${fmt(g.P24_OET, 1)}</td></tr>`;
+  });
+  h += `</table>`;
+
+  h += `<h3 class="res">Öteleme</h3><div class="small">
+    Kullanılan öteleme süresi: <b>${fmt(S.multiSonuc.rt.lag_saat, 2)} sa</b>
+    (ara havza Kirpich T<sub>c</sub>: ${fmt(md.ara.Tc_saat, 2)} sa).
+    Değiştirmek için sol paneldeki <i>Öteleme süresi</i> alanını doldurup
+    <i>② Hesapla ve Ötele</i>'yi tekrar çalıştırın.</div>`;
+
+  $("parBody").innerHTML = h;
+  $("parWrap").classList.remove("hidden");
+
+  // profil grafiği (x: çıkıştan mesafe km, y: kot m) — her alt havza bir seri
+  const RENK = ["#1565c0", "#e65100", "#2e7d32", "#7b1fa2", "#c73e3a", "#00838f"];
+  const ds = [];
+  satirlar.forEach((r, k) => {
+    const e = r.c.girdi.elevations || [], L = r.c.girdi.L_km;
+    if (e.length !== 11 || !(L > 0)) return;
+    const t = profilTani(e, L);
+    const noktalar = e.map((v, i) => ({ x: +(L * i / 10).toFixed(3), y: v }));
+    ds.push({
+      label: r.ad + (t && t.uyarilar.length ? " ⚠" : ""),
+      data: noktalar, borderColor: RENK[k % RENK.length],
+      backgroundColor: RENK[k % RENK.length],
+      borderWidth: 2, tension: 0.1,
+      // eğimi belirleyen (payı en yüksek) segmentin uçlarını büyük göster
+      pointRadius: noktalar.map((_, i) =>
+        (t && t.enBuyukPay > 0.35 && (i === t.enBuyukIdx || i === t.enBuyukIdx + 1)) ? 6 : 3),
+      pointBackgroundColor: noktalar.map((_, i) =>
+        (t && t.enBuyukPay > 0.35 && (i === t.enBuyukIdx || i === t.enBuyukIdx + 1))
+          ? "#c73e3a" : RENK[k % RENK.length]),
+    });
+  });
+  if (parChart) parChart.destroy();
+  if (ds.length) {
+    parChart = new Chart($("parChartC"), {
+      type: "line", data: { datasets: ds },
+      options: {
+        animation: false, maintainAspectRatio: false, parsing: false,
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y.toFixed(1)} m @ ${c.parsed.x} km` } },
+        },
+        scales: {
+          x: { type: "linear", title: { display: true, text: "Çıkıştan mesafe (km)" } },
+          y: { title: { display: true, text: "Kot (m)" } },
+        },
+      },
+    });
+  }
+}
+$("btnClosePar").onclick = () => $("parWrap").classList.add("hidden");
+
 function renderMultiResults() {
   const { md, araC, membaC, rt, methods } = S.multiSonuc;
+  // Hazne atanmışsa: varsayılan görünüm rezervuarlı; rezervuarsız çözüm de saklanır
+  const rezVar = !!rt.rezervuarli;
+  if (S.multiShowRes == null) S.multiShowRes = true;
+  const Y = (rezVar && !S.multiShowRes) ? rt.yontemler_rezervuarsiz : rt.yontemler;
   // 1) alt havza tablosu
   let h = `<h3 class="res">Alt Havzalar</h3><table class="tbl">
     <tr><th>Havza</th><th>A (km²)</th><th>L (km)</th><th>Lc</th><th>CN</th><th>Bölge</th><th>Tc (sa)</th><th>DSİ Q100</th></tr>`;
@@ -1298,12 +1837,30 @@ function renderMultiResults() {
   h += rowFor("Ara havza", md.ara, araC, md.ara.Tc_saat, true);
   h += `</table>`;
   if (md.uyari && md.uyari.length) h += `<div class="small err">⚠ ${md.uyari.join("; ")}</div>`;
+  // kot profili anormallikleri (Tc/öteleme süresini şişirebilir)
+  const _tani = membaC.map((x, i) => ({ ad: "Memba " + (i + 1), t: profilTani(x.girdi.elevations, x.girdi.L_km) }))
+    .concat([{ ad: "Ara havza", t: profilTani(araC.girdi.elevations, araC.girdi.L_km) }])
+    .filter(x => x.t && x.t.uyarilar.length);
+  if (_tani.length) h += `<div class="small err">⚠ Kot profili şüpheli: ${_tani.map(x => x.ad).join(", ")} — T<sub>c</sub> ve öteleme süresi olduğundan büyük çıkabilir. Ayrıntı için <b>📐 Fiziksel Parametreler</b>.</div>`;
 
   // 2) mansap pikleri — yöntem × tekerrür
+  if (rezVar) {
+    const rl = rt.yontemler, rs = rt.yontemler_rezervuarsiz;
+    h += `<div class="mstep"><b>🏞 Memba haznesi etkin</b> — mansap hidrografı sönümlenmiş memba çıkışıyla hesaplandı.</div>
+      <div class="rain-tools"><label class="inline"><input type="checkbox" id="multiResToggle" ${S.multiShowRes ? "checked" : ""} style="width:auto;margin-right:4px">Rezervuarlı sonucu göster</label>
+      <button id="btnClearMultiRes" class="small-btn">Hazne atamalarını kaldır</button></div>`;
+    h += `<table class="tbl"><tr><th>Yöntem</th><th>Q100 rezervuarsız</th><th>Q100 rezervuarlı</th><th>Sönümleme</th></tr>`;
+    methods.forEach(m => {
+      const a = rs[m] && rs[m].pikler["100"], b = rl[m] && rl[m].pikler["100"];
+      if (a == null || b == null) return;
+      h += `<tr><td>${M_LABEL[m]}</td><td>${fmt(a,1)}</td><td><b>${fmt(b,1)}</b></td><td>%${fmt((1-b/a)*100,1)}</td></tr>`;
+    });
+    h += `</table>`;
+  }
   h += `<h3 class="res">Mansap Taşkın Pikleri (öteleme=${fmt(md.ara.Tc_saat, 2)} sa, m³/s)</h3>
     <table class="tbl"><tr><th>Yöntem</th>` + MRP.map(rp => `<th>Q${rp}</th>`).join("") + `</tr>`;
   methods.forEach(m => {
-    const y = rt.yontemler[m]; if (!y) return;
+    const y = Y[m]; if (!y) return;
     const syn = (m === "mockus" || m === "rasyonel") ? " *" : "";
     h += `<tr><td>${M_LABEL[m]}${syn}</td>` +
       MRP.map(rp => `<td>${y.pikler[rp] == null ? "—" : fmt(y.pikler[rp], 1)}</td>`).join("") + `</tr>`;
@@ -1313,20 +1870,28 @@ function renderMultiResults() {
 
   // 3) Q100 bileşen dökümü (seçili ilk gerçek yöntem)
   const dm = methods.includes("dsi") ? "dsi" : methods[0];
-  const comp = rt.yontemler[dm] && rt.yontemler[dm].bilesenler["100"];
+  const comp = Y[dm] && Y[dm].bilesenler["100"];
   if (comp) h += `<div class="small">${M_LABEL[dm]} Q100 bileşen: ara ${fmt(comp.ara_pik, 1)} +
-    memba ${comp.memba_pikleri.map(v => fmt(v, 1)).join(", ")} (ötelenmiş) → ${fmt(rt.yontemler[dm].pikler["100"], 1)} m³/s</div>`;
+    memba ${comp.memba_pikleri.map(v => fmt(v, 1)).join(", ")} (ötelenmiş) → ${fmt(Y[dm].pikler["100"], 1)} m³/s</div>`;
 
   h += `<div class="export-row" style="align-items:center">
     <button id="btnMcmp" class="primary">⚖ Sonuç ve Karşılaştırma (tam ekran)</button>
     <button id="btnResMulti" class="primary">🏞 Rezervuar Ötelemesi</button>
+    <button id="btnPar" class="primary">📐 Fiziksel Parametreler</button>
     <label class="inline" style="flex-direction:row;gap:4px">Grafik yöntem
       <select id="multiChartM">${methods.map(m => `<option value="${m}">${M_LABEL[m]}</option>`).join("")}</select></label>
     <button id="btnMultiChart" class="primary">📈 Mansap hidrografları</button>
     <button id="btnMultiCsv">⬇ CSV</button></div>`;
   $("multiResults").innerHTML = h;
+  if (rezVar) {
+    const tg = $("multiResToggle");
+    if (tg) tg.onchange = () => { S.multiShowRes = tg.checked; renderMultiResults(); };
+    const cl = $("btnClearMultiRes");
+    if (cl) cl.onclick = async () => { S.multiRes = {}; await reRouteMulti(); };
+  }
   $("btnMcmp").onclick = openMcmp;
   $("btnResMulti").onclick = openReservoir;
+  $("btnPar").onclick = openParams;
   $("btnMultiChart").onclick = () => showMultiChart($("multiChartM").value);
   $("btnMultiCsv").onclick = exportMultiCsv;
 }
@@ -1808,6 +2373,7 @@ function clearSingleBasin() {
   // durum
   S.outlet = null; S.havza = null; S.kotlar = Array(11).fill("");
   S.thiessen = []; S.istasyonlar = []; S.yzdBolge = null;
+  S.stBase = null; S.stExclude = new Set(); S.stExtra = []; S.stPlace = false;
   S.rainValues = {}; S.P24w = null; S.OETw = null; S.yagis = [];
   S.sonuc = null; S.girdi = null; S.dplvList = null;
   S.resPoints = null; S.resSonuc = null;
