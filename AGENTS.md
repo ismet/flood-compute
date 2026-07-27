@@ -66,7 +66,7 @@ data/tables/          — 13 JSON tables extracted from Excel workbooks
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 ```
 
-- **`backend/core/vektor.py` does not exist** but is imported in `backend/main.py:217` (`/api/import-basin` endpoint). That endpoint will crash at runtime. Do not create the file unless instructed — the import is a placeholder/unfinished feature.
+- **`backend/core/vektor.py`** and **`backend/core/_import_basin_subprocess.py`** do not exist but are imported in `backend/main.py:217,235` (`/api/import-basin` endpoint). That endpoint will crash at runtime. Do not create these files unless instructed — they are placeholder/unfinished features.
 
 ## Key API endpoints
 
@@ -76,9 +76,11 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 |---|---|
 | `POST /api/delineate` | Basin delineation from outlet click (subprocess, locked) |
 | `POST /api/multi-delineate` | Multi-basin (ara havza) delineation |
+| `POST /api/import-basin` | Upload basin polygon from KML/KMZ/GeoJSON (broken — needs vektor.py) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
 | `POST /api/thiessen` | Thiessen weights from basin + stations |
+| `POST /api/stations` | Upload custom station KMZ/KML |
 | `POST /api/route` | Multi-basin hydrograph routing |
 | `POST /api/reservoir-route` | Storage-Indication routing |
 | `POST /api/reservoir-controlled` | Gated spillway optimization (peak-shaving) |
@@ -86,15 +88,17 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `POST /api/dilekce` | Generate MGM petition (.docx/.pdf) |
 | `POST /api/yil-ara` | Return period from Q/Q10/Q100 (analytical inverse) |
 | `POST /api/rainfall/parse` | Parse pasted rainfall table |
+| `POST /api/yzd-region` | YZD region (A/B/C) from basin |
 | `GET /api/stations/default` | Default station KMZ |
 | `GET /api/mgm-stations` | MGM 2020 PLV (236 stations) |
 | `GET /api/dplv` | DPLV station list |
 | `GET /api/geocode` | OSM Nominatim (Turkey) |
 | `GET /api/snyder-ctcp` | Snyder Ct-Cp abacus |
 | `GET /api/abak2` | ABAK2 areal reduction table |
-| `GET /api/reservoir-defaults` | Söylemez defaults |
+| `GET /api/reservoir-defaults` | Söylemez reservoir defaults |
 | `GET /api/reservoir-controlled-defaults` | Gated spillway defaults |
-| `POST /api/yzd-region` | YZD region (A/B/C) from basin |
+| `GET /api/dilekce-defaults` | Petition default contact/signature info |
+| `GET /api/dilekce-imza` | Default signature/stamp image preview |
 | `POST /api/project/save` / `list` / `load/{ad}` / `DELETE` | Project CRUD |
 
 ## Core computation formulas
