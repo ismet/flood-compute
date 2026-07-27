@@ -21,7 +21,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/dem/` | (Opsiyonel) yerel DEM GeoTIFF'leri (EPSG:4326). Yoksa Copernicus GLO-30 karoları otomatik indirilir (`data/dem/cache/`). |
 | `data/corine/` | (Opsiyonel) yerel CORINE 2018 GeoTIFF (sınıf kodları 111–523 veya grid kodu 1–44). Havzayı kapsayan yerel raster yoksa **EEA CLC2018 servisinden otomatik indirilir** (100 m, resmi lejand renklerinden sınıflandırılır, `data/corine/cache/` altına önbelleklenir). |
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
-| `data/stations/` | Varsayılan istasyon seti (`DMİ.kmz`, 684 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
+| `data/stations/` | Varsayılan istasyon seti (`bir_cikti.kml`, 2315 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
 | `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
@@ -40,7 +40,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    otomatik indirilir); seçilen hidrolojik zemin grubuna (A/B/C/D) göre
    `data/tables/corine_cn.json` tablosundan alansal ağırlıklı CN(II);
    CN(III) Excel'deki dönüşüm tablosuyla.
-4. **Thiessen** — Varsayılan `DMİ.kmz` istasyonları otomatik yüklenir (veya
+4. **Thiessen** — Varsayılan `bir_cikti.kml` istasyonları otomatik yüklenir (veya
    KMZ/KML yüklenir); Voronoi hücreleri havzaya kesilerek alan ağırlıkları
    (DATAGİR H kolonu karşılığı) bulunur. Haritada yalnız pay alan istasyonlar çizilir.
 5. **Yağış** — Her istasyon satırı `Ad P2 P5 P10 P25 P50 P100 [OEY]` formatında
@@ -60,8 +60,8 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      azaltma + 1.13 maksimizasyon + SCS akış) tr saat kaydırmayla süperpoze edilir.
      Q2–Q100 CII, QOET CIII; Q500/1000/10000 ekstrapolasyon. Parametreler ve
      Q2–Q100 pikleri Excel ile birebir (`backend/tests/test_snyder_golden.py`).
-     W50/W75 girilmezse **ŞEKİL 1 (DSİ Snyder abağı)** formülüyle otomatik okunur:
-     W50=5.87/(Qp/A)^1.08/2.54, W75=3.35/(Qp/A)^1.08/2.54 (qp'den; `snyder.w50_w75`).
+      W50/W75 girilmezse **ŞEKİL 1 (DSİ Snyder abağı)** formülüyle otomatik okunur:
+      W50=5.87/(qp/1000)^1.08/2.54, W75=3.35/(qp/1000)^1.08/2.54 (`snyder.w50_w75`).
    * Hidrograf grafiği, CSV/JSON dışa aktarım, debiden tekerrür yılı bulma
      (`Yıl_Ara` makrosunun analitik çözümü: Q = Q10 + (0.99·log₁₀T − 0.98)·(Q100−Q10)).
    * **⚖ Yöntem Karşılaştırma** (tam ekran): dört yöntemi (DSİ/Mockus/Rasyonel/Snyder)
@@ -146,7 +146,7 @@ ve **kapak açıklığı programı** (grafik + tablo + CSV). `reservoir.route_co
   şeffaf eşdeğer). C100 kullanıcı girdisidir.
 * Kar erimesi hidrografı OET pikine sabit değer (Qkar piki) olarak eklenir;
   Excel'de KAR2'deki zaman hizalaması kullanılır. Fark güvenli taraftadır.
-* Snyder biriim hidrografı Excel'de elle (kırmızı hücreler) hacim dengesine
+* Snyder birim hidrografı Excel'de elle (kırmızı hücreler) hacim dengesine
   ayarlanır; burada W50/W75 noktalı kanonik şekil üstel kuyrukla otomatik
   hacim-dengelenir (pik=Qp ve hacim=1 mm korunur). QOET Excel'de 6 saatlik
   bloklarla hesaplandığından tek tr kullanan bu uygulamada ~%0.2 sapar; Q2–Q100
@@ -176,7 +176,8 @@ docker run -d -p 8737:8737 -e APP_PASSWORD=gizli-parola \
 ## Testler
 
 ```bat
-python backend/tests/test_golden.py        :: DSİ/Mockus birebir (49 pik + BH + önhesap)
-python backend/tests/test_snyder_golden.py :: Snyder birebir (parametreler + Q2–Q100 pik)
-python backend/tests/test_api_smoke.py     :: API uçtan uca duman testi
+python backend/tests/test_golden.py              :: DSİ/Mockus birebir (49 pik + BH + önhesap)
+python backend/tests/test_snyder_golden.py       :: Snyder birebir (parametreler + Q2–Q100 pik)
+python backend/tests/test_reservoir_golden.py    :: Rezervuar öteleme birebir (çıkış piki, su kotu, sönümleme)
+python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
 ```
