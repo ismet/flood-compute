@@ -66,7 +66,13 @@ def _local_dems():
         if os.path.isdir(p):
             if not os.path.exists(os.path.join(p, "hdr.adf")):
                 continue                      # ESRI Grid değil (ör. cache/)
-        elif not fn.lower().endswith((".tif", ".tiff", ".vrt", ".img")):
+        elif fn.lower().endswith(".vrt"):
+            # VRT aynı isimli bir ESRI Grid klasörünü referans alıyorsa
+            # grid zaten listede olacağından çift kaynağı önlemek için atla
+            base = os.path.splitext(fn)[0]
+            if os.path.isdir(os.path.join(DEM_DIR, base)):
+                continue
+        elif not fn.lower().endswith((".tif", ".tiff", ".img")):
             continue
         try:
             with rasterio.open(p) as src:
