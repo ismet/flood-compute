@@ -262,6 +262,96 @@ $("infoFile").onchange = async () => {
   $("infoFile").value = "";
 };
 
+/* ---- koordinatlı raster altlıklar (1/25000 paftalar) ----
+   Dosya arka uca yüklenir, orada Web Mercator'a yeniden projeksiyonlanıp XYZ
+   karo olarak sunulur; burada yalnızca L.tileLayer ile gösterilir.          */
+S.rasterLayers = [];      // [{meta, layer, gorunur, saydam}]
+
+function renderRasterLayers() {
+  const el = $("rasterLayers");
+  if (!el) return;
+  if (!S.rasterLayers.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<b>Raster altlıklar:</b><br>` + S.rasterLayers.map((k, i) =>
+    `<label class="inline" style="gap:4px">
+       <input type="checkbox" class="ras-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto">
+       🗺 ${k.meta.baslik || k.meta.ad}
+       <input type="range" class="ras-op" data-i="${i}" min="10" max="100" value="${Math.round(k.saydam * 100)}"
+              title="Saydamlık" style="width:80px">
+       <button class="link-btn" data-zoom="${i}" title="Katmana git">⌖</button>
+       <button class="link-btn" data-del="${i}" title="Kaldır">✕</button>
+     </label>`).join("<br>");
+  el.querySelectorAll(".ras-chk").forEach(c => c.onchange = () => {
+    const k = S.rasterLayers[+c.dataset.i];
+    k.gorunur = c.checked;
+    if (c.checked) k.layer.addTo(map); else k.layer.remove();
+  });
+  el.querySelectorAll(".ras-op").forEach(r => r.oninput = () => {
+    const k = S.rasterLayers[+r.dataset.i];
+    k.saydam = +r.value / 100;
+    k.layer.setOpacity(k.saydam);
+  });
+  el.querySelectorAll("button[data-zoom]").forEach(b => b.onclick = () => {
+    const k = S.rasterLayers[+b.dataset.zoom];
+    if (k.meta.sinir) map.fitBounds(k.meta.sinir, { padding: [20, 20] });
+  });
+  el.querySelectorAll("button[data-del]").forEach(b => b.onclick = async () => {
+    const i = +b.dataset.del, k = S.rasterLayers[i];
+    if (!confirm(`“${k.meta.baslik || k.meta.ad}” altlığı sunucudan silinsin mi?`)) return;
+    try { await api("/api/raster-delete", { ad: k.meta.ad }); } catch (e) {}
+    k.layer.remove();
+    S.rasterLayers.splice(i, 1);
+    renderRasterLayers();
+  });
+}
+
+/* Meta bilgisinden Leaflet karo katmanı kurar (haritaya ekler). */
+function rasterKatmanEkle(meta) {
+  if (S.rasterLayers.some(k => k.meta.ad === meta.ad)) return;
+  const layer = L.tileLayer(`/api/raster/${encodeURIComponent(meta.ad)}/{z}/{x}/{y}.png`, {
+    maxZoom: 22, opacity: 1, bounds: meta.sinir || undefined,
+    attribution: meta.baslik || meta.ad,
+  }).addTo(map);
+  S.rasterLayers.push({ meta, layer, gorunur: true, saydam: 1 });
+  renderRasterLayers();
+}
+
+async function loadRasterLayers() {
+  try {
+    const r = await api("/api/raster-layers");
+    (r.katmanlar || []).forEach(rasterKatmanEkle);
+  } catch (e) { /* altlık yoksa sessiz geç */ }
+}
+loadRasterLayers();
+
+$("btnRasterAdd").onclick = async () => {
+  const dosyalar = Array.from($("rasterFile").files || []);
+  if (!dosyalar.length) return setStatus("delinStatus", "Önce raster dosyasını seçin", "err");
+  const sid = dosyalar.some(f => /\.sid$/i.test(f.name));
+  const worldVar = dosyalar.some(f => /\.(sdw|tfw|wld|prj)$/i.test(f.name));
+  if (sid && !worldVar && !$("rasterCrs").value.trim()) {
+    // .sid'lerde georeferans çoğu kez yalnız .sdw'dedir; uyar ama engelleme
+    setStatus("delinStatus", "Uyarı: .sid seçtiniz ama yanında .sdw/.tfw yok ve CRS "
+      + "boş. Georeferans dosyanın içinde değilse altlık yanlış yere oturur.", "err");
+  }
+  setStatus("delinStatus",
+    `${dosyalar.map(f => "“" + f.name + "”").join(", ")} yükleniyor…`
+    + (sid ? " (.sid → GeoTIFF dönüşümü sürebilir)" : ""), "loading");
+  try {
+    const fd = new FormData();
+    dosyalar.forEach(f => fd.append("files", f));
+    const crs = $("rasterCrs").value.trim();
+    const url = "/api/raster-add" + (crs ? `?crs=${encodeURIComponent(crs)}` : "");
+    const meta = await api(url, fd, true);
+    rasterKatmanEkle(meta);
+    if (meta.sinir) map.fitBounds(meta.sinir, { padding: [20, 20] });
+    setStatus("delinStatus", `Altlık eklendi: ${meta.baslik || meta.ad} — `
+      + `${meta.genislik}×${meta.yukseklik} piksel, ${meta.bant} bant, ${meta.etkin_crs}.`, "ok");
+    $("rasterFile").value = "";
+  } catch (e) {
+    setStatus("delinStatus", "Altlık eklenemedi: " + e.message, "err");
+  }
+};
+
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
    (dere verilmediyse) dere ağı DEM'den üretilir.                          */
@@ -286,6 +376,8 @@ $("basinFile").onchange = () => { if (!$("riverFile").files[0]) importBasinFiles
 // delineate / import sonucunu arayüze uygular (ikisi de aynı biçimde döner)
 function applyBasinResult(r, baslik) {
   S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
+  // dere/kanal da durumda tutulur: proje kaydında saklansın ve yüklenince geri gelsin
+  S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
   $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
   updateSnyderW();
   layers.havza.clearLayers(); layers.havza.addData(r.havza_geojson);
@@ -317,6 +409,268 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
   updateComputeReady();
 }
 
+/* -------- havza sınırı / dere ağını haritada elle düzenleme (Geoman) --------
+   Düzenleme bitince geometri /api/basin-from-geometry'ye gönderilir; alan
+   poligonun kendisinden (jeodezik), L/Lc/kot profili DEM'den yeniden üretilir
+   — yani dosyadan içe aktarmayla birebir aynı yol. */
+let editYedek = null;   // vazgeçmek için düzenleme öncesi anlık kopya
+
+/* Geoman seçenekleri.
+   - allowSelfIntersection: Geoman'ın varsayılanı (true) KALMALI. false yapılırsa
+     her sürükleme/silme sonrası tüm poligonda kinks taraması yapılır ve kesişme
+     bulunursa işlem GERİ ALINIR. DEM havzasının köşeleri ~30 m aralıklı olduğu
+     için her anlamlı sürükleme komşu kenarı keser → köşe yerine geri zıplar,
+     sağ tık silmesi de geri alınır.
+   - limitMarkersToCount: 4000+ köşede tüm işaretçileri çizmek arayüzü kilitler;
+     Geoman yalnızca imlece en yakın N tanesini gösterir.                      */
+const PM_SECENEK = { allowSelfIntersection: true, limitMarkersToCount: 80, snappable: false };
+
+function duzenlenebilirKatmanlar() {
+  const out = [];
+  [layers.havza, layers.dere].forEach(g => g.eachLayer(l => { if (l.pm) out.push(l); }));
+  return out;
+}
+
+/* Bir Leaflet katmanındaki toplam köşe sayısı (iç içe latlng dizilerini gezer). */
+function koseSayisi(katman) {
+  let n = 0;
+  const say = (a) => Array.isArray(a) ? a.forEach(say) : n++;
+  katman.eachLayer(l => { if (l.getLatLngs) say(l.getLatLngs()); });
+  return n;
+}
+
+const DERE_STIL = { color: "#3b8ea5", weight: 1.5 };
+const DERE_PATLAT_LIMIT = 400;   // bu kol sayısını aşarsa patlatma yapılmaz
+
+/* Dere ağı DEM'den TEK bir çok parçalı MultiLineString olarak gelir (her DEM
+   hücresi bir segment, unary_union ile birleştirilmiş). Tek Leaflet nesnesi
+   olduğu için bir kolu ayrı taşımak/silmek mümkün olmaz. Düzenlemeye girerken
+   kollara ayrılır; çıkarken toGeoJSON hepsini FeatureCollection olarak toplar.
+   Çok kalabalık ağlarda patlatma arayüzü kilitleyeceği için atlanır — o zaman
+   önce sadeleştirme önerilir. Döner: {kol, kose, patladi}                    */
+function derePatlat() {
+  const kollar = [];
+  layers.dere.eachLayer(l => {
+    if (!l.getLatLngs) return;
+    const topla = (a) => {
+      if (!a.length) return;
+      if (Array.isArray(a[0])) a.forEach(topla); else kollar.push(a);
+    };
+    topla(l.getLatLngs());
+  });
+  const kose = kollar.reduce((n, k) => n + k.length, 0);
+  if (kollar.length <= 1 || kollar.length > DERE_PATLAT_LIMIT) {
+    return { kol: kollar.length, kose, patladi: false };
+  }
+  layers.dere.clearLayers();
+  kollar.forEach(p => layers.dere.addLayer(L.polyline(p, DERE_STIL)));
+  return { kol: kollar.length, kose, patladi: true };
+}
+
+/* --- dere kolu silme kipi: kipteyken bir kola tıklamak onu kaldırır --- */
+let dereSilModu = false;
+function dereSilTikla(e) {
+  if (!dereSilModu) return;
+  L.DomEvent.stop(e);
+  layers.dere.removeLayer(e.target);
+  $("editInfo").textContent = `Dere kolu silindi (kalan ${layers.dere.getLayers().length}).`;
+}
+function setDereSil(acik) {
+  dereSilModu = acik;
+  $("btnDereDel").classList.toggle("picking", acik);
+  map.getContainer().style.cursor = acik ? "not-allowed" : "";
+  layers.dere.eachLayer(l => {
+    l.off("click", dereSilTikla);
+    if (acik) l.on("click", dereSilTikla);
+  });
+  if (acik) $("editInfo").textContent = "Silme kipi açık — kaldırmak istediğiniz dere koluna tıklayın.";
+}
+
+/* Yeni dere kolu çizme (Geoman Line aracı). */
+function setDereCiz(acik) {
+  if (!map.pm) return;
+  $("btnDereDraw").classList.toggle("picking", acik);
+  if (acik) {
+    setDereSil(false);
+    map.pm.enableDraw("Line", { snappable: false, finishOn: "dblclick" });
+    $("editInfo").textContent = "Çizim açık — tıklayarak dereyi çizin, çift tıkla bitirin.";
+  } else if (map.pm.disableDraw) {
+    map.pm.disableDraw();
+  }
+}
+
+/* Çizim biten kol haritanın köküne düşer; dere katmanına taşınmalı ki
+   “Uygula”da katmandan okunsun ve L/Lc hesabına girsin. */
+if (window.L && L.PM) {
+  map.on("pm:create", (e) => {
+    const l = e.layer;
+    if (!l || !l.getLatLngs) return;
+    map.removeLayer(l);
+    if (l.setStyle) l.setStyle(DERE_STIL);
+    layers.dere.addLayer(l);
+    if (l.pm) l.pm.enable(PM_SECENEK);
+    if (dereSilModu) l.on("click", dereSilTikla);
+    $("btnDereDraw").classList.remove("picking");
+    $("editInfo").textContent =
+      `Yeni dere kolu eklendi (toplam ${layers.dere.getLayers().length}).`;
+  });
+}
+
+/* Douglas-Peucker — DEM'den gelen merdiven basamaklı sınırı elle düzenlenebilir
+   hale getirir. tol derece cinsinden (metre / 111320). kos = cos(enlem):
+   boylam derecesi enlemde kısaldığı için mesafe ona göre ölçeklenir.         */
+function dpSadelestir(noktalar, tol, kos) {
+  if (noktalar.length < 3) return noktalar;
+  const dik = (p, a, b) => {
+    const px = (p.lng - a.lng) * kos, py = p.lat - a.lat;
+    const bx = (b.lng - a.lng) * kos, by = b.lat - a.lat;
+    if (bx === 0 && by === 0) return Math.hypot(px, py);
+    const t = (px * bx + py * by) / (bx * bx + by * by);
+    const u = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - u * bx, py - u * by);
+  };
+  const tut = new Array(noktalar.length).fill(false);
+  tut[0] = tut[noktalar.length - 1] = true;
+  const yigin = [[0, noktalar.length - 1]];
+  while (yigin.length) {
+    const [i, j] = yigin.pop();
+    let enUzak = -1, idx = -1;
+    for (let k = i + 1; k < j; k++) {
+      const d = dik(noktalar[k], noktalar[i], noktalar[j]);
+      if (d > enUzak) { enUzak = d; idx = k; }
+    }
+    if (enUzak > tol && idx > 0) { tut[idx] = true; yigin.push([i, idx], [idx, j]); }
+  }
+  return noktalar.filter((_, i) => tut[i]);
+}
+
+/* Havza sınırını ve dereleri verilen toleransla sadeleştirir (haritada, yerinde). */
+function sadelestirGeometri(metre) {
+  const tol = metre / 111320;
+  const kos = Math.cos(map.getCenter().lat * Math.PI / 180) || 1;
+  let once = 0, sonra = 0;
+  duzenlenebilirKatmanlar().forEach(l => {
+    if (!l.getLatLngs) return;
+    const kapali = l instanceof L.Polygon;
+    const isle = (a) => {
+      if (!a.length) return a;
+      if (Array.isArray(a[0])) return a.map(isle);
+      once += a.length;
+      let y = dpSadelestir(a, tol, kos);
+      // poligon halkası en az 3 köşe olmalı; aşırı sadeleşirse dokunma
+      if (kapali && y.length < 4) y = a;
+      sonra += y.length;
+      return y;
+    };
+    l.setLatLngs(isle(l.getLatLngs()));
+    if (l.pm && l.pm.enabled()) { l.pm.disable(); l.pm.enable(PM_SECENEK); }
+  });
+  return { once, sonra };
+}
+
+function setGeomEdit(acik) {
+  const btn = $("btnEditGeom"), ok = $("btnEditApply"), iptal = $("btnEditCancel");
+  if (acik) {
+    if (!S.havza) return setStatus("delinStatus", "Önce havzayı çıkarın", "err");
+    if (!L.PM) return setStatus("delinStatus",
+      "Düzenleme kütüphanesi yüklenemedi (internet bağlantısı gerekiyor).", "err");
+    editYedek = {
+      havza: layers.havza.toGeoJSON(), dere: layers.dere.toGeoJSON(),
+      kanal: layers.kanal.toGeoJSON(), sHavza: S.havza,
+    };
+    // düzenlerken havzaya tıklamak SİLME onayını açmasın
+    layers.havza.eachLayer(l => { l.off("click", onHavzaClick); l.unbindTooltip(); });
+    const d = derePatlat();          // dere kollarını ayrı ayrı düzenlenebilir yap
+    duzenlenebilirKatmanlar().forEach(l => l.pm.enable(PM_SECENEK));
+    btn.classList.add("hidden"); ok.classList.remove("hidden"); iptal.classList.remove("hidden");
+    $("editTools").classList.remove("hidden");
+    const n = koseSayisi(layers.havza);
+    // ~400 köşe hedefiyle tolerans öner (DEM adımı ≈ 30 m)
+    $("editTol").value = Math.round(Math.max(20, Math.min(1000, 30 * (n + d.kose) / 800)));
+    const dereMsg = d.kol === 0 ? "Haritada dere yok."
+      : d.patladi ? `Dere ağı ${d.kol} ayrı kola bölündü (${d.kose} köşe) — her kol tek tek taşınıp silinebilir.`
+      : `Dere ağı ${d.kol} kol / ${d.kose} köşe — ayrı kollara bölmek için fazla kalabalık, `
+        + `önce “Sadeleştir”e basın (kol sayısı ${DERE_PATLAT_LIMIT} altına inince bölünür).`;
+    setStatus("delinStatus", "Düzenleme açık — köşeyi sürükleyerek taşıyın, ara noktaya "
+      + "tıklayarak yeni köşe ekleyin, köşeye sağ tıklayarak silin. Bitince “Uygula”ya basın."
+      + `\nHavza sınırında ${n} köşe var; imlece en yakın ${PM_SECENEK.limitMarkersToCount} tanesi gösteriliyor.`
+      + "\n" + dereMsg
+      + (n + d.kose > 800 ? "\n⚠ DEM'den gelen geometri piksel merdiveni olduğu için çok köşeli: tek "
+        + "köşeyi oynatmak havza ölçeğinde neredeyse hiçbir şey değiştirmez. Önce “Sadeleştir”i kullanın." : ""), "");
+  } else {
+    setDereCiz(false); setDereSil(false);
+    duzenlenebilirKatmanlar().forEach(l => { if (l.pm.enabled()) l.pm.disable(); });
+    btn.classList.remove("hidden"); ok.classList.add("hidden"); iptal.classList.add("hidden");
+    $("editTools").classList.add("hidden");
+    $("editInfo").textContent = "";
+  }
+}
+
+$("btnEditSimplify").onclick = () => {
+  const m = +$("editTol").value || 60;
+  const { once, sonra } = sadelestirGeometri(m);
+  // sadeleşme sonrası kol sayısı sınırın altına inmiş olabilir → tekrar dene
+  const d = derePatlat();
+  if (d.patladi) duzenlenebilirKatmanlar().forEach(l => {
+    if (!l.pm.enabled()) l.pm.enable(PM_SECENEK);
+    if (dereSilModu) l.on("click", dereSilTikla);
+  });
+  $("editInfo").textContent =
+    `${once} → ${sonra} köşe (${m} m tolerans), dere ${d.kol} kol`
+    + (d.patladi ? " (ayrı ayrı düzenlenebilir)" : "")
+    + ". Yetmezse toleransı artırıp tekrar basın.";
+};
+$("btnDereDraw").onclick = () => setDereCiz(!$("btnDereDraw").classList.contains("picking"));
+$("btnDereDel").onclick = () => setDereSil(!dereSilModu);
+
+function cancelGeomEdit() {
+  setGeomEdit(false);
+  if (editYedek) {
+    layers.havza.clearLayers(); layers.havza.addData(editYedek.havza);
+    layers.dere.clearLayers(); if (editYedek.dere) layers.dere.addData(editYedek.dere);
+    layers.kanal.clearLayers(); if (editYedek.kanal) layers.kanal.addData(editYedek.kanal);
+    S.havza = editYedek.sHavza;
+    editYedek = null;
+  }
+  setStatus("delinStatus", "Düzenleme iptal edildi, önceki geometri geri yüklendi.", "");
+}
+
+async function applyGeomEdit() {
+  const havza = katmanGeojson(layers.havza);
+  if (!havza) return setStatus("delinStatus", "Havza sınırı boş", "err");
+  setGeomEdit(false);
+  setStatus("delinStatus", "Düzenlenen geometriden parametreler yeniden üretiliyor… "
+    + "(DEM okunuyor, büyük havzada 1–3 dakika sürebilir)", "loading");
+  try {
+    const r = await api("/api/basin-from-geometry", {
+      havza_geojson: havza,
+      dere_geojson: katmanGeojson(layers.dere),
+      river_km2: +$("inpRivThr").value || 1,
+      dem_source: $("inpDem").value,
+    });
+    applyBasinResult(r, "Düzenlenen havza uygulandı.");
+    // geometri değişti → önceki hesap ve alana bağlı adımlar bayat
+    S.sonuc = null; S.girdi = null;
+    if ($("results")) $("results").innerHTML = "";
+    setStatus("compStatus", "", "");
+    updateComputeReady();
+    editYedek = null;
+    setStatus("delinStatus", $("delinStatus").textContent
+      + "\n⚠ Alan değiştiği için CN (Adım 3) ve Thiessen (Adım 4) yeniden çalıştırılmalı, "
+      + "sonra tekrar hesaplayın.", "err");
+  } catch (e) {
+    setStatus("delinStatus", "Hata: " + e.message + "\nGeometri haritada duruyor; "
+      + "düzeltip tekrar deneyebilir veya “Vazgeç” ile geri alabilirsiniz.", "err");
+    $("btnEditApply").classList.remove("hidden");
+    $("btnEditCancel").classList.remove("hidden");
+    $("btnEditGeom").classList.add("hidden");
+  }
+}
+
+$("btnEditGeom").onclick = () => setGeomEdit(true);
+$("btnEditCancel").onclick = cancelGeomEdit;
+$("btnEditApply").onclick = applyGeomEdit;
+
 map.on("click", (ev) => {
   if (S.multi && S.multi.place) { multiAddPoint(ev.latlng); return; }
 });
@@ -333,6 +687,7 @@ map.on("click", async (ev) => {
       snap_m: +$("inpSnap").value || 500, dem_source: $("inpDem").value,
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
+    S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
     updateSnyderW();
     layers.havza.clearLayers(); layers.havza.addData(r.havza_geojson);
@@ -559,11 +914,20 @@ $("kmzFile").onchange = async () => {
 const DPLV_LABELS = ["5dk", "10dk", "15dk", "30dk", "1sa", "2sa", "3sa", "4sa",
                      "5sa", "6sa", "8sa", "12sa", "18sa", "24sa"];
 
+/* "Hazır istasyon" açılır listesinde gösterilmeyen istasyonlar. Verileri
+   data/tables/dplv_stations.json'da durur ve yanındaki MGM PLV kutusundan
+   seçilebilir; yalnızca varsayılan olarak gelmesinler diye gizleniyor.
+   Seçenek value'ları özgün dizi indeksi kalır → kayıtlı projelerde kayma olmaz. */
+const DPLV_GIZLI = ["TEKİRDAĞ"];
+
 async function loadDplv() {
   const d = await api("/api/dplv");
   S.dplvList = d;
   const sel = $("inpDplv");
+  let ilk = null;
   d.stations.forEach((s, i) => {
+    if (DPLV_GIZLI.includes(s.name)) return;
+    if (ilk === null) ilk = i;
     const o = document.createElement("option"); o.value = i; o.textContent = s.name;
     sel.appendChild(o);
   });
@@ -571,7 +935,10 @@ async function loadDplv() {
     S.dplvValues = S.dplvList.stations[+sel.value].ratios.slice();
     renderDplvGrid();
   };
-  if (!S.dplvValues) S.dplvValues = d.stations[0].ratios.slice();
+  if (ilk !== null) {
+    sel.value = ilk;
+    if (!S.dplvValues) S.dplvValues = d.stations[ilk].ratios.slice();
+  }
   renderDplvGrid();
 }
 loadDplv();
@@ -1157,7 +1524,12 @@ function recalcRain() {
 
 function dplvRatios() {
   if (S.dplvValues && S.dplvValues.every(v => v != null)) return S.dplvValues;
-  return S.dplvList.stations[+$("inpDplv").value].ratios;
+  // Boş/bayat seçim (ör. gizlenmiş bir istasyonu işaret eden eski proje) +"" ile
+  // 0. istasyona düşmesin; ilk görünür istasyona geri çekil.
+  const v = $("inpDplv").value;
+  const st = v === "" ? null : S.dplvList.stations[+v];
+  const gorunur = S.dplvList.stations.find(s => !DPLV_GIZLI.includes(s.name));
+  return (st || gorunur || S.dplvList.stations[0]).ratios;
 }
 
 /* ---------------- ADIM 6: hesap ---------------- */
@@ -1298,6 +1670,7 @@ function renderResults() {
     </div>
     <div class="export-row" style="align-items:center">
       <button id="btnReport" class="primary">📄 Word Raporu (Bölüm) indir</button>
+      <button id="btnKmz">🌍 KMZ indir (havza + dere + debiler)</button>
       <span id="repStatus" class="small"></span>
     </div>`;
   el.innerHTML = h;
@@ -1308,6 +1681,7 @@ function renderResults() {
   $("btnCompare").onclick = () => openCompare();
   $("btnReservoir").onclick = openReservoir;
   $("btnReport").onclick = downloadReport;
+  $("btnKmz").onclick = downloadKmz;
   if (r.snyder) $("btnSnyChart").onclick = () => showSnyderChart();
   $("btnYil").onclick = () => {
     const d = $("selDur").value, q = +$("yilQ").value;
@@ -1351,20 +1725,64 @@ async function downloadReport() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ girdi: S.girdi, sonuc: S.sonuc, meta }),
     });
-    if (!resp.ok) {
-      let msg = resp.statusText;
-      try { msg = (await resp.json()).hata || msg; } catch (e) {}
-      throw new Error(msg);
-    }
-    const blob = await resp.blob();
-    const cd = resp.headers.get("content-disposition") || "";
-    let name = "Taskin_Bolum.docx";
-    const idx = cd.indexOf("filename=");
-    if (idx >= 0) name = cd.slice(idx + 9).replace(/["';]/g, "").trim() || name;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    const name = await dosyaIndir(resp, "Taskin_Bolum.docx");
+    $("repStatus").textContent = "✓ İndirildi: " + name;
+  } catch (e) { $("repStatus").textContent = "Hata: " + e.message; }
+}
+
+/* Yanıttaki dosyayı Content-Disposition adıyla indirir, indirilen adı döndürür. */
+async function dosyaIndir(resp, varsayilanAd) {
+  if (!resp.ok) {
+    let msg = resp.statusText;
+    try { msg = (await resp.json()).hata || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  const blob = await resp.blob();
+  const cd = resp.headers.get("content-disposition") || "";
+  let name = varsayilanAd;
+  const idx = cd.indexOf("filename=");
+  if (idx >= 0) name = cd.slice(idx + 9).replace(/["';]/g, "").trim() || name;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return name;
+}
+
+/* Katmandaki güncel geometri (elle düzenlemeler dahil); boşsa null. */
+function katmanGeojson(katman) {
+  if (!katman) return null;
+  const gj = katman.toGeoJSON();
+  return (gj && gj.features && gj.features.length) ? gj : null;
+}
+
+/* Nihai havza sınırı + dere ağı + seçili yöntemin tekerrürlü pik debileri → KMZ.
+   Geometri S'ten değil harita katmanlarından okunur, böylece haritada yapılan
+   düzenlemeler çıktıya birebir yansır. */
+async function downloadKmz() {
+  if (!S.sonuc) { $("repStatus").textContent = "Önce hesaplayın"; return; }
+  const havza = katmanGeojson(layers.havza);
+  if (!havza) { $("repStatus").textContent = "Havza sınırı yok — önce havzayı çıkarın"; return; }
+  const yontem = $("repSecili").value;
+  $("repStatus").textContent = "KMZ hazırlanıyor…";
+  try {
+    const debiler = {};
+    CMP_RPS.forEach(rp => { const v = cmpPeak(yontem, rp); if (v != null) debiler[rp] = v; });
+    const o = S.outlet;
+    const resp = await fetch("/api/kmz-export", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ad: $("projName").value || (S.girdi && S.girdi.ad) || "Havza",
+        yontem_ad: CMP_LABELS[yontem] || yontem,
+        havza_geojson: havza,
+        dere_geojson: katmanGeojson(layers.dere),
+        kanal_geojson: katmanGeojson(layers.kanal),
+        outlet: o ? { lat: o.snap_lat ?? o.lat, lon: o.snap_lon ?? o.lon } : null,
+        debiler,
+        girdi_ozeti: S.sonuc.girdi_ozeti || null,
+      }),
+    });
+    const name = await dosyaIndir(resp, "havza.kmz");
     $("repStatus").textContent = "✓ İndirildi: " + name;
   } catch (e) { $("repStatus").textContent = "Hata: " + e.message; }
 }
@@ -2430,7 +2848,8 @@ function exportCSV() {
 /* ---------------- havza silme (haritadan tıkla) ---------------- */
 function clearSingleBasin() {
   // durum
-  S.outlet = null; S.havza = null; S.kotlar = Array(11).fill("");
+  S.outlet = null; S.havza = null; S.dere = null; S.kanal = null;
+  S.kotlar = Array(11).fill("");
   S.thiessen = []; S.istasyonlar = []; S.yzdBolge = null;
   S.stBase = null; S.stExclude = new Set(); S.stExtra = []; S.stPlace = false;
   S.rainValues = {}; S.P24w = null; S.OETw = null; S.yagis = [];
@@ -2498,7 +2917,11 @@ $("btnSave").onclick = async () => {
    "inpDplv", "karTemps", "karA", "karH", "karHist", "inpC100", "inpUs",
    "inpCt", "inpCp", "inpW50", "inpW75", "inpYald"]
     .forEach(id => fields[id] = $(id).value);
-  await api("/api/project/save", { ad, durum: { S: { ...S, sonuc: null, dplvList: null }, fields } });
+  // infoLayers/rasterLayers içinde Leaflet katman nesneleri var; bunlar haritaya
+  // geri başvurduğu için JSON.stringify "circular structure" ile patlar. Raster
+  // altlıklar zaten sunucuda duruyor ve açılışta /api/raster-layers ile geliyor.
+  const durumS = { ...S, sonuc: null, dplvList: null, infoLayers: [], rasterLayers: [] };
+  await api("/api/project/save", { ad, durum: { S: durumS, fields } });
   loadProjects();
   alert("Kaydedildi");
 };
@@ -2512,13 +2935,21 @@ $("projList").onchange = async () => {
   const ad = $("projList").value;
   if (!ad) return;
   const d = await api("/api/project/load/" + encodeURIComponent(ad));
+  // haritada duran canlı katman nesneleri kayda girmez; yüklemede korunmalı
+  const infoY = S.infoLayers, rasterY = S.rasterLayers;
   Object.assign(S, d.S);
+  S.infoLayers = infoY; S.rasterLayers = rasterY;
   Object.entries(d.fields).forEach(([id, v]) => { if ($(id)) $(id).value = v; });
   $("projName").value = ad;
   renderKotlar();
   renderRainTable();
   renderDplvGrid();
   updateComputeReady();
-  if (S.havza) { layers.havza.clearLayers(); layers.havza.addData(S.havza); map.fitBounds(layers.havza.getBounds()); }
+  if (S.havza) {
+    layers.havza.clearLayers(); layers.havza.addData(S.havza);
+    layers.dere.clearLayers(); if (S.dere) layers.dere.addData(S.dere);
+    layers.kanal.clearLayers(); if (S.kanal) layers.kanal.addData(S.kanal);
+    map.fitBounds(layers.havza.getBounds());
+  }
 };
 loadProjects();
