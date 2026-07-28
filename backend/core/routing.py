@@ -82,13 +82,20 @@ def method_hydro(res, method, rp, dt):
     return None
 
 
-def _route_method(ara_res, up_results, method, lag_hours):
+def _route_method(ara_res, up_results, method, lag_hours, up_override=None):
+    """up_override[i][method][rp] verilmişse o memba için hazneden çıkan
+    (ötelenmiş) hidrograf, ham hidrograf yerine kullanılır."""
     dt = 1.0 if method == "snyder" else 0.5
     shift = int(round(lag_hours / dt))
     hydro, peaks, comps = {}, {}, {}
     for rp in RP_HYD:
         ara_h = method_hydro(ara_res, method, rp, dt) or []
-        up_hs = [(method_hydro(ur, method, rp, dt) or []) for ur in up_results]
+        up_hs = []
+        for i, ur in enumerate(up_results):
+            ov = None
+            if up_override and i < len(up_override) and up_override[i]:
+                ov = (up_override[i].get(method) or {}).get(rp)
+            up_hs.append(list(ov) if ov else (method_hydro(ur, method, rp, dt) or []))
         if not ara_h and not any(up_hs):
             continue  # yöntemde bu tekerrür yok (ör. Rasyonel OET)
         maxlen = len(ara_h)
@@ -113,11 +120,75 @@ def _route_method(ara_res, up_results, method, lag_hours):
             "t_axis": [round(i * dt, 3) for i in range(n)]}
 
 
-def route(ara_res, up_results, lag_hours, methods=None):
+def _hazne_ote(hidrograf, dt, cfg):
+    """Tek bir hidrografı, cfg'de tanımlı hazneden geçirip çıkışı döner."""
+    from . import reservoir
+    if cfg.get("tip") == "kapakli":
+        r = reservoir.route_controlled(
+            hidrograf, dt, cfg["hacim_satih"], cfg["esik_kotu"], cfg["lef"],
+            cfg["baslangic_kotu"], cfg["maks_su_kotu"],
+            W1=cfg.get("taban_debi", 0.0), n_kapak=cfg.get("kapak_adedi", 1),
+            pik_sonrasi_bosalt=cfg.get("pik_sonrasi_bosalt", True))
+    else:
+        rating = cfg.get("rating")
+        if not rating:
+            P = None
+            if cfg.get("yaklasim_taban_kotu") is not None:
+                P = cfg["kret_kotu"] - cfg["yaklasim_taban_kotu"]
+            rating = reservoir.rating_from_geometry(
+                cfg["kret_kotu"], cfg.get("apron_giris_acisi", 0.0),
+                cfg.get("kret_uzunlugu", 40.0), C=cfg.get("debi_katsayisi"), P=P)
+        r = reservoir.route(hidrograf, dt, cfg["kret_kotu"], cfg["hacim_satih"], rating)
+    return r
+
+
+def _rezervuar_overrides(up_results, methods, rezervuarlar):
+    """Rezervuar atanmış memba noktalarının hidrograflarını haznede öteler.
+
+    Döner: (override, ozet) — override[i][method][rp] = hazne çıkışı.
+    Öteleme, ilgili yöntemin kendi dt'siyle yapıldığından dizi uzunluğu ve
+    zaman ekseni ham hidrografla birebir aynıdır (doğrudan yerine geçer).
+    """
+    override = [None] * len(up_results)
+    ozet = [None] * len(up_results)
+    for i, cfg in enumerate(rezervuarlar or []):
+        if not cfg or i >= len(up_results):
+            continue
+        ov, oz = {}, {}
+        for m in methods:
+            dt = 1.0 if m == "snyder" else 0.5
+            for rp in RP_HYD:
+                h = method_hydro(up_results[i], m, rp, dt)
+                if not h:
+                    continue
+                try:
+                    r = _hazne_ote(h, dt, cfg)
+                except Exception as e:
+                    oz.setdefault("hata", str(e))
+                    continue
+                ov.setdefault(m, {})[rp] = r["cikis"]
+                oz.setdefault(m, {})[rp] = {
+                    "giris_pik": r["ozet"]["giris_pik"],
+                    "cikis_pik": r["ozet"]["cikis_pik"],
+                    "sonumleme": r["ozet"].get("pik_sonumleme"),
+                    "maks_su_kotu": r["ozet"].get("maks_su_kotu"),
+                }
+        if ov:
+            override[i] = ov
+            ozet[i] = oz
+    return override, ozet
+
+
+def route(ara_res, up_results, lag_hours, methods=None, rezervuarlar=None):
     """Ara havza + ötelenmiş memba hidrograflarını her yönteme göre toplar.
 
     methods: ["dsi","snyder","mockus","rasyonel"] alt kümesi. Verilmezse
     sonuçlarda mevcut tüm yöntemler otelenir.
+
+    rezervuarlar: membalarla aynı sıradaki liste; bir eleman dolu ise o memba
+    noktasının çıkışı önce haznede ötelenir (sönümlenir), sonra mansaba
+    taşınır — yani hazne aşağıdaki tüm noktaları etkiler. Bu durumda
+    karşılaştırma için **rezervuarsız** çözüm de ayrıca döndürülür.
     """
     if methods is None:
         methods = ["dsi"]
@@ -127,7 +198,16 @@ def route(ara_res, up_results, lag_hours, methods=None):
             methods.append("mockus")
         if ara_res.get("rasyonel"):
             methods.append("rasyonel")
+    override, rez_ozet = (None, None)
+    if rezervuarlar and any(rezervuarlar):
+        override, rez_ozet = _rezervuar_overrides(up_results, methods, rezervuarlar)
     out = {"lag_saat": lag_hours, "yontemler": {}}
     for m in methods:
-        out["yontemler"][m] = _route_method(ara_res, up_results, m, lag_hours)
+        out["yontemler"][m] = _route_method(ara_res, up_results, m, lag_hours, override)
+    if override is not None:
+        out["rezervuarli"] = True
+        out["rezervuar_ozet"] = rez_ozet
+        # karşılaştırma için hazne yokmuş gibi ikinci bir çözüm
+        out["yontemler_rezervuarsiz"] = {
+            m: _route_method(ara_res, up_results, m, lag_hours, None) for m in methods}
     return out

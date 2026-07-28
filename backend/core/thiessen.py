@@ -93,8 +93,8 @@ def _utm_epsg(lon, lat):
     return 32600 + zone if lat >= 0 else 32700 + zone
 
 
-def weights(basin_geojson, stations):
-    """Havza içinde her istasyonun Thiessen alan oranı.
+def _weights_once(basin_geojson, stations):
+    """Havza içinde her istasyonun Thiessen alan oranı (tek geçiş).
 
     Dönen ağırlıklar Excel DATAGİR H kolonuna (alan oranı) karşılık gelir.
     """
@@ -159,3 +159,40 @@ def weights(basin_geojson, stations):
         for o in out:
             o["agirlik"] = round(o["agirlik"] / tw, 4)
     return out
+
+
+def _ayni(a, b):
+    return (str(a.get("name")) == str(b.get("name"))
+            and abs(float(a["lat"]) - float(b["lat"])) < 1e-6
+            and abs(float(a["lon"]) - float(b["lon"])) < 1e-6)
+
+
+def weights(basin_geojson, stations, min_agirlik=0.0, max_eleme=25):
+    """Thiessen ağırlıkları; payı ``min_agirlik``ın altındaki istasyonları eler.
+
+    Eleme, ağırlıkları orantılı dağıtmakla yapılmaz — istasyon listeden
+    çıkarılıp Thiessen **yeniden kurulur**, böylece boşalan alanı geometrik
+    olarak komşu istasyonlar devralır. Her turda yalnız **en küçük paylı**
+    istasyon elenir; çünkü bir istasyon çıkınca kalanların payı ancak artar
+    ve eşiğin altındakiler eşiğin üstüne çıkabilir (hepsini birden elemek
+    gereğinden fazla istasyon atardı). En az bir istasyon her zaman kalır.
+
+    Döner: (sonuc, elenen) — elenen: [{name, kurum, agirlik}] (elendiği andaki pay).
+    """
+    aktif = list(stations)
+    elenen = []
+    out = _weights_once(basin_geojson, aktif)
+    if min_agirlik and min_agirlik > 0:
+        for _ in range(max_eleme):
+            paylilar = [o for o in out if o["agirlik"] > 0]
+            if len(paylilar) <= 1:
+                break
+            kucukler = [o for o in paylilar if o["agirlik"] < min_agirlik]
+            if not kucukler:
+                break
+            en_kucuk = min(kucukler, key=lambda o: o["agirlik"])
+            elenen.append({"name": en_kucuk.get("name"), "kurum": en_kucuk.get("kurum"),
+                           "agirlik": en_kucuk["agirlik"]})
+            aktif = [s for s in aktif if not _ayni(s, en_kucuk)]
+            out = _weights_once(basin_geojson, aktif)
+    return out, elenen

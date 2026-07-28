@@ -208,6 +208,24 @@ def api_delineate(req: DelineateReq):
         _delineate_lock.release()
 
 
+@app.post("/api/bilgi-katmani")
+async def api_bilgi_katmani(file: UploadFile = File(...)):
+    """Bilgi amaçlı harita katmanı: dosyadaki tüm geometrileri GeoJSON döner.
+
+    Hesaba girmez; yalnız haritada bağlam göstermek içindir."""
+    from backend.core import vektor
+    try:
+        fc = vektor.oku_tum(await file.read(), file.filename or "")
+        turler = {}
+        for f in fc["features"]:
+            t = f["geometry"].get("type", "?")
+            turler[t] = turler.get(t, 0) + 1
+        return {"geojson": fc, "ad": file.filename, "sayi": len(fc["features"]),
+                "turler": turler}
+    except Exception as e:
+        return _err(e)
+
+
 @app.post("/api/import-basin")
 async def api_import_basin(file: UploadFile = File(...),
                            dere_file: UploadFile | None = File(None),

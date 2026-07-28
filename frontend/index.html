@@ -5,7 +5,7 @@
 <title>Taşkın Hesap — Sentetik Yöntemler</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="/static/style.css?v=42">
+<link rel="stylesheet" href="/static/style.css?v=43">
 </head>
 <body>
 <div id="app">
@@ -133,6 +133,10 @@
         <label class="inline" title="Opsiyonel. Dere ağı verilirse L, Lc ve kot profili DEM yerine BU dere geometrisinden hesaplanır (kotlar yine DEM'den okunur). Havza dosyasında çizgiler zaten varsa bu alana gerek yok.">🌊 Dere ağı (opsiyonel) <input type="file" id="riverFile" accept=".kml,.kmz,.geojson,.json,.zip,.gpkg"></label>
         <button id="btnImport" class="small-btn">İçe aktar ve hesapla</button>
       </div>
+      <div class="rain-tools" style="margin-top:2px">
+        <label class="inline" title="Yalnız haritada göstermek için: proje sınırı, yollar, yerleşimler, mevcut tesisler vb. Hesaba girmez. Birden çok dosya seçebilirsiniz.">🗺 Bilgi katmanı ekle <input type="file" id="infoFile" accept=".kml,.kmz,.geojson,.json,.zip,.gpkg" multiple></label>
+      </div>
+      <div id="infoLayers" class="small"></div>
       <div id="delinStatus" class="status"></div>
       <div class="grid2">
         <label>Alan A (km²)<input id="inpA" type="number" step="0.001"></label>
@@ -395,6 +399,6 @@
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=42"></script>
+<script src="/static/app.js?v=43"></script>
 </body>
 </html>

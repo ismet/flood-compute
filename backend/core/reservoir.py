@@ -114,18 +114,43 @@ def gate_opening_for(level, O_target, sill, Lef, W1=0.0, n=1):
     return (lo + hi) / 2
 
 
-def _sim_controlled(I, dt_s, kot, vol, sill, Lef, W1, H_init, O_cap, n=1):
-    """Verilen pik-tavan O_cap ile öteleme simülasyonu."""
+def _sim_controlled(I, dt_s, kot, vol, sill, Lef, W1, H_init, O_cap, n=1,
+                    pik_sonrasi_bosalt=True):
+    """Verilen pik-tavan O_cap ile öteleme simülasyonu.
+
+    İşletme kuralı:
+      * Giriş **pikine kadar** (yükselen kol): O ≤ I — mansaba doğal akımdan
+        fazlası verilmez, fazla su haznede depolanır.
+      * Pik **geçtikten sonra** (alçalan kol, ``pik_sonrasi_bosalt``): O > I
+        olabilir; hazne, çıkış piki tavanı O_cap'i aşmadan boşaltılır. Çıkış
+        zaten O_cap ≤ giriş piki olduğundan mansaptaki pik büyümez, ama
+        depolama daha erken geri kazanılır ve maksimum su kotu düşer.
+      * Boşaltma, su kotu **başlangıç kotunun altına** inecek kadar sürmez;
+        o seviyeye gelince yeniden geçişli (O ≈ I) çalışılır.
+    """
     V = _interp(H_init, kot, vol)          # hm³
+    V_init = V                             # boşaltmada alt sınır
     outs, levels, openings = [], [], []
     maxlev = _interp(V, vol, kot)          # gerçek başlangıç kotu (tabloya kırpılı)
     nI = len(I)
+    t_pik = max(range(nI), key=lambda i: I[i]) if nI else 0
     for t in range(nI):
         lev = _interp(V, vol, kot)
         if lev > maxlev:
             maxlev = lev
         Qmax = gate_max_Q(lev, sill, Lef, W1, n)
+        I_next = I[t + 1] if t + 1 < nI else I[t]
+        I_ort = (I[t] + I_next) / 2.0      # bu adımdaki ortalama giriş (trapez)
         O = min(I[t], O_cap)               # pik-tavan + O ≤ I
+        if pik_sonrasi_bosalt and t > t_pik:
+            # Alçalan kolda girenden fazlasını salabiliriz. O_bosalt, bu adım
+            # sonunda hacmi tam başlangıç seviyesine indiren debidir; hem alt
+            # (boşaltmaya izin ver) hem üst (başlangıç kotunun altına inme)
+            # sınır olarak kullanılır — böylece hazne normal işletme kotuna
+            # çekilip orada tutulur.
+            O_bosalt = max(0.0, (V - V_init) * 1e6 / dt_s + I_ort)
+            O = max(O, min(O_cap, O_bosalt))
+            O = min(O, O_bosalt)
         O = min(O, Qmax)                   # kapak kapasitesi
         if lev > sill:
             O = max(O, W1)                 # taban debi (kapak kapalıyken bile)
@@ -134,8 +159,7 @@ def _sim_controlled(I, dt_s, kot, vol, sill, Lef, W1, H_init, O_cap, n=1):
         openings.append(gate_opening_for(lev, O, sill, Lef, W1, n))
         outs.append(O)
         levels.append(lev)
-        I_next = I[t + 1] if t + 1 < nI else I[t]
-        V += ((I[t] + I_next) / 2.0 - O) * dt_s / 1e6   # hm³ (trapez giriş)
+        V += (I_ort - O) * dt_s / 1e6      # hm³
         if V < vol[0]:
             V = vol[0]
     lev = _interp(V, vol, kot)
@@ -144,12 +168,20 @@ def _sim_controlled(I, dt_s, kot, vol, sill, Lef, W1, H_init, O_cap, n=1):
     return outs, levels, openings, maxlev
 
 
-def route_controlled(inflow, dt_hr, vol_satih, sill, Lef, H_init, H_max, W1=0.0, n_kapak=1):
+def route_controlled(inflow, dt_hr, vol_satih, sill, Lef, H_init, H_max, W1=0.0,
+                     n_kapak=1, pik_sonrasi_bosalt=True):
     """Kapaklı (kontrollü) dolusavak ötelemesi + kapak optimizasyonu.
 
-    Kapaklar öyle işletilir ki: (a) su kotu H_max'ı geçmez, (b) çıkış ≤ giriş,
-    (c) çıkış piki minimum olur (pik-tavan/peak-shaving; H_init ile H_max arasındaki
-    depolama kullanılır). İkili arama ile minimum uygulanabilir O_cap bulunur.
+    Kapaklar öyle işletilir ki: (a) su kotu H_max'ı geçmez, (b) **giriş pikine
+    kadar** çıkış ≤ giriş, (c) çıkış piki minimum olur (pik-tavan/peak-shaving;
+    H_init ile H_max arasındaki depolama kullanılır). İkili arama ile minimum
+    uygulanabilir O_cap bulunur.
+
+    ``pik_sonrasi_bosalt`` (vars. açık): pik geçtikten sonra çıkış girişi
+    aşabilir — hazne, O_cap'i ve başlangıç kotunu aşmadan boşaltılır. Çıkış
+    tavanı zaten giriş pikinin altında olduğu için mansaptaki pik büyümez;
+    buna karşılık maksimum su kotu düştüğünden optimizasyon **daha küçük**
+    bir çıkış piki bulabilir.
     n_kapak: kapak adedi (her biri Lef genişlikte).
     """
     kot = [r[0] for r in vol_satih]
@@ -160,7 +192,8 @@ def route_controlled(inflow, dt_hr, vol_satih, sill, Lef, H_init, H_max, W1=0.0,
     Ipk = max(I) if I else 0.0
 
     def maxlev_for(oc):
-        return _sim_controlled(I, dt_s, kot, vol, sill, Lef, W1, H_init, oc, n)[3]
+        return _sim_controlled(I, dt_s, kot, vol, sill, Lef, W1, H_init, oc, n,
+                               pik_sonrasi_bosalt)[3]
 
     lo, hi = max(W1, 0.0), max(Ipk, W1 + 1.0)
     asilamaz = maxlev_for(hi) > H_max + 1e-6    # pass-through bile taşırıyorsa
@@ -172,7 +205,7 @@ def route_controlled(inflow, dt_hr, vol_satih, sill, Lef, H_init, H_max, W1=0.0,
             lo = mid
     O_cap = hi
     outs, levels, openings, maxlev = _sim_controlled(
-        I, dt_s, kot, vol, sill, Lef, W1, H_init, O_cap, n)
+        I, dt_s, kot, vol, sill, Lef, W1, H_init, O_cap, n, pik_sonrasi_bosalt)
 
     # --- girdi tutarlılık kontrolü (sessiz 0 çıkışı yakala) ---
     kmin, kmax = kot[0], kot[-1]
@@ -197,6 +230,8 @@ def route_controlled(inflow, dt_hr, vol_satih, sill, Lef, H_init, H_max, W1=0.0,
         "maks_su_kotu": maxlev, "H_max": H_max, "H_init": H_init,
         "maks_kapak_acikligi": max(openings) if openings else 0.0,
         "kapak_adedi": n,
+        "pik_sonrasi_bosalt": bool(pik_sonrasi_bosalt),
+        "giris_pik_indeks": int(max(range(len(I)), key=lambda i: I[i])) if I else None,
         "giris_pik_saat": (I.index(Ipk) * dt_hr) if I else None,
         "cikis_pik_saat": (outs.index(Opk) * dt_hr) if outs else None,
         "asim_uyarisi": bool(asilamaz),

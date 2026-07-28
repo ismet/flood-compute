@@ -9,11 +9,20 @@ import sys
 
 
 def main():
+    # Windows'ta stdout/stdin varsayılan olarak cp1252 açılır ve Türkçe
+    # karakterler (ör. "havzası" içindeki ı) UnicodeEncodeError verir.
+    for stream in (sys.stdout, sys.stdin):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     req = json.loads(sys.stdin.read())
     from backend.core.gis import multi_delineate
     from backend.core.routing import basin_tc
     res = multi_delineate(req["mansap"], req["membalar"],
-                          river_km2=req.get("river_km2", 1.0))
+                          river_km2=req.get("river_km2", 1.0),
+                          snap_m=req.get("snap_m", 500.0),
+                          dem_source=req.get("dem_source", "auto"))
     try:
         res["ara"]["Tc_saat"] = round(basin_tc(res["ara"]["L_km"], res["ara"]["kotlar"]), 3)
     except Exception:
