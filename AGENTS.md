@@ -50,7 +50,7 @@ backend/core/         — Computation engine (no framework dependency)
   rational.py         — Rasyonel (A ≤ 1 km²)
   reservoir.py        — Storage-Indication routing + controlled gates
   routing.py          — Multi-basin (ara havza) hydrograph routing
-  gis.py              — Basin delineation, DEM handling (~495 lines)
+  gis.py              — Basin delineation, DEM handling (~907 lines)
   tables.py           — JSON table loader + interpolation helpers (data layer)
   corine.py           — CORINE → CN lookup
   corine_online.py    — EEA CLC2018 WMS downloader
@@ -61,12 +61,14 @@ backend/core/         — Computation engine (no framework dependency)
   dilekce.py          — MGM petition (.docx/.pdf)
   _delineate_subprocess.py   — subprocess entry point: python -m
   _multi_delineate_subprocess.py
+  _import_basin_subprocess.py — subprocess entry point: python -m
+  vektor.py             — KML/KMZ/GeoJSON parser for basin import
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 13 JSON tables extracted from Excel workbooks
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 ```
 
-- **`backend/core/vektor.py`** and **`backend/core/_import_basin_subprocess.py`** do not exist but are imported in `backend/main.py:217,235` (`/api/import-basin` endpoint). That endpoint will crash at runtime. Do not create these files unless instructed — they are placeholder/unfinished features.
+---
 
 ## Key API endpoints
 
@@ -76,7 +78,7 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 |---|---|
 | `POST /api/delineate` | Basin delineation from outlet click (subprocess, locked) |
 | `POST /api/multi-delineate` | Multi-basin (ara havza) delineation |
-| `POST /api/import-basin` | Upload basin polygon from KML/KMZ/GeoJSON (broken — needs vektor.py) |
+| `POST /api/import-basin` | Upload basin polygon from KML/KMZ/GeoJSON |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
 | `POST /api/thiessen` | Thiessen weights from basin + stations |
