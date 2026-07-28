@@ -45,7 +45,7 @@ All golden tests verify outputs match Excel (tol=1e-6).
 ## Project structure (key files)
 
 ```
-backend/main.py       — FastAPI app, 31 endpoints, Pydantic models, HTTP Basic auth
+backend/main.py       — FastAPI app, 37 endpoints, Pydantic models, HTTP Basic auth
 backend/core/         — Computation engine (no framework dependency)
   engine.py           — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff
   snyder.py           — Snyder synthetic UH

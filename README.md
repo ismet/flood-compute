@@ -24,6 +24,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/stations/` | Varsayılan istasyon seti (`bir_cikti.kml`, 2315 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
 | `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
+| `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 
 ## İş akışı (6 adım)
@@ -131,6 +132,31 @@ uygulanır (min uygulanabilir tavan ikili aramayla bulunur). Çıktı: ötelenmi
 ve **kapak açıklığı programı** (grafik + tablo + CSV). `reservoir.route_controlled`,
 `/api/reservoir-controlled`.
 
+## Raster altlıklar (1/25000 pafta vb.)
+
+Harita panelindeki **🗺 1/25000 altlık** aracı ile koordinatlı raster pafta yüklenir
+(GeoTIFF, MrSID `.sid` + world file `.sdw`). `.sid` dosyaları GDAL ile GeoTIFF'e
+çevrilir. Altlık EPSG:3857'ye yeniden projeksiyonlanarak XYZ karo servisi üzerinden
+haritada gösterilir (`/api/raster/{ad}/{z}/{x}/{y}.png`). `backend/core/raster.py`,
+`backend/tests/test_raster.py`.
+
+## KMZ dışa aktarımı
+
+Hesap sonuçlarındaki **🌍 KMZ indir** düğmesiyle havza sınırı + dere ağı + seçili
+yöntemin tüm tekerrürlü pik debileri (Q2–Q10000) tek bir `.kmz` dosyası olarak
+indirilir. Geometri haritadaki güncel hâliyle (elle düzenlemeler dahil) yazılır.
+`backend/core/kmz_export.py`, `backend/tests/test_kmz_export.py`.
+
+## Haritada geometri düzenleme (✏️ Havza / dere düzenle)
+
+Havza çıkarıldıktan sonra **✏️ Havza / dere düzenle** düğmesiyle GeoMan eklentisi
+üzerinden havza sınırı ve dere ağı haritada elle düzenlenir: köşe sürükleme, yeni
+köşe ekleme (çift tık), köşe silme (sağ tık). Dere ağı tek tek kollara ayrılır;
+istenmeyen kollar silinebilir veya yeni kol çizilebilir. DEM'den gelen piksel
+merdivenini azaltmak için Douglas-Peucker sadeleştirme aracı bulunur. "Uygula"
+denince düzenlenmiş geometriden `/api/basin-from-geometry` ile alan, L, Lc ve
+kot profili yeniden üretilir.
+
 ## Excel makrolarının karşılıkları
 
 | Makro | Uygulamadaki karşılığı |
@@ -179,5 +205,7 @@ docker run -d -p 8737:8737 -e APP_PASSWORD=gizli-parola \
 python backend/tests/test_golden.py              :: DSİ/Mockus birebir (49 pik + BH + önhesap)
 python backend/tests/test_snyder_golden.py       :: Snyder birebir (parametreler + Q2–Q100 pik)
 python backend/tests/test_reservoir_golden.py    :: Rezervuar öteleme birebir (çıkış piki, su kotu, sönümleme)
+python backend/tests/test_kmz_export.py          :: KMZ yazıcı gidiş-dönüş (vektör.oku ile)
+python backend/tests/test_raster.py              :: Raster altlık XYZ karo servisi + CRS
 python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
 ```
