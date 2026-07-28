@@ -10,6 +10,7 @@ env/
 data/dem/cache/
 data/corine/cache/
 data/projects/
+data/raster/
 
 # data/stations/DMİ.kmz is the canonical copy; root is a local fallback
 /DMİ.kmz
@@ -19,3 +20,10 @@ data/projects/
 data/dem/aster30m.vrt
 data/dem/aster30m/
 data/DMİ_yedek.kmz
+
+# Kökteki ASTER 30 m ESRI Grid (2.6 GB) — yerel DEM, depoya girmemeli.
+# data/dem/aster30m/ kuralı bu yolu kapsamıyordu.
+/aster30M/
+
+# Excel açıkken bıraktığı kilit dosyaları
+~$*

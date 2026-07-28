@@ -13,6 +13,8 @@ python backend/tests/test_golden.py                   # DSİ/Mockus golden (49 p
 python backend/tests/test_snyder_golden.py            # Snyder golden
 python backend/tests/test_reservoir_golden.py         # reservoir routing golden
 python backend/tests/test_api_smoke.py                # API smoke (FastAPI TestClient)
+python backend/tests/test_kmz_export.py               # KMZ writer round-trip (via vektor.oku)
+python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS override
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data
 docker build -t taskin-hesap .                        # build Docker image
@@ -63,9 +65,12 @@ backend/core/         — Computation engine (no framework dependency)
   _multi_delineate_subprocess.py
   _import_basin_subprocess.py — subprocess entry point: python -m
   vektor.py             — KML/KMZ/GeoJSON parser for basin import
+  kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
+  raster.py             — Georeferenced raster basemaps → XYZ tile service
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 13 JSON tables extracted from Excel workbooks
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
+data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
 ```
 
 ---
@@ -79,6 +84,12 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `POST /api/delineate` | Basin delineation from outlet click (subprocess, locked) |
 | `POST /api/multi-delineate` | Multi-basin (ara havza) delineation |
 | `POST /api/import-basin` | Upload basin polygon from KML/KMZ/GeoJSON |
+| `POST /api/basin-from-geometry` | Same as import-basin but input is GeoJSON, not a file — used after on-map editing |
+| `POST /api/kmz-export` | Basin + streams + selected method's Q2–Q10000 → .kmz |
+| `POST /api/raster-add` | Upload georeferenced raster basemap (`?crs=EPSG:…` if the file has none) |
+| `POST /api/raster-delete` | Remove a raster basemap |
+| `GET /api/raster-layers` | List raster basemaps |
+| `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
 | `POST /api/thiessen` | Thiessen weights from basin + stations |

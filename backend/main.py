@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import traceback
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -139,6 +140,30 @@ class ReportReq(BaseModel):
     meta: dict | None = None
 
 
+class RasterSilReq(BaseModel):
+    ad: str
+
+
+class BasinGeomReq(BaseModel):
+    """Haritada elle düzenlenmiş havza/dere geometrisinden parametre üretimi."""
+    havza_geojson: dict
+    dere_geojson: dict | None = None
+    river_km2: float = 1.0
+    dem_source: str = "auto"
+
+
+class KmzReq(BaseModel):
+    """Nihai havza + dere + tekerrürlü debilerin KMZ çıktısı için istek."""
+    ad: str | None = None
+    yontem_ad: str | None = None
+    havza_geojson: dict | None = None
+    dere_geojson: dict | None = None
+    kanal_geojson: dict | None = None
+    outlet: dict | None = None       # {lat, lon}
+    debiler: dict | list | None = None   # {"100": 128.9, ...} veya [{rp, q}]
+    girdi_ozeti: dict | None = None
+
+
 class SaveReq(BaseModel):
     ad: str
     durum: dict
@@ -226,6 +251,126 @@ async def api_bilgi_katmani(file: UploadFile = File(...)):
         return _err(e)
 
 
+def _geometri_al(gj, cizgi=False):
+    """GeoJSON FeatureCollection / Feature / ham geometri → tek geometri sözlüğü.
+
+    Poligonlarda en büyüğü seçilir (havza sınırı), çizgilerde hepsi tek bir
+    MultiLineString'te birleştirilir. gis.params_from_basin_polygon shapely
+    `shape()` ile ham geometri beklediği için normalleştirme burada yapılır.
+    """
+    if not gj:
+        return None
+    from shapely.geometry import mapping, shape
+
+    def geometriler(x):
+        if not isinstance(x, dict):
+            return []
+        t = x.get("type") or ""
+        if t == "FeatureCollection":
+            out = []
+            for f in x.get("features") or []:
+                out += geometriler(f)
+            return out
+        if t == "Feature":
+            return geometriler(x.get("geometry"))
+        if t == "GeometryCollection":
+            out = []
+            for g in x.get("geometries") or []:
+                out += geometriler(g)
+            return out
+        return [x] if t else []
+
+    ham = []
+    for g in geometriler(gj):
+        try:
+            ham.append(shape(g))
+        except Exception:
+            pass
+    if not ham:
+        return None
+    if cizgi:
+        parcalar = []
+        for g in ham:
+            if g.geom_type == "LineString":
+                parcalar.append(g)
+            elif g.geom_type == "MultiLineString":
+                parcalar += list(g.geoms)
+        if not parcalar:
+            return None
+        from shapely.geometry import MultiLineString
+        return mapping(MultiLineString(parcalar))
+    poligonlar = []
+    for g in ham:
+        if g.geom_type == "Polygon":
+            poligonlar.append(g)
+        elif g.geom_type == "MultiPolygon":
+            poligonlar += list(g.geoms)
+    if not poligonlar:
+        return None
+    return mapping(max(poligonlar, key=lambda p: p.area))
+
+
+def _havza_parametreleri(havza_gj, dere_gj=None, river_km2=1.0, dem_source="auto"):
+    """Havza poligonundan DEM ile parametre üretir (alt süreçte).
+
+    Hem dosyadan içe aktarmada hem haritada elle düzenlemede kullanılan ortak
+    yol. Alt süreç, numba/rasyonel bellek kullanımını ana süreçten ayırır.
+    """
+    import sys
+    payload = json.dumps({"havza": havza_gj, "river_km2": river_km2,
+                          "dem_source": dem_source, "dere": dere_gj})
+    proc = subprocess.run(
+        [sys.executable, "-m", "backend.core._import_basin_subprocess"],
+        input=payload, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=480, cwd=ROOT)
+    if proc.returncode != 0:
+        msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
+        raise RuntimeError(msg)
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def _yzd_ekle(result):
+    """Sonuca YZD alansal dağılım bölgesini ekler (hata olursa boş bırakır)."""
+    try:
+        from backend.core import yzd_region
+        result["yzd_bolge"] = yzd_region.detect(
+            basin_geojson=result.get("havza_geojson"),
+            lat=result["outlet"]["lat"], lon=result["outlet"]["lon"])
+    except Exception as e:
+        result["yzd_bolge"] = {"bolge": None, "yontem": None, "hata": str(e)}
+    return result
+
+
+@app.post("/api/basin-from-geometry")
+def api_basin_from_geometry(req: BasinGeomReq):
+    """Haritada elle düzenlenmiş havza sınırı (+dere) için parametreleri
+    yeniden üretir. /api/import-basin ile aynı işi yapar, farkı girdinin
+    dosya değil doğrudan GeoJSON olması."""
+    acquired = _delineate_lock.acquire(blocking=False)
+    if not acquired:
+        return JSONResponse(status_code=503,
+            content={"hata": "Havza çıkarımı devam ediyor, lütfen bekleyip tekrar deneyin."})
+    try:
+        havza = _geometri_al(req.havza_geojson)
+        if havza is None:
+            raise RuntimeError("Havza sınırı bir poligon olmalı")
+        dere = _geometri_al(req.dere_geojson, cizgi=True)
+        result = _havza_parametreleri(havza, dere, req.river_km2, req.dem_source)
+        if dere:
+            result["dere_geojson"] = req.dere_geojson
+            result["dere_kaynagi"] = "duzenleme"
+        else:
+            result["dere_kaynagi"] = "dem"
+        result["kaynak"] = "duzenleme"
+        return _yzd_ekle(result)
+    except subprocess.TimeoutExpired:
+        return _err(RuntimeError("İşlem zaman aşımına uğradı (8 dk)"))
+    except Exception as e:
+        return _err(e)
+    finally:
+        _delineate_lock.release()
+
+
 @app.post("/api/import-basin")
 async def api_import_basin(file: UploadFile = File(...),
                            dere_file: UploadFile | None = File(None),
@@ -246,18 +391,8 @@ async def api_import_basin(file: UploadFile = File(...),
             if dgj.get("dereler"):
                 gj["dereler"] = dgj["dereler"]
                 gj["cizgi_sayisi"] = dgj["cizgi_sayisi"]
-        import subprocess, sys
-        payload = json.dumps({"havza": gj["havza"], "river_km2": river_km2,
-                              "dem_source": dem_source, "dere": gj.get("dereler")})
-        proc = subprocess.run(
-            [sys.executable, "-m", "backend.core._import_basin_subprocess"],
-            input=payload, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=480,
-            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        if proc.returncode != 0:
-            msg = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else "subprocess failed"
-            raise RuntimeError(msg)
-        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        result = _havza_parametreleri(gj["havza"], gj.get("dereler"),
+                                      river_km2, dem_source)
         # kullanıcı dere ağı da verdiyse DEM'den türetilen yerine onu göster
         if gj.get("dereler"):
             result["dere_geojson"] = gj["dereler"]
@@ -267,14 +402,7 @@ async def api_import_basin(file: UploadFile = File(...),
         result["ice_aktarim"] = {"poligon_sayisi": gj["poligon_sayisi"],
                                  "cizgi_sayisi": gj["cizgi_sayisi"],
                                  "dosya": file.filename}
-        try:
-            from backend.core import yzd_region
-            result["yzd_bolge"] = yzd_region.detect(
-                basin_geojson=result.get("havza_geojson"),
-                lat=result["outlet"]["lat"], lon=result["outlet"]["lon"])
-        except Exception as e:
-            result["yzd_bolge"] = {"bolge": None, "yontem": None, "hata": str(e)}
-        return result
+        return _yzd_ekle(result)
     except subprocess.TimeoutExpired:
         return _err(RuntimeError("İşlem zaman aşımına uğradı (8 dk)"))
     except Exception as e:
@@ -621,6 +749,109 @@ def api_report(req: ReportReq):
         return Response(
             content=data,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/raster-layers")
+def api_raster_layers():
+    """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""
+    from backend.core import raster
+    try:
+        return {"katmanlar": raster.listele()}
+    except Exception as e:
+        return _err(e)
+
+
+# ana raster sayılan uzantılar; kalanlar yan dosya (.sdw/.tfw/.prj/.aux.xml)
+RASTER_UZANTI = (".tif", ".tiff", ".vrt", ".img", ".sid", ".png", ".jpg", ".jpeg", ".ecw")
+
+
+@app.post("/api/raster-add")
+async def api_raster_add(files: list[UploadFile] = File(...),
+                         crs: str = "", baslik: str = ""):
+    """Koordinatlı raster altlık yükler.
+
+    Birden çok dosya gönderilebilir: ilk raster dosyası ana katman, kalanlar
+    yan dosya olarak (world file .sdw/.tfw, .prj, .aux.xml) yanına yazılır —
+    georeferans dosyanın içinde değil de .sdw'de olduğunda bu şarttır.
+    .sid gönderilirse harici GDAL ile GeoTIFF'e çevrilir.
+    crs, dosyada CRS yoksa zorunlu (EPSG:23037 = ED50/UTM 37N,
+    EPSG:32637 = WGS84/UTM 37N)."""
+    from backend.core import raster
+    try:
+        okunan = [(f.filename or "", await f.read()) for f in files]
+        if not okunan:
+            raise RuntimeError("Dosya seçilmedi")
+        ana = next((i for i, (n, _) in enumerate(okunan)
+                    if n.lower().endswith(RASTER_UZANTI)), None)
+        if ana is None:
+            raise RuntimeError(
+                "Raster dosyası bulunamadı. Ana dosya şu biçimlerden biri olmalı: "
+                + ", ".join(RASTER_UZANTI))
+        ad, veri = okunan[ana]
+        yan = [x for i, x in enumerate(okunan) if i != ana]
+        return raster.ekle(veri, ad, crs=crs.strip() or None,
+                           baslik=baslik.strip() or None, yardimci=yan)
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/raster-converter")
+def api_raster_converter():
+    """MrSID (.sid) dönüştürücüsü kurulu mu — arayüzde uyarı göstermek için."""
+    from backend.core import raster
+    try:
+        return raster.cevirici_durumu()
+    except Exception as e:
+        return _err(e)
+
+
+@app.post("/api/raster-delete")
+def api_raster_delete(req: RasterSilReq):
+    from backend.core import raster
+    try:
+        return raster.sil(req.ad)
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/raster/{ad}/{z}/{x}/{y}.png")
+def api_raster_tile(ad: str, z: int, x: int, y: int):
+    """XYZ karo servisi — Leaflet L.tileLayer bu adresi çağırır."""
+    from fastapi.responses import Response
+    from backend.core import raster
+    try:
+        if not (0 <= z <= 22):
+            raise ValueError("geçersiz zoom")
+        png = raster.karo(ad, z, x, y)
+    except Exception as e:
+        return _err(e)
+    if png is None:
+        return Response(status_code=204)          # kapsam dışı / tamamen saydam
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.post("/api/kmz-export")
+def api_kmz_export(req: KmzReq):
+    """Nihai havza sınırı, dere ağı ve seçili yöntemin tekerrürlü pik
+    debilerini Google Earth'te açılan tek bir .kmz olarak döndürür."""
+    from fastapi.responses import Response
+    from backend.core import kmz_export
+    try:
+        veri = req.model_dump()
+        if not veri.get("havza_geojson"):
+            raise RuntimeError("Havza sınırı yok — önce havzayı çıkarın")
+        data = kmz_export.build(veri)
+        # HTTP başlığı ASCII olmalı: Türkçe karakterleri sadeleştir
+        tr = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
+        ad = _safe(req.ad or "havza")
+        fn = re.sub(r"[^A-Za-z0-9_.-]+", "_", ad.translate(tr)).strip("_") + "_havza.kmz"
+        return Response(
+            content=data,
+            media_type="application/vnd.google-earth.kmz",
             headers={"Content-Disposition": f'attachment; filename="{fn}"'})
     except Exception as e:
         return _err(e)
