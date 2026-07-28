@@ -19,7 +19,7 @@ docker build -t taskin-hesap .                        # build Docker image
 ```
 
 Tests run as **scripts directly** (not via pytest): `python backend/tests/test_*.py`.  
-All golden tests verify outputs match Excel to machine precision (≈1e-16).
+All golden tests verify outputs match Excel (tol=1e-6).
 
 ## Critical conventions
 
@@ -43,7 +43,7 @@ All golden tests verify outputs match Excel to machine precision (≈1e-16).
 ## Project structure (key files)
 
 ```
-backend/main.py       — FastAPI app, all ~25 endpoints, Pydantic models, HTTP Basic auth
+backend/main.py       — FastAPI app, 31 endpoints, Pydantic models, HTTP Basic auth
 backend/core/         — Computation engine (no framework dependency)
   engine.py           — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff
   snyder.py           — Snyder synthetic UH

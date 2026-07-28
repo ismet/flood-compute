@@ -1,9 +1,9 @@
 # Taşkın Hesap — Sentetik Yöntemler Web Uygulaması
 
-`11.Tayakadın Deresi SENTETİK YÖNTEMLER TABLOLU.xlsm` çalışma kitabının hesap
-mantığının **birebir** web uygulamasına taşınmış hâli. Hesap motoru, Tayakadın
-örneğinin tüm Excel çıktılarıyla makine hassasiyetinde (≈1e-16) doğrulanmıştır
-(`backend/tests/test_golden.py`).
+`11.Tayakadın Deresi SENTETİK YÖNTEMLER TABLOLU.xlsm` (harici referans Excel)
+çalışma kitabının hesap mantığının **birebir** web uygulamasına taşınmış hâli.
+Hesap motoru, Tayakadın örneğinin tüm Excel çıktılarıyla doğrulanmıştır
+(`backend/tests/test_golden.py`, tol=1e-6).
 
 ## Kurulum ve çalıştırma
 
