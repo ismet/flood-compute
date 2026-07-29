@@ -27,8 +27,49 @@ def _local_rasters():
             if fn.lower().endswith((".tif", ".tiff"))]
 
 
+def _c_agirlikli(rows):
+    """Sınıf dökümünden rasyonel yöntem akış katsayısı C'yi alansal ağırlıklar.
+
+    Tablo aralık verdiği için alt/orta/üst olmak üzere üç değer üretilir.
+    Kullanıcının eşleştirme matrisinde bulunmayan CORINE sınıfları en yakın
+    sınıfa öykünerek türetilmiştir; bunların alan payı ayrıca raporlanır ki
+    mühendis türetmenin ne kadarına güvenebileceğini görsün.
+    """
+    tab = tables.load("corine_c")["siniflar"]
+    alt = ust = 0.0
+    kapsanan = turetilen = eslesmeyen = 0
+    for r in rows:
+        bilgi = tab.get(str(r["kod"]))
+        h = r["hucre"]
+        if bilgi is None:
+            eslesmeyen += h
+            r["c_min"] = r["c_max"] = None
+            continue
+        alt += bilgi["c_min"] * h
+        ust += bilgi["c_max"] * h
+        r["c_min"], r["c_max"] = bilgi["c_min"], bilgi["c_max"]
+        r["c_tablo"] = bool(bilgi.get("tablo"))
+        if bilgi.get("tablo"):
+            kapsanan += h
+        else:
+            turetilen += h
+    toplam = kapsanan + turetilen
+    if toplam == 0:
+        return None
+    c_min, c_max = alt / toplam, ust / toplam
+    return {
+        "C_min": round(c_min, 3),
+        "C_orta": round((c_min + c_max) / 2.0, 3),
+        "C_max": round(c_max, 3),
+        "tablo_orani": round(kapsanan / toplam, 4),
+        "turetilmis_orani": round(turetilen / toplam, 4),
+        "eslesmeyen_orani": round(eslesmeyen / (toplam + eslesmeyen), 4)
+        if (toplam + eslesmeyen) else 0.0,
+    }
+
+
 def _aggregate(vals, counts, soil_group):
-    """Sınıf kodu/sayım listesinden CN dökümü üretir."""
+    """Sınıf kodu/sayım listesinden CN dökümü ve rasyonel C türetimi üretir."""
     tab = tables.load("corine_cn")["siniflar"]
     rows, tot_w, tot_a = [], 0.0, 0
     for v, c in zip(vals, counts):
@@ -51,6 +92,8 @@ def _aggregate(vals, counts, soil_group):
         "CN2": round(cn2, 1),
         "CN3": round(tables.cn2_to_cn3(cn2), 1),
         "dokum": rows,
+        # CN ile aynı CORINE geçişinden türetilir — ayrıca indirme yapılmaz
+        "rasyonel_C": _c_agirlikli(rows),
     }
 
 
