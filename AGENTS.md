@@ -15,6 +15,7 @@ python backend/tests/test_reservoir_golden.py         # reservoir routing golden
 python backend/tests/test_api_smoke.py                # API smoke (FastAPI TestClient)
 python backend/tests/test_kmz_export.py               # KMZ writer round-trip (via vektor.oku)
 python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS override
+python backend/tests/test_corine_c.py                 # CORINE -> rational C derivation
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data
 docker build -t taskin-hesap .                        # build Docker image
@@ -54,7 +55,7 @@ backend/core/         — Computation engine (no framework dependency)
   routing.py          — Multi-basin (ara havza) hydrograph routing
   gis.py              — Basin delineation, DEM handling (~907 lines)
   tables.py           — JSON table loader + interpolation helpers (data layer)
-  corine.py           — CORINE → CN lookup
+  corine.py           — CORINE → CN lookup + rational C derivation (same pass)
   corine_online.py    — EEA CLC2018 WMS downloader
   thiessen.py         — Voronoi/Thiessen weights from KMZ
   snowmelt.py         — Degree-day snowmelt (KAR1)
@@ -68,7 +69,8 @@ backend/core/         — Computation engine (no framework dependency)
   kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
 frontend/             — 3 files: index.html, app.js (all logic), style.css
-data/tables/          — 13 JSON tables extracted from Excel workbooks
+data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
+                        CORINE class → rational C range matrix)
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
 ```

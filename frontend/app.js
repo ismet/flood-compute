@@ -744,13 +744,61 @@ $("btnCN").onclick = async () => {
   try {
     const r = await api("/api/cn", { havza_geojson: S.havza, zemin_grubu: $("inpSoil").value });
     $("inpCN2").value = r.CN2; $("inpCN3").value = r.CN3;
-    let h = `<table class="tbl"><tr><th>Kod</th><th>Sınıf</th><th>Oran</th><th>CN</th></tr>`;
-    r.dokum.forEach(d => h += `<tr><td>${d.kod}</td><td>${d.ad}</td><td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td></tr>`);
-    $("cnTable").innerHTML = h + "</table>";
+    S.cnSonuc = r;
+    renderCnSonuc(r);
     setStatus("cnStatus", `Ağırlıklı CN(II)=${r.CN2}  CN(III)=${r.CN3}\nVeri kaynağı: ${r.kaynak}`, "ok");
     markDone(3);
   } catch (e) { setStatus("cnStatus", "Hata: " + e.message, "err"); }
 };
+
+/* CORINE sınıf dökümü + aynı geçişten türetilen rasyonel akış katsayısı C.
+   C, CN ile aynı CORINE kesitinden gelir; ayrıca veri indirilmez.        */
+function renderCnSonuc(r) {
+  let h = `<table class="tbl"><tr><th>Kod</th><th>Sınıf</th><th>Oran</th><th>CN</th><th>C aralığı</th></tr>`;
+  r.dokum.forEach(d => {
+    const c = d.c_min == null ? "—"
+      : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}${d.c_tablo ? "" : " *"}`;
+    h += `<tr><td>${d.kod}</td><td>${d.ad}</td>`
+      + `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td><td>${c}</td></tr>`;
+  });
+  h += `</table>`;
+
+  const c = r.rasyonel_C;
+  if (c) {
+    const turetilmis = c.turetilmis_orani > 0
+      ? `<div class="small">* Alanın %${(c.turetilmis_orani * 100).toFixed(1)}'i eşleştirme
+           matrisinde yer almayan CORINE sınıfı; en yakın sınıftan türetildi.</div>` : "";
+    h += `<div style="margin-top:6px;padding:6px;border:1px solid #d8d3cc;border-radius:4px">
+      <b>Rasyonel yöntem akış katsayısı C</b> <span class="small">(CORINE'den alansal ağırlıklı)</span>
+      <div style="margin:3px 0">alt <b>${c.C_min.toFixed(3)}</b> ·
+        orta <b>${c.C_orta.toFixed(3)}</b> · üst <b>${c.C_max.toFixed(3)}</b></div>
+      <label class="inline">Kullanılacak
+        <select id="cSecim">
+          <option value="C_min">alt — ${c.C_min.toFixed(3)}</option>
+          <option value="C_orta" selected>orta — ${c.C_orta.toFixed(3)}</option>
+          <option value="C_max">üst — ${c.C_max.toFixed(3)}</option>
+        </select></label>
+      <button id="btnCToRational" class="small-btn">→ Rasyonel C100 alanına aktar</button>
+      <span id="cAktarInfo" class="small"></span>
+      ${turetilmis}
+      <div class="small">⚠ Tablo değerleri <b>genel</b> rasyonel C'dir; Adım 6'daki alan ise
+        <b>C100</b> (T=100 katsayısı) olup küçük tekerrürlere C<sub>T</sub>=C100·(T/100)<sup>üs</sup>
+        ile ölçeklenir. Aktarılan değeri mühendislik kararınızla gözden geçirin.</div>
+    </div>`;
+  }
+  $("cnTable").innerHTML = h;
+
+  if (c) $("btnCToRational").onclick = () => {
+    const anahtar = $("cSecim").value;
+    const deger = c[anahtar];
+    $("inpC100").value = deger.toFixed(3);
+    $("inpRasyonel").checked = true;
+    if ($("rasyonelBox")) $("rasyonelBox").open = true;
+    S.rasyonelCKaynak = { deger, secim: anahtar, kaynak: r.kaynak };
+    $("cAktarInfo").textContent = `✓ C100 = ${deger.toFixed(3)} yazıldı, rasyonel yöntem işaretlendi.`;
+    updateComputeReady();
+  };
+}
 
 /* ---------------- ADIM 4: Thiessen ---------------- */
 /* ---- istasyon listesi yönetimi (çıkarma / elle ekleme) ----
@@ -2037,8 +2085,10 @@ async function autoComputeSub(sub, qbaz, methods) {
     P24, P24_OET: oetOk ? OET : 0, dplv_ratios: dplvRatios(),
   };
   const snyderOn = methods.includes("snyder");
+  // rasyonel C: alt havzanın KENDİ CORINE dökümünden türet; yoksa 0.45'e düş
+  const c100 = (cn.rasyonel_C && cn.rasyonel_C.C_orta) || 0.45;
   const res = await api("/api/compute", {
-    girdi, rasyonel: methods.includes("rasyonel"), c100: 0.45,
+    girdi, rasyonel: methods.includes("rasyonel"), c100,
     snyder: snyderOn, snyder_par: snyderOn ? { Ct: +$("multiCt").value || 1.55, Cp: +$("multiCp").value || 0.6 } : null,
   });
   return { girdi, res, cn, thiessen: act };
