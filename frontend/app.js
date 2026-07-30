@@ -894,12 +894,19 @@ $("btnCN").onclick = async () => {
 /* CORINE sınıf dökümü + aynı geçişten türetilen rasyonel akış katsayısı C.
    C, CN ile aynı CORINE kesitinden gelir; ayrıca veri indirilmez.        */
 function renderCnSonuc(r) {
-  let h = `<table class="tbl"><tr><th>Kod</th><th>Sınıf</th><th>Oran</th><th>CN</th><th>C aralığı</th></tr>`;
+  let h = `<table class="tbl"><tr><th></th><th>Kod</th><th>Sınıf</th><th>Oran</th>`
+    + `<th>CN</th><th>C</th><th>C aralığı</th></tr>`;
   r.dokum.forEach(d => {
-    const c = d.c_min == null ? "—"
-      : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}${d.c_tablo ? "" : " *"}`;
-    h += `<tr><td>${d.kod}</td><td>${d.ad}</td>`
-      + `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td><td>${c}</td></tr>`;
+    const kutu = d.c_renk
+      ? `<span style="display:inline-block;width:11px;height:11px;border:1px solid #b5b0a8;background:${d.c_renk}"></span>`
+      : "";
+    const cOrt = d.c_ort == null ? "—"
+      : `<b>${d.c_ort.toFixed(2)}</b>${d.c_tablo ? "" : " *"}`;
+    const aralik = d.c_min == null ? "—"
+      : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}`;
+    h += `<tr><td>${kutu}</td><td>${d.kod}</td><td>${d.ad}</td>`
+      + `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td>`
+      + `<td>${cOrt}</td><td>${aralik}</td></tr>`;
   });
   h += `</table>`;
 
@@ -911,11 +918,12 @@ function renderCnSonuc(r) {
     h += `<div style="margin-top:6px;padding:6px;border:1px solid #d8d3cc;border-radius:4px">
       <b>Rasyonel yöntem akış katsayısı C</b> <span class="small">(CORINE'den alansal ağırlıklı)</span>
       <div style="margin:3px 0">alt <b>${c.C_min.toFixed(3)}</b> ·
-        orta <b>${c.C_orta.toFixed(3)}</b> · üst <b>${c.C_max.toFixed(3)}</b></div>
+        <span title="Tablodaki 'önerilen ortalama' değerlerin alansal ağırlıklı ortalaması — aralığın orta noktası değildir">önerilen
+        <b>${c.C_orta.toFixed(3)}</b></span> · üst <b>${c.C_max.toFixed(3)}</b></div>
       <label class="inline">Kullanılacak
         <select id="cSecim">
           <option value="C_min">alt — ${c.C_min.toFixed(3)}</option>
-          <option value="C_orta" selected>orta — ${c.C_orta.toFixed(3)}</option>
+          <option value="C_orta" selected>önerilen — ${c.C_orta.toFixed(3)}</option>
           <option value="C_max">üst — ${c.C_max.toFixed(3)}</option>
         </select></label>
       <button id="btnCToRational" class="small-btn">→ Rasyonel C100 alanına aktar</button>
