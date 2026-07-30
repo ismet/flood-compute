@@ -377,14 +377,33 @@ async function akarsuYukle() {
     return;
   }
   const b = map.getBounds();
+  // Leaflet kaydırma sonrası ±180 dışında boylam döndürebilir; sunucu bunu
+  // reddeder. Ayrıca NaN gelirse istek hiç kurulamaz — ikisini de kırp.
+  const sy = (v, alt, ust) => Math.min(ust, Math.max(alt, Number(v)));
+  const bati = sy(b.getWest(), -180, 179.999), dogu = sy(b.getEast(), -179.999, 180);
+  const guney = sy(b.getSouth(), -90, 89.999), kuzey = sy(b.getNorth(), -89.999, 90);
+  if (!(bati < dogu && guney < kuzey)) {
+    $("akarsuInfo").textContent = "harita penceresi okunamadı";
+    return;
+  }
   const sira = ++akarsuSira;
   $("akarsuInfo").textContent = "yükleniyor…";
+  let url = "";
   try {
     const q = new URLSearchParams({
-      bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
-      olcek: $("akarsuOlcek").value,
+      bati, guney, dogu, kuzey, olcek: $("akarsuOlcek").value,
     });
-    const r = await api("/api/akarsu?" + q.toString());
+    url = "/api/akarsu?" + q.toString();
+    let r;
+    try {
+      r = await api(url);
+    } catch (ilk) {
+      // Ağ düzeyinde kopma (sunucu yeniden başlıyor olabilir) → bir kez dene
+      if (!(ilk instanceof TypeError)) throw ilk;
+      await new Promise(res => setTimeout(res, 800));
+      if (sira !== akarsuSira) return;
+      r = await api(url);
+    }
     if (sira !== akarsuSira) return;          // daha yeni bir istek yolda
     layers.akarsu.clearLayers();
     layers.akarsu.addData(r.geojson);
@@ -392,7 +411,13 @@ async function akarsuYukle() {
       `${r.sayi} kol · 1/${r.olcek}.000${r.otomatik ? " (otomatik)" : ""}`
       + (r.kirpildi ? ` — ${r.sinir} sınırı aşıldı, yakınlaştırın` : "");
   } catch (e) {
-    if (sira === akarsuSira) $("akarsuInfo").textContent = "Hata: " + e.message;
+    if (sira !== akarsuSira) return;
+    // "Failed to fetch" tek başına hiçbir şey söylemiyor: isteğin sunucuya
+    // ulaşıp ulaşmadığını ayırt edebilmek için URL'yi ve hata türünü göster.
+    console.error("akarsu isteği başarısız", { url, hata: e });
+    const ag = (e instanceof TypeError);
+    $("akarsuInfo").textContent =
+      `Hata: ${e.name}: ${e.message}${ag ? " (istek sunucuya ulaşmadı)" : ""} — ${url}`;
   }
 }
 
