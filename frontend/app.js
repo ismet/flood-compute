@@ -352,6 +352,78 @@ $("btnRasterAdd").onclick = async () => {
   }
 };
 
+/* ---- DSİ kaynak akarsu ağı (bağlam katmanı — hesaba GİRMEZ) ----
+   Türkiye geneli üç ölçekte ~405.000 çizgi; tamamı gönderilemez, bu yüzden
+   yalnız görünen pencere istenir ve harita gezdikçe yenilenir. Havza/dere
+   çıkarımı yine DEM'den yapılır; bu katman göz kontrolü içindir.          */
+layers.akarsu = L.geoJSON(null, {
+  style: { color: "#1565c0", weight: 1.2, opacity: 0.85 },
+  onEachFeature: (f, l) => {
+    const p = f.properties || {};
+    const ad = p.ad || p.tip || "akarsu";
+    const km = p.uzunluk_m ? ` — ${(p.uzunluk_m / 1000).toFixed(2)} km` : "";
+    l.bindTooltip(ad + km, { sticky: true });
+  },
+});
+const AKARSU_MIN_ZOOM = 9;
+let akarsuZaman = null, akarsuSira = 0;
+
+async function akarsuYukle() {
+  if (!$("akarsuAc").checked) return;
+  if (map.getZoom() < AKARSU_MIN_ZOOM) {
+    layers.akarsu.clearLayers();
+    $("akarsuInfo").textContent =
+      `yakınlaştırın (z≥${AKARSU_MIN_ZOOM}) — bu ölçekte tüm ülke yüklenemez`;
+    return;
+  }
+  const b = map.getBounds();
+  const sira = ++akarsuSira;
+  $("akarsuInfo").textContent = "yükleniyor…";
+  try {
+    const q = new URLSearchParams({
+      bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
+      olcek: $("akarsuOlcek").value,
+    });
+    const r = await api("/api/akarsu?" + q.toString());
+    if (sira !== akarsuSira) return;          // daha yeni bir istek yolda
+    layers.akarsu.clearLayers();
+    layers.akarsu.addData(r.geojson);
+    $("akarsuInfo").textContent = `${r.sayi} kol (1/${r.olcek}.000)`
+      + (r.kirpildi ? ` — ${r.sinir} sınırı aşıldı, yakınlaştırın` : "");
+  } catch (e) {
+    if (sira === akarsuSira) $("akarsuInfo").textContent = "Hata: " + e.message;
+  }
+}
+
+$("akarsuAc").onchange = () => {
+  if ($("akarsuAc").checked) { layers.akarsu.addTo(map); akarsuYukle(); }
+  else {
+    layers.akarsu.remove(); layers.akarsu.clearLayers();
+    $("akarsuInfo").textContent = "";
+  }
+};
+$("akarsuOlcek").onchange = () => { if ($("akarsuAc").checked) akarsuYukle(); };
+map.on("moveend zoomend", () => {
+  if (!$("akarsuAc").checked) return;
+  clearTimeout(akarsuZaman);
+  akarsuZaman = setTimeout(akarsuYukle, 350);   // gezinirken istek yağmuru olmasın
+});
+
+/* veri kurulu değilse seçeneği kapat ve nasıl üretileceğini söyle */
+(async function akarsuDurum() {
+  try {
+    const b = await api("/api/akarsu-bilgi");
+    if (!b.var) {
+      $("akarsuAc").disabled = true;
+      $("akarsuOlcek").disabled = true;
+      $("akarsuInfo").textContent = "veri yok — tools/mdb_akarsu_cikar.py ile üretin";
+    } else {
+      $("akarsuInfo").textContent =
+        b.olcekler.map(o => `1/${o.olcek}.000: ${o.kol.toLocaleString("tr")}`).join(" · ");
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+})();
+
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
    (dere verilmediyse) dere ağı DEM'den üretilir.                          */

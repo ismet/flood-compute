@@ -754,6 +754,31 @@ def api_report(req: ReportReq):
         return _err(e)
 
 
+@app.get("/api/akarsu-bilgi")
+def api_akarsu_bilgi():
+    """DSİ akarsu ağı katmanı kurulu mu, hangi ölçekte kaç kol var."""
+    from backend.core import akarsu
+    try:
+        return akarsu.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/akarsu")
+def api_akarsu(bati: float, guney: float, dogu: float, kuzey: float,
+               olcek: int = 100, sinir: int = 0):
+    """Görünen pencere içindeki DSİ akarsu kollarını GeoJSON olarak verir.
+
+    Türkiye geneli üç ölçekte ~405.000 çizgi olduğu için tamamı gönderilmez;
+    R*Tree indeksiyle yalnız pencere döndürülür. Bu katman hesaba girmez."""
+    from backend.core import akarsu
+    try:
+        return akarsu.sorgula((bati, guney, dogu, kuzey), olcek=olcek,
+                              sinir=sinir or akarsu.VARSAYILAN_SINIR)
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""
