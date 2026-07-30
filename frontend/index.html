@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
-<link rel="stylesheet" href="/static/style.css?v=49">
+<link rel="stylesheet" href="/static/style.css?v=50">
 </head>
 <body>
 <div id="app">
@@ -146,8 +146,9 @@
       <div id="rasterLayers" class="small"></div>
       <div class="rain-tools" style="margin-top:2px">
         <label class="chk" title="DSİ kaynak akarsu ağı. Yalnızca haritada bağlam olarak gösterilir, hesaba GİRMEZ — havza ve dere çıkarımı yine DEM'den yapılır. Türkiye geneli ~405.000 çizgi olduğu için sadece görünen pencere yüklenir, haritayı gezdirdikçe yenilenir."><input type="checkbox" id="akarsuAc"> 🌊 DSİ akarsu ağı</label>
-        <label class="inline" title="1/100.000 en ayrıntılı ağdır; geniş alanlara bakarken 1/250.000 veya 1/500.000 daha okunaklı olur.">Ölçek
+        <label class="inline" title="Otomatik: görünen alanın genişliğine göre ölçek seçilir (geniş bakışta 1/500.000, yakınlaşınca 1/100.000). Geniş alanda 1/100.000 ağını zorlamak yanıtı megabaytlara çıkarır ve yavaşlatır.">Ölçek
           <select id="akarsuOlcek">
+            <option value="oto" selected>Otomatik</option>
             <option value="100">1/100.000</option>
             <option value="250">1/250.000</option>
             <option value="500">1/500.000</option>
@@ -429,6 +430,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=49"></script>
+<script src="/static/app.js?v=50"></script>
 </body>
 </html>

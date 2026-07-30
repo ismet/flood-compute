@@ -89,6 +89,33 @@ def main():
     assert bos["sayi"] == 0 and not bos["kirpildi"], bos
     print("OK  boş bölge            0 kol, çökmüyor")
 
+    # --- 7) otomatik ölçek: geniş bakışta kaba ağ seçilmeli
+    assert akarsu.oto_olcek(3.0) == 500 and akarsu.oto_olcek(1.0) == 250
+    assert akarsu.oto_olcek(0.1) == 100
+    genis = akarsu.sorgula((25.5, 38.5, 28.5, 40.5), olcek="oto")
+    dar = akarsu.sorgula(PENCERE, olcek="oto")
+    assert genis["otomatik"] and genis["olcek"] == 500, genis["olcek"]
+    assert dar["otomatik"] and dar["olcek"] == 100, dar["olcek"]
+    print(f"OK  otomatik ölçek       geniş→1/{genis['olcek']}.000, dar→1/{dar['olcek']}.000")
+
+    # --- 8) yanıt boyutu sınırlı kalmalı (tarayıcı "Failed to fetch" vermesin)
+    # Sadeleştirme olmadan geniş pencere 7 MB'a çıkıyor ve saniyelerce sürüyordu.
+    import json
+    for ad, pencere in (("geniş", (25.5, 38.5, 28.5, 40.5)),
+                        ("çok geniş", (24.0, 36.0, 32.0, 42.0))):
+        r = akarsu.sorgula(pencere, olcek="oto")
+        mb = len(json.dumps(r["geojson"])) / 1e6
+        assert mb < 2.0, f"{ad} pencere yanıtı {mb:.2f} MB — fazla büyük"
+        print(f"OK  yanıt boyutu         {ad}: {r['sayi']} kol, {mb:.2f} MB")
+
+    # sadeleştirme gerçekten nokta azaltıyor mu
+    ham = akarsu.sorgula(PENCERE, olcek=100, sadelestir=False)
+    sade = akarsu.sorgula(PENCERE, olcek=100, sadelestir=True)
+    n_ham = sum(len(f["geometry"]["coordinates"]) for f in ham["geojson"]["features"])
+    n_sade = sum(len(f["geometry"]["coordinates"]) for f in sade["geojson"]["features"])
+    assert n_sade <= n_ham, (n_ham, n_sade)
+    print(f"OK  sadeleştirme         {n_ham} → {n_sade} nokta")
+
     print("\nTÜM AKARSU SINAMALARI GEÇTİ")
 
 

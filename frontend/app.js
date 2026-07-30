@@ -388,7 +388,8 @@ async function akarsuYukle() {
     if (sira !== akarsuSira) return;          // daha yeni bir istek yolda
     layers.akarsu.clearLayers();
     layers.akarsu.addData(r.geojson);
-    $("akarsuInfo").textContent = `${r.sayi} kol (1/${r.olcek}.000)`
+    $("akarsuInfo").textContent =
+      `${r.sayi} kol · 1/${r.olcek}.000${r.otomatik ? " (otomatik)" : ""}`
       + (r.kirpildi ? ` — ${r.sinir} sınırı aşıldı, yakınlaştırın` : "");
   } catch (e) {
     if (sira === akarsuSira) $("akarsuInfo").textContent = "Hata: " + e.message;

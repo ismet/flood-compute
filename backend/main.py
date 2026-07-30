@@ -766,7 +766,7 @@ def api_akarsu_bilgi():
 
 @app.get("/api/akarsu")
 def api_akarsu(bati: float, guney: float, dogu: float, kuzey: float,
-               olcek: int = 100, sinir: int = 0):
+               olcek: str = "oto", sinir: int = 0):
     """Görünen pencere içindeki DSİ akarsu kollarını GeoJSON olarak verir.
 
     Türkiye geneli üç ölçekte ~405.000 çizgi olduğu için tamamı gönderilmez;

@@ -19,7 +19,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DB_YOLU = os.path.join(ROOT, "data", "akarsu", "akarsu.sqlite")
 
 OLCEKLER = (100, 250, 500)
-VARSAYILAN_SINIR = 8000        # tek istekte döndürülecek en çok kol sayısı
+VARSAYILAN_SINIR = 3000        # tek istekte döndürülecek en çok kol sayısı
+
+# Pencere genişliğine (derece) göre otomatik ölçek. Geniş bakışta 1/100.000
+# ağını göndermek anlamsız: hem okunmuyor hem de yanıt megabaytlara çıkıyor.
+OTO_ESIK = ((2.0, 500), (0.5, 250))     # genişlik > eşik → o ölçek
+
+# Ekranda bir pikselden küçük ayrıntıyı göndermenin faydası yok. Tipik harita
+# genişliği ~1200 px kabul edilip tolerans pencere genişliğinden türetilir.
+EKRAN_PIKSEL = 1200
+ONDALIK = 5                    # ~1 m; float32 zaten bundan fazlasını taşımıyor
 
 _yerel = threading.local()     # sqlite bağlantısı iş parçacığına özgü olmalı
 
@@ -55,24 +64,84 @@ def bilgi():
     }
 
 
-def _cizgi(paket):
+def oto_olcek(genislik_derece):
+    """Pencere genişliğine göre uygun ölçeği seçer."""
+    for esik, olcek in OTO_ESIK:
+        if genislik_derece > esik:
+            return olcek
+    return 100
+
+
+def _sadelestir(pts, tol):
+    """Douglas-Peucker — ekran ölçeğinde görünmeyen köşeleri atar.
+
+    Yanıtın büyük kısmı koordinat metnidir; sadeleştirme olmadan orta
+    yakınlıkta bir pencere megabaytlara çıkıp tarayıcıda "Failed to fetch"
+    ile düşüyordu.
+    """
+    if len(pts) < 3 or tol <= 0:
+        return pts
+
+    def dik(p, a, b):
+        ax, ay = a
+        bx, by = b[0] - ax, b[1] - ay
+        px, py = p[0] - ax, p[1] - ay
+        if bx == 0.0 and by == 0.0:
+            return (px * px + py * py) ** 0.5
+        t = (px * bx + py * by) / (bx * bx + by * by)
+        u = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+        dx, dy = px - u * bx, py - u * by
+        return (dx * dx + dy * dy) ** 0.5
+
+    tut = [False] * len(pts)
+    tut[0] = tut[-1] = True
+    yigin = [(0, len(pts) - 1)]
+    while yigin:
+        i, j = yigin.pop()
+        en, idx = -1.0, -1
+        for k in range(i + 1, j):
+            d = dik(pts[k], pts[i], pts[j])
+            if d > en:
+                en, idx = d, k
+        if en > tol and idx > 0:
+            tut[idx] = True
+            yigin.append((i, idx))
+            yigin.append((idx, j))
+    return [p for p, t in zip(pts, tut) if t]
+
+
+def _cizgi(paket, tol=0.0):
     """Paketli float32 lon/lat çiftlerini GeoJSON koordinat listesine çevirir."""
     n = len(paket) // 8            # her nokta 2 × float32 = 8 bayt
     duz = struct.unpack(f"<{2 * n}f", paket)
-    return [[duz[2 * i], duz[2 * i + 1]] for i in range(n)]
+    pts = [(duz[2 * i], duz[2 * i + 1]) for i in range(n)]
+    if tol > 0:
+        pts = _sadelestir(pts, tol)
+    return [[round(x, ONDALIK), round(y, ONDALIK)] for x, y in pts]
 
 
-def sorgula(bbox, olcek=100, sinir=VARSAYILAN_SINIR):
+def sorgula(bbox, olcek=100, sinir=VARSAYILAN_SINIR, sadelestir=True):
     """Verilen pencere içindeki akarsu kollarını GeoJSON olarak döndürür.
 
-    bbox: (bati, guney, dogu, kuzey) WGS84 derece.
+    bbox : (bati, guney, dogu, kuzey) WGS84 derece.
+    olcek: 100/250/500 ya da "oto" — pencere genişliğine göre seçilir.
     """
-    if olcek not in OLCEKLER:
-        raise ValueError(f"Ölçek {OLCEKLER} içinden olmalı (verilen: {olcek})")
     b, g, d, k = (float(v) for v in bbox)
     if not (-180 <= b < d <= 180 and -90 <= g < k <= 90):
         raise ValueError("Geçersiz pencere (bbox)")
+    genislik = d - b
+    otomatik = str(olcek).lower() in ("oto", "auto", "otomatik")
+    if otomatik:
+        olcek = oto_olcek(genislik)
+    else:
+        try:
+            olcek = int(olcek)
+        except (TypeError, ValueError):
+            raise ValueError(f"Ölçek {OLCEKLER} içinden ya da 'oto' olmalı")
+    if olcek not in OLCEKLER:
+        raise ValueError(f"Ölçek {OLCEKLER} içinden olmalı (verilen: {olcek})")
     sinir = max(1, min(int(sinir), 50000))
+    tol = (genislik / EKRAN_PIKSEL) if sadelestir else 0.0
 
     db = _baglanti()
     # R*Tree ile kesişen kolları bul, sonra geometriyi çek
@@ -87,7 +156,7 @@ def sorgula(bbox, olcek=100, sinir=VARSAYILAN_SINIR):
     sat = sat[:sinir]
     ozellikler = []
     for kid, ad, tip, uzunluk, paket in sat:
-        koord = _cizgi(paket)
+        koord = _cizgi(paket, tol)
         if len(koord) < 2:
             continue
         ozellikler.append({
@@ -99,6 +168,7 @@ def sorgula(bbox, olcek=100, sinir=VARSAYILAN_SINIR):
     return {
         "geojson": {"type": "FeatureCollection", "features": ozellikler},
         "olcek": olcek,
+        "otomatik": otomatik,
         "sayi": len(ozellikler),
         "kirpildi": kirpildi,      # sınır aşıldıysa arayüz kullanıcıyı uyarır
         "sinir": sinir,
