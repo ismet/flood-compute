@@ -16,6 +16,8 @@ python backend/tests/test_api_smoke.py                # API smoke (FastAPI TestC
 python backend/tests/test_kmz_export.py               # KMZ writer round-trip (via vektor.oku)
 python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS override
 python backend/tests/test_corine_c.py                 # CORINE -> rational C derivation
+python backend/tests/test_akarsu.py                   # DSİ river layer (skips if data absent)
+python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data
 docker build -t taskin-hesap .                        # build Docker image
@@ -68,11 +70,14 @@ backend/core/         — Computation engine (no framework dependency)
   vektor.py             — KML/KMZ/GeoJSON parser for basin import
   kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
+  akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
                         CORINE class → rational C range matrix)
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
+data/akarsu/          — akarsu.sqlite, DSİ river network at 1/100k–1/500k
+                        (~405k lines, 110 MB; gitignored, built by the tool above)
 ```
 
 ---
@@ -91,6 +96,8 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `POST /api/raster-add` | Upload georeferenced raster basemap (`?crs=EPSG:…` if the file has none) |
 | `POST /api/raster-delete` | Remove a raster basemap |
 | `GET /api/raster-layers` | List raster basemaps |
+| `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
+| `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
 | `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |

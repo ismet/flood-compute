@@ -352,6 +352,104 @@ $("btnRasterAdd").onclick = async () => {
   }
 };
 
+/* ---- DSİ kaynak akarsu ağı (bağlam katmanı — hesaba GİRMEZ) ----
+   Türkiye geneli üç ölçekte ~405.000 çizgi; tamamı gönderilemez, bu yüzden
+   yalnız görünen pencere istenir ve harita gezdikçe yenilenir. Havza/dere
+   çıkarımı yine DEM'den yapılır; bu katman göz kontrolü içindir.          */
+layers.akarsu = L.geoJSON(null, {
+  style: { color: "#1565c0", weight: 1.2, opacity: 0.85 },
+  onEachFeature: (f, l) => {
+    const p = f.properties || {};
+    const ad = p.ad || p.tip || "akarsu";
+    const km = p.uzunluk_m ? ` — ${(p.uzunluk_m / 1000).toFixed(2)} km` : "";
+    l.bindTooltip(ad + km, { sticky: true });
+  },
+});
+const AKARSU_MIN_ZOOM = 9;
+let akarsuZaman = null, akarsuSira = 0;
+
+async function akarsuYukle() {
+  if (!$("akarsuAc").checked) return;
+  if (map.getZoom() < AKARSU_MIN_ZOOM) {
+    layers.akarsu.clearLayers();
+    $("akarsuInfo").textContent =
+      `yakınlaştırın (z≥${AKARSU_MIN_ZOOM}) — bu ölçekte tüm ülke yüklenemez`;
+    return;
+  }
+  const b = map.getBounds();
+  // Leaflet kaydırma sonrası ±180 dışında boylam döndürebilir; sunucu bunu
+  // reddeder. Ayrıca NaN gelirse istek hiç kurulamaz — ikisini de kırp.
+  const sy = (v, alt, ust) => Math.min(ust, Math.max(alt, Number(v)));
+  const bati = sy(b.getWest(), -180, 179.999), dogu = sy(b.getEast(), -179.999, 180);
+  const guney = sy(b.getSouth(), -90, 89.999), kuzey = sy(b.getNorth(), -89.999, 90);
+  if (!(bati < dogu && guney < kuzey)) {
+    $("akarsuInfo").textContent = "harita penceresi okunamadı";
+    return;
+  }
+  const sira = ++akarsuSira;
+  $("akarsuInfo").textContent = "yükleniyor…";
+  let url = "";
+  try {
+    const q = new URLSearchParams({
+      bati, guney, dogu, kuzey, olcek: $("akarsuOlcek").value,
+    });
+    url = "/api/akarsu?" + q.toString();
+    let r;
+    try {
+      r = await api(url);
+    } catch (ilk) {
+      // Ağ düzeyinde kopma (sunucu yeniden başlıyor olabilir) → bir kez dene
+      if (!(ilk instanceof TypeError)) throw ilk;
+      await new Promise(res => setTimeout(res, 800));
+      if (sira !== akarsuSira) return;
+      r = await api(url);
+    }
+    if (sira !== akarsuSira) return;          // daha yeni bir istek yolda
+    layers.akarsu.clearLayers();
+    layers.akarsu.addData(r.geojson);
+    $("akarsuInfo").textContent =
+      `${r.sayi} kol · 1/${r.olcek}.000${r.otomatik ? " (otomatik)" : ""}`
+      + (r.kirpildi ? ` — ${r.sinir} sınırı aşıldı, yakınlaştırın` : "");
+  } catch (e) {
+    if (sira !== akarsuSira) return;
+    // "Failed to fetch" tek başına hiçbir şey söylemiyor: isteğin sunucuya
+    // ulaşıp ulaşmadığını ayırt edebilmek için URL'yi ve hata türünü göster.
+    console.error("akarsu isteği başarısız", { url, hata: e });
+    const ag = (e instanceof TypeError);
+    $("akarsuInfo").textContent =
+      `Hata: ${e.name}: ${e.message}${ag ? " (istek sunucuya ulaşmadı)" : ""} — ${url}`;
+  }
+}
+
+$("akarsuAc").onchange = () => {
+  if ($("akarsuAc").checked) { layers.akarsu.addTo(map); akarsuYukle(); }
+  else {
+    layers.akarsu.remove(); layers.akarsu.clearLayers();
+    $("akarsuInfo").textContent = "";
+  }
+};
+$("akarsuOlcek").onchange = () => { if ($("akarsuAc").checked) akarsuYukle(); };
+map.on("moveend zoomend", () => {
+  if (!$("akarsuAc").checked) return;
+  clearTimeout(akarsuZaman);
+  akarsuZaman = setTimeout(akarsuYukle, 350);   // gezinirken istek yağmuru olmasın
+});
+
+/* veri kurulu değilse seçeneği kapat ve nasıl üretileceğini söyle */
+(async function akarsuDurum() {
+  try {
+    const b = await api("/api/akarsu-bilgi");
+    if (!b.var) {
+      $("akarsuAc").disabled = true;
+      $("akarsuOlcek").disabled = true;
+      $("akarsuInfo").textContent = "veri yok — tools/mdb_akarsu_cikar.py ile üretin";
+    } else {
+      $("akarsuInfo").textContent =
+        b.olcekler.map(o => `1/${o.olcek}.000: ${o.kol.toLocaleString("tr")}`).join(" · ");
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+})();
+
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
    (dere verilmediyse) dere ağı DEM'den üretilir.                          */
@@ -406,7 +504,48 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
     `${baslik}\nHavza: ${r.alan_km2} km² | L=${r.L_km} km | Lc=${r.Lc_km} km` + detay + yzdMsg + uy,
     uy ? "err" : "ok");
   markDone(1);
+  renderAdayKanallar(r);
   updateComputeReady();
+}
+
+/* Tıklama çevresindeki rakip akarsu kolları.
+   İki DEM aynı dereyi farklı yere koyabiliyor ve 300 m yarıçapta alanları
+   2/10/16 km² olan ayrı kollar bulunabiliyor; hangisinin kullanıcının
+   kastettiği outlet olduğu koddan bilinemez. Eskiden kullanıcı "kanala
+   kenetleme" yarıçapını tahminle ayarlamak zorundaydı — bilemeyeceği bir
+   şey. Artık seçenekler alanlarıyla listeleniyor, tek tıkla geçiliyor.   */
+function renderAdayKanallar(r) {
+  const el = $("adayKanallar");
+  if (!el) return;
+  const ad = (r && r.aday_kanallar) || [];
+  const secili = r && r.alan_km2;
+  // yalnız gerçekten farklı bir seçenek varsa göster (%20'den fazla sapma)
+  const digerleri = ad.filter(k => secili && Math.abs(k.alan_km2 - secili) > 0.2 * secili);
+  if (!digerleri.length) { el.innerHTML = ""; return; }
+  el.innerHTML =
+    `<b>Yakındaki diğer kollar</b> — tıklanan nokta bir yatağın tam üstünde
+     değilse havza yanlış kola oturmuş olabilir. Doğrusu bunlardan biriyse tıklayın:<br>`
+    + digerleri.map((k, i) =>
+      `<button class="link-btn" data-aday="${i}" title="Bu kola kenetlenip havzayı yeniden çıkar">
+         ${k.alan_km2.toFixed(2)} km² — ${k.mesafe_m.toFixed(0)} m ötede</button>`).join(" · ")
+    + `<div class="small" style="color:#8a857e">Şu an seçili: ${(+secili).toFixed(2)} km²
+       (${(r.snap_mesafe_m || 0).toFixed(0)} m kenetlendi)</div>`;
+  el.querySelectorAll("button[data-aday]").forEach(b => b.onclick = async () => {
+    const k = digerleri[+b.dataset.aday];
+    setStatus("delinStatus", `${k.alan_km2.toFixed(2)} km²'lik kola kenetlenip `
+      + `havza yeniden çıkarılıyor…`, "loading");
+    el.innerHTML = "";
+    try {
+      // adayın tam hücresine kenetle: dar yarıçap, başka kola atlamasın
+      const r2 = await api("/api/delineate", {
+        lat: k.lat, lon: k.lon, river_km2: +$("inpRivThr").value || 1,
+        snap_m: 60, dem_source: $("inpDem").value,
+      });
+      applyBasinResult(r2, "Seçilen kola göre havza çıkarıldı.");
+    } catch (e) {
+      setStatus("delinStatus", "Hata: " + e.message, "err");
+    }
+  });
 }
 
 /* -------- havza sınırı / dere ağını haritada elle düzenleme (Geoman) --------
@@ -719,6 +858,7 @@ map.on("click", async (ev) => {
       (r.kenar_uyarisi ? "\n⚠ Havza pencere kenarına değiyor, sonuçları kontrol edin!" : "") +
       dgn + yzdMsg, "ok");
     markDone(1);
+    renderAdayKanallar(r);
     updateComputeReady();
   } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
 });

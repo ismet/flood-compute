@@ -11,6 +11,8 @@ data/dem/cache/
 data/corine/cache/
 data/projects/
 data/raster/
+# tools/mdb_akarsu_cikar.py ile Kaynak_Akarsu.mdb'den üretilir (~110 MB)
+data/akarsu/
 
 # data/stations/DMİ.kmz is the canonical copy; root is a local fallback
 /DMİ.kmz
