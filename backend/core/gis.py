@@ -40,6 +40,12 @@ D8 = {64: (-1, 0), 128: (-1, 1), 1: (0, 1), 2: (1, 1),
 # düşürülebilir (ör. 512 MB plan için 4_000_000).
 MAX_CELLS = int(os.environ.get("DELINEATE_MAX_CELLS", 8_000_000))
 
+# Kenetleme, akarsu ağını bulana kadar arama yarıçapını bu değere kadar
+# ikiye katlayarak büyütür (bkz. _akarsuya_kenetle). Kullanıcının verdiği
+# snap_m yalnız başlangıç yarıçapıdır; doğru değeri kullanıcının bilmesi
+# beklenmez.
+MAKS_ARAMA_M = float(os.environ.get("SNAP_MAKS_ARAMA_M", "2000"))
+
 
 # ------------------------------------------------------------------ DEM temini
 _LOCAL_DEM_CACHE = None
@@ -346,19 +352,13 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
     dy = abs(transform.e) * 110540.0
     cell_km2 = dx * dy / 1e6
 
-    # outlet'i yüksek birikime kenetle (snap_m yarıçapında).
-    # DEM kabalaştığında hücre büyür ve nehir yatağı 1-2 hücre kayabilir;
-    # bu yüzden en az 8 hücrelik bir arama penceresi kullan.
-    snap_cells = max(8, int(snap_m / dx))
-    col, row = int((lon - transform.c) / transform.a), int((lat - transform.f) / transform.e)
+    # outlet'i AKARSU AĞINA kenetle: eşiği aşan en yakın hücre (bkz.
+    # _akarsuya_kenetle). snap_m artık bir üst sınırdır, hedef yarıçap değil.
     h, w = flw.shape
-    r0, r1 = max(0, row - snap_cells), min(h, row + snap_cells + 1)
-    c0, c1 = max(0, col - snap_cells), min(w, col + snap_cells + 1)
-    win = np.array(acc[r0:r1, c0:c1])
-    rr, cc = np.unravel_index(np.argmax(win), win.shape)
-    row, col = r0 + rr, c0 + cc
+    esik_hucre = max(1.0, river_km2 / cell_km2)
+    row, col, x_snap, y_snap, _kenet_m, _kenet_esik = _akarsuya_kenetle(
+        acc, transform, dx, dy, lat, lon, h, w, esik_hucre, snap_m)
     idx_out = row * w + col
-    x_snap, y_snap = transform * (col + 0.5, row + 0.5)
 
     # havza maskesi
     flw.add_pits(xy=([x_snap], [y_snap]))
@@ -388,6 +388,9 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
 
     fdir_arr = flw.to_array('d8')
     acc_arr = np.asarray(acc)
+    # rakip kolları acc serbest bırakılmadan ÖNCE çıkar (aşağıda del ediliyor)
+    adaylar = aday_kanallar(acc_arr, transform, dx, dy, lat, lon, h, w,
+                            cell_km2, maks_m=max(snap_m, 800.0))
     del acc
     gc.collect()
 
@@ -472,23 +475,111 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
         "cozunurluk_m": round((dx + dy) / 2.0, 1),
         "snap_mesafe_m": round(_seg_len_m(lon, lat, x_snap, y_snap), 1),
         "pencere_deg": [round(v, 4) for v in bbox],
+        # tıklama çevresindeki rakip kollar: kenetleme belirsizse arayüz
+        # bunları alternatif olarak sunar (bkz. aday_kanallar)
+        "aday_kanallar": adaylar,
     }
     return edges, out
 
 
 # ==================== ÇOK PARÇALI HAVZA (ARA HAVZA) ====================
-def _snap_idx(acc, transform, dx, lat, lon, h, w, snap_m=500.0):
-    """Nokta çevresinde snap_m yarıçapta en yüksek birikime kenetle -> (row, col, x, y)."""
-    snap_cells = max(3, int(snap_m / dx))
-    col = int((lon - transform.c) / transform.a)
-    row = int((lat - transform.f) / transform.e)
-    r0, r1 = max(0, row - snap_cells), min(h, row + snap_cells + 1)
-    c0, c1 = max(0, col - snap_cells), min(w, col + snap_cells + 1)
-    win = np.array(acc[r0:r1, c0:c1])
-    rr, cc = np.unravel_index(np.argmax(win), win.shape)
-    row, col = r0 + rr, c0 + cc
-    x, y = transform * (col + 0.5, row + 0.5)
-    return row, col, float(x), float(y)
+def _akarsuya_kenetle(acc, transform, dx, dy, lat, lon, h, w,
+                      esik_hucre, maks_m):
+    """Tıklanan noktayı EN YAKIN akarsu hücresine kenetler.
+
+    Eski kural "arama kutusundaki en yüksek birikim"di ve İKİ YÖNLÜ hata
+    veriyordu:
+      - yarıçap küçükse yatağa hiç ulaşamayıp yamaç hücresinde kalıyor,
+        havza yanlış/eksik çıkıyordu;
+      - yarıçap büyükse yakındaki küçük yatağı geçip komşu BÜYÜK kola
+        atlıyor, havzayı şişiriyordu.
+    Kullanıcının doğru yarıçapı tahmin etmesi gerekiyordu ki bunu bilemez.
+
+    Yeni kural: akarsu ağı (birikim >= esik_hucre) içindeki en yakın hücre;
+    eşit uzaklıkta birikimi büyük olan. Böylece `maks_m` yalnızca bir ÜST
+    SINIRDIR — büyük tutmak zararsızdır, çünkü yakında yatak varken uzaktaki
+    büyük nehre atlanmaz. Küçük havzada eşik ağı boşaltıyorsa eşik kademeli
+    düşürülür; hiçbiri tutmazsa eski davranışa (en yüksek birikim) dönülür.
+
+    Döner: (row, col, x, y, mesafe_m, esik_kullanilan) — esik_kullanilan None
+    ise ağ bulunamamış, en yüksek birikime kenetlenmiştir.
+    """
+    col = min(max(int((lon - transform.c) / transform.a), 0), w - 1)
+    row = min(max(int((lat - transform.f) / transform.e), 0), h - 1)
+
+    # KURAL: menzildeki en yüksek akış birikimi (ArcHydro / QGIS "Snap Pour
+    # Point" ile aynı). Kısa süre "en yakın dere"yi denedim; bu, ana kanaldan
+    # 70 m daha yakın duran önemsiz bir yan kola oturup havzayı 10 km²'den
+    # 1.8 km²'ye düşürdü. Standart kural doğru; eski koddaki gerçek kusur
+    # `max(8, ...)` gizli tabanıydı: 30 m DEM'de kullanıcı 50 m yazsa bile
+    # 240 m aranıyordu, yani ayarı uygulanmıyordu.
+    yaricap = max(1, int(math.ceil(maks_m / max(1e-9, min(dx, dy)))))
+    r0, r1 = max(0, row - yaricap), min(h, row + yaricap + 1)
+    c0, c1 = max(0, col - yaricap), min(w, col + yaricap + 1)
+    pencere = np.asarray(acc[r0:r1, c0:c1])
+    d_satir = (np.arange(r0, r1) - row)[:, None] * dy
+    d_sutun = (np.arange(c0, c1) - col)[None, :] * dx
+    mesafe = np.hypot(d_satir, d_sutun)
+    menzil = mesafe <= max(maks_m, min(dx, dy) * 0.5)
+
+    puan = np.where(menzil, pencere, -1.0)
+    ri, ci = np.unravel_index(int(np.argmax(puan)), puan.shape)
+    kullanilan = float(pencere[ri, ci]) if pencere[ri, ci] >= esik_hucre else None
+
+    row2, col2 = r0 + int(ri), c0 + int(ci)
+    x, y = transform * (col2 + 0.5, row2 + 0.5)
+    return row2, col2, float(x), float(y), float(mesafe[ri, ci]), kullanilan
+
+
+def aday_kanallar(acc, transform, dx, dy, lat, lon, h, w, cell_km2,
+                  maks_m=800.0, en_fazla=4):
+    """Tıklanan noktanın çevresindeki belirgin akarsu kollarını listeler.
+
+    Kenetleme belirsizliğini GİZLEMEK yerine göstermek için: iki DEM aynı
+    dereyi farklı yerlere koyabilir ve 300 m yarıçapta alanları 2/10/16 km²
+    olan ayrı kollar bulunabilir. Hangisinin kullanıcının kastettiği outlet
+    olduğu koddan bilinemez; arayüz bunları alternatif olarak sunar.
+
+    Döner: [{alan_km2, mesafe_m, lat, lon}] — alana göre büyükten küçüğe.
+    """
+    col = min(max(int((lon - transform.c) / transform.a), 0), w - 1)
+    row = min(max(int((lat - transform.f) / transform.e), 0), h - 1)
+    yaricap = max(1, int(math.ceil(maks_m / max(1e-9, min(dx, dy)))))
+    r0, r1 = max(0, row - yaricap), min(h, row + yaricap + 1)
+    c0, c1 = max(0, col - yaricap), min(w, col + yaricap + 1)
+    pencere = np.asarray(acc[r0:r1, c0:c1], dtype=np.float64)
+    d_satir = (np.arange(r0, r1) - row)[:, None] * dy
+    d_sutun = (np.arange(c0, c1) - col)[None, :] * dx
+    mesafe = np.hypot(d_satir, d_sutun)
+
+    aday = (mesafe <= maks_m) & (pencere * cell_km2 >= 1.0)
+    puan = np.where(aday, pencere, -1.0)
+    out = []
+    for _ in range(en_fazla):
+        if puan.max() <= 0:
+            break
+        ri, ci = np.unravel_index(int(np.argmax(puan)), puan.shape)
+        buyukluk = float(pencere[ri, ci])
+        # aynı kola ait hücreler: birikimi yakın olanlar
+        ayni_kol = np.abs(pencere - buyukluk) < buyukluk * 0.35
+        m = np.where(ayni_kol & aday, mesafe, np.inf)
+        rj, cj = np.unravel_index(int(np.argmin(m)), m.shape)
+        x, y = transform * (c0 + cj + 0.5, r0 + rj + 0.5)
+        out.append({"alan_km2": round(buyukluk * cell_km2, 3),
+                    "mesafe_m": round(float(m[rj, cj]), 1),
+                    "lat": round(float(y), 6), "lon": round(float(x), 6)})
+        puan = np.where(ayni_kol, -1.0, puan)
+    return out
+
+
+def _snap_idx(acc, transform, dx, lat, lon, h, w, snap_m=500.0,
+              cell_km2=None, river_km2=1.0):
+    """Çok parçalı akışta kenetleme — tek havzayla aynı kuralı kullanır."""
+    dy = dx if cell_km2 is None else (cell_km2 * 1e6 / dx)
+    esik = 1.0 if cell_km2 is None else max(1.0, river_km2 / cell_km2)
+    row, col, x, y, _, _ = _akarsuya_kenetle(
+        acc, transform, dx, dy, lat, lon, h, w, esik, snap_m)
+    return row, col, x, y
 
 
 def _params_from_mask(flw, transform, acc_arr, dem_raw, dist_all, mask, outlet_idx,
@@ -851,7 +942,8 @@ def multi_delineate(down, ups, river_km2=1.0, snap_m=500.0, max_cells=None,
     dist_all = np.asarray(flw.stream_distance(unit="m"))
 
     # mansap havzası
-    dr, dc, xod, yod = _snap_idx(acc, transform, dx, down["lat"], down["lon"], h, w, snap_m)
+    dr, dc, xod, yod = _snap_idx(acc, transform, dx, down["lat"], down["lon"], h, w,
+                                 snap_m, cell_km2=cell_km2, river_km2=river_km2)
     d_idx = dr * w + dc
     d_mask = np.asarray(flw.basins(xy=([xod], [yod])) > 0)
     if d_mask.sum() < 4:
@@ -861,7 +953,8 @@ def multi_delineate(down, ups, river_km2=1.0, snap_m=500.0, max_cells=None,
     # memba havzaları
     u_masks, membalar = [], []
     for k, u in enumerate(ups):
-        ur, uc, xou, you = _snap_idx(acc, transform, dx, u["lat"], u["lon"], h, w, snap_m)
+        ur, uc, xou, you = _snap_idx(acc, transform, dx, u["lat"], u["lon"], h, w,
+                                     snap_m, cell_km2=cell_km2, river_km2=river_km2)
         u_idx = ur * w + uc
         um = np.asarray(flw.basins(xy=([xou], [you])) > 0)
         if um.sum() < 4:
