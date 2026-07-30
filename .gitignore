@@ -27,3 +27,10 @@ data/DMİ_yedek.kmz
 
 # Excel açıkken bıraktığı kilit dosyaları
 ~$*
+
+# Yerel çalışma verisi — depoya girmemeli (GitHub 100 MB üstü dosyayı reddeder).
+# Data.db ~1.6 GB, Havzalar.rar ~1.8 GB, Havzalar/ ~6 GB.
+/Data.db
+/Havzalar/
+*.rar
+*.7z
