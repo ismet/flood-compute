@@ -104,6 +104,20 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    ayrı satır olarak verilir. `backend/core/btfa.py`, golden test:
    `backend/tests/test_btfa_golden.py` (Karamandere).
 
+   BTFA sonucunda **homojenlik testi** (Dalrymple, 1960) da verilir: her
+   istasyonun kendi Q<sub>10</sub>/Q<sub>2</sub> oranı bölgesel eğri üzerinde
+   hangi tekerrüre denk geliyor bulunur ve serinin kısalığından beklenen %95
+   bandıyla karşılaştırılır. Banda sığmayan istasyonlar kırmızı işaretlenir;
+   onları listeden çıkarıp analizi yenilemek bölgeyi homojenleştirir.
+
+   Aynı adımda **MMY (Muhtemel Maksimum Yağış)** hesabı vardır: bir meteoroloji
+   istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle
+   MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2. K<sub>m</sub>, 9
+   bölgeye ait zarf eğrilerinden düzeltilmiş ortalamaya göre okunur. Çıkan
+   derinlik 6. adımdaki **OET** yağışına yazılarak muhtemel maksimum feyezan
+   (Q<sub>OET</sub>) elde edilir. `backend/core/mmy.py`, golden test:
+   `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
+
 ## Ara Havza (çok parçalı havza) modu
 
 Üst kısımdaki **Ara Havza** düğmesiyle geçilir. Panelde net numaralı sıra izlenir
@@ -231,6 +245,13 @@ kot profili yeniden üretilir.
   sayıyı birebir tutturmak gerekirse arayüzdeki **Üs** kutusuna yazın; boş
   bırakılırsa seçili istasyonlardan hesaplanan bağıntı kullanılır. Her iki
   bağıntı (a=1 ve a serbest) R² ile birlikte ekranda gösterilir.
+* MMY'de M1/M2 düzeltme katsayıları **girdi**dir (varsayılan 1.0). Kaynak
+  Excel'lerde bu değerler hücrede formül değil, makroyla/elle yazılmış
+  sayılardır; Hershfield abaklarının sayısal karşılığı dosyalarda yok. Uydurma
+  bir eğri koymak sonucu sessizce kaydırırdı, bu yüzden hesaplanan oranlar
+  (P<sub>ort</sub>(−P<sub>maks</sub>)/P<sub>ort</sub> ve S(−P<sub>maks</sub>)/S)
+  ile N ekranda gösterilir; kullanıcı abaktan okuyup girer. K<sub>m</sub> ise
+  Excel'den çıkarılan zarf eğrilerinden **birebir** okunur.
 
 ## Web'e deploy
 
@@ -262,5 +283,6 @@ python backend/tests/test_kmz_export.py          :: KMZ yazıcı gidiş-dönüş
 python backend/tests/test_raster.py              :: Raster altlık XYZ karo servisi + CRS
 python backend/tests/test_tfa_golden.py          :: NTFA birebir (6 dağılım × T2–T10000 + K-S)
 python backend/tests/test_btfa_golden.py         :: BTFA birebir (Karamandere indeks-debi)
+python backend/tests/test_mmy_golden.py          :: MMY birebir (Hershfield, iki kaynak dosya)
 python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
 ```

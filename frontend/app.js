@@ -720,6 +720,28 @@ function btfaCiz(o) {
   });
   h += "</table>";
 
+  const hm = o.homojenlik;
+  if (hm) {
+    h += `<p class="small"><b>Homojenlik testi</b> — ${hm.yontem}. `
+      + (hm.homojen
+          ? "Bölge <b>homojen</b>: tüm istasyonlar %95 bandının içinde."
+          : `<b>${hm.aykiri.length} istasyon banda sığmıyor</b> (${hm.aykiri.join(", ")}) — `
+            + "bunları çıkarıp yeniden çalıştırmayı deneyin.")
+      + '</p><table class="tbl small"><tr><th>İstasyon</th><th>N</th>'
+      + "<th>Q10/Q2</th><th>T eşdeğer</th><th>alt–üst sınır</th><th>Sonuç</th></tr>";
+    hm.istasyonlar.forEach(s => {
+      const durum = s.homojen === null ? "sınanmadı" : (s.homojen ? "homojen" : "aykırı");
+      h += `<tr${s.homojen === false ? ' style="color:#b71c1c;font-weight:600"' : ""}>`
+        + `<td>${s.kod}</td><td style="text-align:right">${s.yil_sayisi}</td>`
+        + `<td style="text-align:right">${fmt(s.oran_q10_q2, 3)}</td>`
+        + `<td style="text-align:right">${fmt(s.t_esdeger, 1)}</td>`
+        + `<td style="text-align:right">${s.t_alt == null ? "—"
+            : fmt(s.t_alt, 1) + " – " + fmt(s.t_ust, 1)}</td>`
+        + `<td>${durum}</td></tr>`;
+    });
+    h += "</table>";
+  }
+
   h += '<p class="small"><b>Bölgesel büyüme eğrisi</b> (Q<sub>T</sub>/Q<sub>2</sub> ortalaması)'
     + '</p><table class="tbl small"><tr><th>T (yıl)</th>'
     + T.map(t => `<th style="text-align:right">${t}</th>`).join("") + "</tr><tr><td>oran</td>"
@@ -775,6 +797,73 @@ $("btnBtfa").onclick = async () => {
       + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s.`, "ok");
   } catch (e) {
     setStatus("btfaStatus", "Bölgesel analiz yapılamadı: " + e.message, "err");
+  }
+};
+
+/* ---- MMY: muhtemel maksimum yağış (Hershfield) ----
+   Sonuç, 6. adımdaki OET yağış satırına yazılınca QOET (muhtemel maksimum
+   feyezan) mevcut hesap zinciriyle üretilir.                              */
+(async function mmyBolgeYukle() {
+  try {
+    const r = await api("/api/mmy-bolgeler");
+    $("mmyBolge").innerHTML = r.bolgeler
+      .map(b => `<option value="${b.no}">${b.no}. ${b.ad}</option>`).join("");
+  } catch (e) { /* uç yoksa sessiz geç */ }
+})();
+
+$("btnMmy").onclick = async () => {
+  const p = ($("mmySeri").value || "").split(/[\s,;]+/)
+    .map(s => parseFloat(s.replace(",", "."))).filter(v => !isNaN(v) && v > 0);
+  if (p.length < 3) return setStatus("mmyStatus",
+    "En az 3 yıllık yağış değeri girin (her satıra bir değer).", "err");
+  setStatus("mmyStatus", "MMY hesaplanıyor…", "loading");
+  try {
+    const o = await api("/api/mmy", {
+      p, bolge_no: +$("mmyBolge").value,
+      m1_ort: +$("mmyM1o").value || 1, m2_ort: +$("mmyM2o").value || 1,
+      m1_s: +$("mmyM1s").value || 1, m2_s: +$("mmyM2s").value || 1,
+      gun_katsayisi: $("mmyGun").checked,
+      istasyon: $("mmyIstasyon").value.trim(),
+    });
+    S.mmy = o;
+    const sat = (ad, v, br = "") => `<tr><td>${ad}</td>`
+      + `<td style="text-align:right">${typeof v === "number" ? fmt(v, 4) : v}</td>`
+      + `<td class="small">${br}</td></tr>`;
+    $("mmySonuc").innerHTML = (o.istasyon ? `<h3 class="small">${o.istasyon}</h3>` : "")
+      + '<table class="tbl small">'
+      + sat("N", o.yil_sayisi, "yıl") + sat("P<sub>maks</sub>", o.pmax, "mm")
+      + sat("ΣP", o.toplam, "mm") + sat("ΣP (−P<sub>maks</sub>)", o.toplam_pmaxsiz, "mm")
+      + sat("P<sub>ort</sub>", o.ortalama, "mm")
+      + sat("P<sub>ort</sub> (−P<sub>maks</sub>)", o.ortalama_pmaxsiz, "mm")
+      + sat("oran P<sub>ort</sub>(−P<sub>maks</sub>)/P<sub>ort</sub>", o.ortalama_orani,
+            "→ M1<sub>ort</sub> abağı bu oran ve N ile okunur")
+      + sat("S", o.standart_sapma, "mm")
+      + sat("S (−P<sub>maks</sub>)", o.standart_sapma_pmaxsiz, "mm")
+      + sat("oran S(−P<sub>maks</sub>)/S", o.standart_sapma_orani,
+            "→ M1<sub>s</sub> abağı bu oran ve N ile okunur")
+      + sat("M1<sub>ort</sub> · M2<sub>ort</sub>", o.m1_ort * o.m2_ort, "girilen")
+      + sat("M1<sub>s</sub> · M2<sub>s</sub>", o.m1_s * o.m2_s, "girilen")
+      + sat("düzeltilmiş P<sub>ort</sub>", o.duzeltilmis_ortalama, "mm")
+      + sat("düzeltilmiş S", o.duzeltilmis_standart_sapma, "mm")
+      + sat("K<sub>m</sub>", o.km, `${o.bolge_no}. ${o.bolge_adi}`)
+      + (o.gun_katsayisi !== 1 ? sat("gün katsayısı", o.gun_katsayisi, "sabit saat → 24 saat") : "")
+      + `<tr><td><b>MMY</b></td><td style="text-align:right"><b>${fmt(o.mmy, 1)}</b></td>`
+      + "<td class='small'>mm</td></tr></table>"
+      + '<div class="rain-tools"><button id="btnMmyOet" class="small-btn">'
+      + "↧ Bu değeri 6. adımdaki OET yağışına yaz</button></div>";
+    $("btnMmyOet").onclick = () => {
+      const hedef = document.querySelector('[data-rain-oet], #inpP24OET');
+      if (hedef) { hedef.value = fmt(o.mmy, 1); setStatus("mmyStatus", "OET yağışı güncellendi.", "ok"); }
+      else {
+        navigator.clipboard?.writeText(fmt(o.mmy, 1));
+        setStatus("mmyStatus", `MMY = ${fmt(o.mmy, 1)} mm panoya kopyalandı — `
+          + "5. adımdaki yağış tablosunda OET satırına yapıştırın.", "ok");
+      }
+    };
+    setStatus("mmyStatus", `MMY = ${fmt(o.mmy, 1)} mm `
+      + `(N=${o.yil_sayisi}, Km=${fmt(o.km, 3)}).`, "ok");
+  } catch (e) {
+    setStatus("mmyStatus", "MMY hesaplanamadı: " + e.message, "err");
   }
 };
 

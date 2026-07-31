@@ -906,6 +906,42 @@ def api_btfa(g: BtfaGirdi):
         return _err(e)
 
 
+@app.get("/api/mmy-bolgeler")
+def api_mmy_bolgeler():
+    """Km zarf eğrisi tanımlı bölgeler (MMY hesabı için)."""
+    from backend.core import mmy
+    try:
+        return {"bolgeler": mmy.bolgeler()}
+    except Exception as e:
+        return _err(e)
+
+
+class MmyGirdi(BaseModel):
+    p: list[float]                      # 1 günlük yıllık en büyük yağışlar (mm)
+    bolge_no: int
+    m1_ort: float = 1.0                 # Hershfield abaklarından okunur
+    m2_ort: float = 1.0
+    m1_s: float = 1.0
+    m2_s: float = 1.0
+    gun_katsayisi: bool = False         # sabit saat -> gerçek 24 saat (1.13)
+    istasyon: str = ""
+
+
+@app.post("/api/mmy")
+def api_mmy(g: MmyGirdi):
+    """Muhtemel Maksimum Yağış (MMY/PMP) — Hershfield yöntemi.
+
+    Çıkan yağış derinliği, hesap adımındaki P24_OET girdisine yazılarak
+    muhtemel maksimum feyezan (QOET) elde edilir."""
+    from backend.core import mmy
+    try:
+        return mmy.hesapla(g.p, g.bolge_no, m1_ort=g.m1_ort, m2_ort=g.m2_ort,
+                           m1_s=g.m1_s, m2_s=g.m2_s,
+                           gun_katsayisi=g.gun_katsayisi, istasyon=g.istasyon)
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""

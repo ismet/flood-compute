@@ -103,6 +103,81 @@ def istasyon_analizi(seriler):
     return cikti
 
 
+# --------------------------------------------------------- homojenlik testi
+# Dalrymple (1960) — indeks-debi yönteminin klasik eşlikçisi. Bölge homojen
+# sayılırsa tüm istasyonların büyüme eğrisi aynı kabul edilebilir.
+#
+# Her istasyonun kendi Q10/Q2 oranı, bölgesel eğri üzerinde hangi tekerrüre
+# denk geliyor (T_i)? Homojen bir bölgede T_i ~ 10 çıkar; sapma, serinin
+# kısalığından beklenen saçılmanın içinde kalmalıdır. Sınır, Gumbel indirgenmiş
+# değişkeninin standart hatasından türetilir:
+#     y = -ln(-ln(1-1/T)),  K = (y - 0.5772)/1.2825
+#     SE(y) = sqrt(1 + 1.1396*K + 1.1*K²) / sqrt(n)
+# T = 10'da katsayı ~2.088; %95 bandı y10 ± 1.96*SE.
+HOMOJENLIK_T = 10
+_EULER, _BETA = 0.5772, 1.2825
+
+
+def _gumbel_y(t):
+    return -math.log(-math.log(1 - 1.0 / t))
+
+
+def _gumbel_t(y):
+    return 1.0 / (1 - math.exp(-math.exp(-y)))
+
+
+def _se_katsayisi(t):
+    k = (_gumbel_y(t) - _EULER) / _BETA
+    return math.sqrt(1 + 1.1396 * k + 1.1 * k * k)
+
+
+def homojenlik(kullanilan, buyume, guven=1.96):
+    """Dalrymple homojenlik testi. -> istasyon başına T_i ve bandın içinde mi.
+
+    kullanilan: istasyon_analizi çıktısından `kullanildi=True` olanlar
+    buyume    : bölgesel büyüme eğrisi (TEKERRUR sırasına göre)
+    """
+    ys = [_gumbel_y(t) for t in TEKERRUR]
+    y10 = _gumbel_y(HOMOJENLIK_T)
+    kat = _se_katsayisi(HOMOJENLIK_T)
+
+    def ters(oran):
+        """Bölgesel eğride verilen orana karşılık gelen y (indirgenmiş değişken)."""
+        if oran <= buyume[0]:
+            return ys[0]
+        for i in range(1, len(buyume)):
+            if oran <= buyume[i]:
+                b0, b1 = buyume[i - 1], buyume[i]
+                if b1 == b0:
+                    return ys[i]
+                return ys[i - 1] + (ys[i] - ys[i - 1]) * (oran - b0) / (b1 - b0)
+        # eğrinin üstünde: son iki noktanın eğimiyle uzat
+        b0, b1 = buyume[-2], buyume[-1]
+        egim = (ys[-1] - ys[-2]) / (b1 - b0) if b1 != b0 else 0.0
+        return ys[-1] + egim * (oran - b1)
+
+    sonuc = []
+    for k in kullanilan:
+        n = k.get("yil_sayisi") or 0
+        oran = k["oranlar"][TEKERRUR.index(HOMOJENLIK_T)]
+        y_i = ters(oran)
+        kayit = {"kod": k["kod"], "ad": k.get("ad", ""), "yil_sayisi": n,
+                 "oran_q10_q2": oran, "t_esdeger": _gumbel_t(y_i)}
+        if n > 1:
+            se = kat / math.sqrt(n)
+            alt_y, ust_y = y10 - guven * se, y10 + guven * se
+            kayit.update(t_alt=_gumbel_t(alt_y), t_ust=_gumbel_t(ust_y),
+                         homojen=alt_y <= y_i <= ust_y)
+        else:   # kayıt uzunluğu yoksa band kurulamaz — sınanmamış sayılır
+            kayit.update(t_alt=None, t_ust=None, homojen=None)
+        sonuc.append(kayit)
+    aykiri = [s["kod"] for s in sonuc if s["homojen"] is False]
+    return {"tekerrur": HOMOJENLIK_T, "guven_katsayisi": guven,
+            "istasyonlar": sonuc, "aykiri": aykiri,
+            "homojen": not aykiri,
+            "yontem": "Dalrymple (1960) — Gumbel indirgenmiş değişken bandı"}
+
+
 def bolgesel(seriler, alan_km2, us=None, katsayi=None, katsayi_serbest=False,
              disla=(), transfer_kod=None, transfer_ussu=VARSAYILAN_TRANSFER_USSU):
     """BTFA — bölgesel büyüme eğrisi + indeks debi ile havza taşkın debileri.
@@ -155,6 +230,7 @@ def bolgesel(seriler, alan_km2, us=None, katsayi=None, katsayi_serbest=False,
         "istasyonlar": ist,
         "kullanilan_sayisi": len(kullanilan),
         "buyume_egrisi": buyume,
+        "homojenlik": homojenlik(kullanilan, buyume),
         "bagintis": {
             "katsayi": a, "us": b, "kaynak": kaynak,
             "regresyon_serbest": {"katsayi": a_hes, "us": b_hes, "r2": r2, "n": n_reg},

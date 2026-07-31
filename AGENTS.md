@@ -19,6 +19,7 @@ python backend/tests/test_corine_c.py                 # CORINE -> rational C der
 python backend/tests/test_akarsu.py                   # DSİ river layer (skips if data absent)
 python backend/tests/test_tfa_golden.py               # NTFA golden (ornek.xlsm, 6 distributions)
 python backend/tests/test_btfa_golden.py              # BTFA golden (Karamandere index-flood)
+python backend/tests/test_mmy_golden.py               # MMY golden (Hershfield PMP, 2 workbooks)
 python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
@@ -75,7 +76,8 @@ backend/core/         — Computation engine (no framework dependency)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
   akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
-  btfa.py               — BTFA: regional index-flood (growth curve + area–Q2 relation)
+  btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
+  mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
   agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
@@ -112,6 +114,8 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `GET /api/agi-seri` | One station's annual peak series (`kod`, year range, confidence filter) |
 | `POST /api/tfa` | NTFA — at-site frequency analysis from a station code or a raw series |
 | `POST /api/btfa` | BTFA — regional index-flood from several station codes + basin area |
+| `GET /api/mmy-bolgeler` | Regions that have a Km envelope curve (for MMY) |
+| `POST /api/mmy` | MMY — Hershfield PMP from an annual max daily rainfall series |
 | `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
@@ -163,3 +167,15 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
   (0.8968) is not reproducible from its own 15 stations** — least squares gives
   0.0827·A^1.3146 — so it was entered by hand. The fit is therefore computed and
   reported, but `us`/`katsayi` let the caller pin the report's number.
+  Homogeneity is Dalrymple (1960): each station's own Q10/Q2 is read back onto
+  the regional curve as an equivalent T, compared against the Gumbel-reduced-
+  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`.
+- **MMY** (`mmy.py`): Hershfield PMP,
+  `MMY = Port·M1·M2 + Km·S·M1·M2`, Km read from a regional envelope
+  (`data/tables/mmy_km.json`, 9 regions extracted from the source workbook's
+  X-KM sheet) using **Excel LOOKUP step semantics against the ADJUSTED mean** —
+  interpolating instead would not reproduce the workbook. The M1/M2 chart
+  factors are inputs (default 1.0): the source workbooks hold them as
+  macro-written literals, the charts themselves are not in the files, and
+  inventing a curve would silently shift the result. The output feeds the
+  existing `P24_OET` input, which already yields QOET (the PMF).
