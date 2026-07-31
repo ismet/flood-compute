@@ -18,6 +18,8 @@ data/akarsu/*.eski
 
 # data/stations/DMİ.kmz is the canonical copy; root is a local fallback
 /DMİ.kmz
+# data/regions/YZD_ALANLAR.kmz asıl kopya; kökteki bayt bayt aynısı
+/YZD_ALANLAR.kmz
 
 .commandcode/
 /aster30m.vrt
