@@ -31,6 +31,9 @@ import sys
 import tempfile
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from backend.core import akarsu  # noqa: E402  (geometri kodlaması tek yerde)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CIKTI = os.path.join(ROOT, "data", "akarsu", "akarsu.sqlite")
 
@@ -120,11 +123,14 @@ def _semayi_kur(db):
             ad        TEXT,               -- dere adı (P_NAME)
             tip       TEXT,               -- DSİ sınıfı (DERE, ÇAY…)
             uzunluk_m REAL,
-            nokta     BLOB NOT NULL       -- paketli float32 lon,lat çiftleri
+            nokta     BLOB NOT NULL       -- delta+varint+zlib (bkz. akarsu.kodla)
         );
         CREATE INDEX kol_olcek ON kol(olcek);
         CREATE VIRTUAL TABLE kol_idx USING rtree(id, xmin, xmax, ymin, ymax);
+        DROP TABLE IF EXISTS meta;
+        CREATE TABLE meta (anahtar TEXT PRIMARY KEY, deger TEXT);
     """)
+    db.execute("INSERT INTO meta VALUES ('geometri', ?)", (akarsu.BICIM,))
 
 
 def cikar(mdb_yolu, cikti=CIKTI):
@@ -195,8 +201,9 @@ def cikar(mdb_yolu, cikti=CIKTI):
                         else:
                             lon = [p[0] for p in pts]
                             lat = [p[1] for p in pts]
-                        paket = struct.pack(f"<{2 * len(lon)}f",
-                                            *[v for pair in zip(lon, lat) for v in pair])
+                        if len(lon) < 2:
+                            continue
+                        paket = akarsu.kodla(lon, lat)
                         satirlar.append((sonraki_id, olcek, ad or None, tip or None,
                                          uzunluk, paket))
                         indeks.append((sonraki_id, min(lon), max(lon), min(lat), max(lat)))
