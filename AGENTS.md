@@ -17,7 +17,9 @@ python backend/tests/test_kmz_export.py               # KMZ writer round-trip (v
 python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS override
 python backend/tests/test_corine_c.py                 # CORINE -> rational C derivation
 python backend/tests/test_akarsu.py                   # DSİ river layer (skips if data absent)
+python backend/tests/test_tfa_golden.py               # NTFA golden (ornek.xlsm, 6 distributions)
 python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
+python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data
 docker build -t taskin-hesap .                        # build Docker image
@@ -71,6 +73,8 @@ backend/core/         — Computation engine (no framework dependency)
   kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
   akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
+  tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
+  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
                         CORINE class → rational C range matrix)
@@ -78,6 +82,8 @@ data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
 data/akarsu/          — akarsu.sqlite, DSİ river network at 1/100k–1/500k
                         (~405k lines, 110 MB; gitignored, built by the tool above)
+data/agi/             — agi.sqlite, DSİ+EİE annual peak flows 1935–2020
+                        (2732 stations / 36.5k station-years, 3.8 MB)
 ```
 
 ---
@@ -98,6 +104,11 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `GET /api/raster-layers` | List raster basemaps |
 | `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
 | `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
+| `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
+| `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
+| `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |
+| `GET /api/agi-seri` | One station's annual peak series (`kod`, year range, confidence filter) |
+| `POST /api/tfa` | NTFA — at-site frequency analysis from a station code or a raw series |
 | `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
@@ -133,3 +144,11 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 - **Return period inverse**: T = 10^((x+0.98)/0.99), x = (Q−Q10)/(Q100−Q10)
 - **Reservoir**: Storage-Indication (2S/Δt+O)₁ = (I₀+I₁) + (2S/Δt−O)₀
 - **Multi-basin**: Q_mansap(t) = Q_ara(t) + Σ Q_memba_i(t − Tc_ara)
+- **NTFA** (`tfa.py`): moment fits for Normal / Log-Normal 2P & 3P / Pearson-3 /
+  Log-Pearson-3 / Gumbel; plotting position m/(N+1); the distribution with the
+  smallest Smirnov-Kolmogorov Dmax is the accepted one. Golden-matched to
+  `ornek.xlsm`, so three template quirks are reproduced deliberately: the normal
+  tail uses √(44/7) instead of √(2π), its 3rd polynomial coefficient is
+  1.78147937 (literature: 1.781477937), and the Normal Dmax carries a +0.01
+  penalty (`SONUÇLAR!AD27`). Changing any of these can flip which distribution
+  is accepted — see `NORMAL_DMAX_DUZELTME` and `_CDF_B`.

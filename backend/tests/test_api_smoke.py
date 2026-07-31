@@ -85,4 +85,20 @@ r = c.get("/api/project/load/duman_testi")
 assert r.json()["x"] == 1
 print("proje kayıt OK")
 
+# --- AGİ veri tabanı + noktasal frekans analizi (kurulu değilse atlanır)
+b = c.get("/api/agi-bilgi").json()
+if not b.get("var"):
+    print("AGİ atlandı: veri tabanı yok "
+          "(tools/agi_veritabani_olustur.py ile üretilir)")
+else:
+    r = c.get("/api/agi", params={"bati": 32.0, "guney": 39.0, "dogu": 36.0,
+                                  "kuzey": 41.0, "en_az_yil": 20}).json()
+    assert r["istasyonlar"], "pencerede AGİ bulunamadı"
+    kod = r["istasyonlar"][0]["kod"]
+    o = c.post("/api/tfa", json={"kod": kod}).json()
+    assert o["kabul_edilen"] in ("normal", "ln2", "ln3", "p3", "lp3", "gumbel")
+    assert len(o["tekerrur"]) == 10 and len(o["debiler"]) == 6
+    print(f"AGİ/NTFA OK: {b['istasyon']} istasyon, pencerede "
+          f"{len(r['istasyonlar'])} — {kod} kabul edilen: {o['kabul_edilen_adi']}")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")

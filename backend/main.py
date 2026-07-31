@@ -779,6 +779,92 @@ def api_akarsu(bati: float, guney: float, dogu: float, kuzey: float,
         return _err(e)
 
 
+@app.get("/api/agi-bilgi")
+def api_agi_bilgi():
+    """AGİ pik akım veri tabanı kurulu mu, kaç istasyon/kayıt var."""
+    from backend.core import agi
+    try:
+        return agi.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/agi")
+def api_agi(bati: float, guney: float, dogu: float, kuzey: float,
+            en_az_yil: int = 10, kurum: str = ""):
+    """Pencere içindeki AGİ'ler (frekans analizine uygun uzunlukta olanlar)."""
+    from backend.core import agi
+    try:
+        return {"istasyonlar": agi.pencere((bati, guney, dogu, kuzey),
+                                           en_az_yil=en_az_yil, kurum=kurum or None)}
+    except Exception as e:
+        return _err(e)
+
+
+class AgiHavzaGirdi(BaseModel):
+    geometri: dict                      # havza poligonu (GeoJSON geometry)
+    tampon_derece: float = 0.25         # havza dışını da göster (bölgesel analiz için)
+    en_az_yil: int = 10
+    kurum: str = ""
+
+
+@app.post("/api/agi-havza")
+def api_agi_havza(g: AgiHavzaGirdi):
+    """Çıkarılan havzanın içindeki ve çevresindeki AGİ'ler."""
+    from backend.core import agi
+    try:
+        return {"istasyonlar": agi.poligon(g.geometri, tampon_derece=g.tampon_derece,
+                                           en_az_yil=g.en_az_yil, kurum=g.kurum or None)}
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/agi-seri")
+def api_agi_seri(kod: str, ilk_yil: int = 0, son_yil: int = 0,
+                 dusuk_guveni_at: bool = False):
+    """Bir AGİ'nin yıllık maksimum akım serisi (analiz öncesi gözden geçirmek için)."""
+    from backend.core import agi
+    try:
+        return {"istasyon": agi.istasyon(kod),
+                "seri": agi.seri(kod, ilk_yil or None, son_yil or None, dusuk_guveni_at)}
+    except Exception as e:
+        return _err(e)
+
+
+class TfaGirdi(BaseModel):
+    kod: str = ""                       # AGİ kodu (veriyi veri tabanından al)
+    x: list[float] | None = None        # ya da doğrudan seri ver
+    yillar: list[int] | None = None
+    ilk_yil: int = 0
+    son_yil: int = 0
+    dusuk_guveni_at: bool = False
+
+
+@app.post("/api/tfa")
+def api_tfa(g: TfaGirdi):
+    """Noktasal Taşkın Frekans Analizi (NTFA) — DSİ ekstrem dağılım hesabı.
+
+    Altı dağılım moment yöntemiyle uydurulur, Simirnov-Kolmogorov testiyle
+    karşılaştırılır; Dmax'ı en küçük olan "kabul edilen" dağılımdır."""
+    from backend.core import agi, tfa
+    try:
+        ad, x, yillar = g.kod, g.x, g.yillar
+        if g.kod:
+            ist = agi.istasyon(g.kod)
+            s = agi.seri(g.kod, g.ilk_yil or None, g.son_yil or None, g.dusuk_guveni_at)
+            x = [k["q"] for k in s]
+            yillar = [k["yil"] for k in s]
+            ad = f"{ist['kod']} {ist['ad']}".strip()
+        if not x:
+            raise ValueError("Analiz için seri gerekli (kod ya da x)")
+        sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar)
+        if g.kod:
+            sonuc["istasyon_bilgi"] = agi.istasyon(g.kod)
+        return sonuc
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""

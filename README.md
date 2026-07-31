@@ -26,6 +26,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
+| `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
 
 ## İş akışı (6 adım)
 
@@ -79,6 +80,18 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      rapor sonunda “… ile hesaplanan taşkın yinelenme değerlerinin projelendirmede esas
      alınması uygun bulunmuştur” gerekçesi ve tasarım debileri tablosu bu yönteme göre
      yazılır; karşılaştırma tablosunda seçilen yöntem koyu gösterilir. `backend/core/report.py`.
+
+7. **Frekans** — *Noktasal Taşkın Frekans Analizi (NTFA)*. Sentetik yöntemlerden
+   bağımsız ikinci yol: **gözlenmiş** yıllık pik akımlara dayanır. Havza
+   çıkarıldıktan sonra “AGİ'leri haritaya getir” ile havza içindeki ve (tampon
+   kadar) çevresindeki Akım Gözlem İstasyonları haritaya ve listeye gelir;
+   biri seçilip analiz çalıştırılır. Altı dağılım (Normal, Log-Normal 2P/3P,
+   Pearson Tip-3, Log-Pearson Tip-3, Gumbel) moment yöntemiyle uydurulur,
+   T = 2…10 000 yıl debileri hesaplanır ve **Simirnov-Kolmogorov** testiyle
+   karşılaştırılır; D<sub>maks</sub>'ı en küçük olan dağılım kabul edilir.
+   Çıktı, DSİ frekans analizi Excel'inin (`ornek.xlsm`) `SONUÇLAR` sayfasıyla
+   aynı üç bloktur: tekerrür debileri, istatistik parametreler, K-S testi.
+   `backend/core/tfa.py`, golden test: `backend/tests/test_tfa_golden.py`.
 
 ## Ara Havza (çok parçalı havza) modu
 
@@ -178,6 +191,13 @@ kot profili yeniden üretilir.
   bloklarla hesaplandığından tek tr kullanan bu uygulamada ~%0.2 sapar; Q2–Q100
   birebirdir. Q500/1000/10000 uygulama genelindeki gibi Q10–Q100'den ekstrapole
   edilir (Excel'in ayrı P500… girdileri yerine).
+* NTFA'da (adım 7) tersi geçerlidir: DSİ frekans şablonuyla **birebir** uyum
+  hedeflendiği için şablonun üç tuhaflığı korunmuştur — normal kuyruk
+  yaklaşımında √(2π) yerine √(44/7), polinomun 3. katsayısı 1.78147937
+  (literatürde 1.781477937) ve Normal dağılımın D<sub>maks</sub>'ına eklenen
+  sabit +0.01. Bunlar hangi dağılımın kabul edildiğini değiştirebildiği için
+  “düzeltmek” sonuçları Excel'den ayırırdı; `backend/core/tfa.py` içinde
+  `_CDF_B` ve `NORMAL_DMAX_DUZELTME` olarak işaretlidir.
 
 ## Web'e deploy
 
@@ -207,5 +227,6 @@ python backend/tests/test_snyder_golden.py       :: Snyder birebir (parametreler
 python backend/tests/test_reservoir_golden.py    :: Rezervuar öteleme birebir (çıkış piki, su kotu, sönümleme)
 python backend/tests/test_kmz_export.py          :: KMZ yazıcı gidiş-dönüş (vektör.oku ile)
 python backend/tests/test_raster.py              :: Raster altlık XYZ karo servisi + CRS
+python backend/tests/test_tfa_golden.py          :: NTFA birebir (6 dağılım × T2–T10000 + K-S)
 python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
 ```

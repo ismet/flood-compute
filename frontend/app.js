@@ -150,7 +150,7 @@ document.querySelectorAll(".step").forEach(b => {
     if (dir) {
       e.preventDefault();
       const n = +b.dataset.step + dir;
-      const next = document.querySelector(`.step[data-step="${n < 1 ? 6 : n > 6 ? 1 : n}"]`);
+      const next = document.querySelector(`.step[data-step="${n < 1 ? 7 : n > 7 ? 1 : n}"]`);
       if (next) next.focus();
     }
   };
@@ -169,6 +169,7 @@ function activateStep(n) {
     $("rasyonelBox").open = true;
   }
   if (n === 6) updateComputeReady();
+  if (n === 7) agiKatmanAc();
 }
 const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`).classList.add("done");
 const setStatus = (id, msg, cls = "") => {
@@ -449,6 +450,192 @@ map.on("moveend zoomend", () => {
     }
   } catch (e) { /* uç yoksa sessiz geç */ }
 })();
+
+/* ---- AGİ (Akım Gözlem İstasyonu) katmanı + noktasal frekans analizi ----
+   Sentetik yöntemlerden bağımsız ikinci bir yol: gözlenmiş yıllık pik akımlara
+   DSİ ekstrem dağılım hesabı (ornek.xlsm ile birebir, bkz. backend/core/tfa.py).
+   İstasyonlar havza poligonuyla sorgulanır; tampon dışarıyı da kapsar, çünkü
+   çıkarılan havzada AGİ olmayabilir ve komşu havza karşılaştırması gerekir.  */
+layers.agi = L.layerGroup();
+S.agiSecili = null;
+
+const agiRenk = (s) => (s.kurum === "EİE" ? "#6a1b9a" : "#e65100");
+
+function agiIsaretle() {
+  layers.agi.eachLayer(l => {
+    const s = l.agi;
+    if (!s) return;
+    const secili = S.agiSecili && S.agiSecili.kod === s.kod;
+    l.setStyle({
+      radius: secili ? 8 : 5,
+      color: secili ? "#000" : agiRenk(s),
+      weight: secili ? 3 : 1.5,
+      fillColor: agiRenk(s),
+      fillOpacity: s.icinde === false ? 0.25 : 0.85,
+    });
+  });
+  $("btnTfa").disabled = !S.agiSecili;
+}
+
+function agiSec(s) {
+  S.agiSecili = s;
+  agiIsaretle();
+  $("agiInfo").innerHTML =
+    `<b>${s.kod}</b> ${s.ad || ""} — ${s.kurum} · ${s.yil_sayisi} yıl `
+    + `(${s.ilk_yil}–${s.son_yil})`
+    + (s.yagis_alani ? ` · yağış alanı ${fmt(s.yagis_alani, 1)} km²` : "");
+  $("tfaSonuc").innerHTML = "";
+  setStatus("tfaStatus", "", "");
+}
+
+function agiListele(ist) {
+  const icinde = ist.filter(s => s.icinde !== false);
+  const disinda = ist.filter(s => s.icinde === false);
+  const sat = (s) => `<tr data-kod="${s.kod}" class="agi-sat">`
+    + `<td>${s.kod}</td><td>${s.ad || ""}</td><td>${s.kurum}</td>`
+    + `<td style="text-align:right">${s.yil_sayisi}</td>`
+    + `<td style="text-align:right">${s.ilk_yil}–${s.son_yil}</td>`
+    + `<td style="text-align:right">${s.yagis_alani ? fmt(s.yagis_alani, 1) : "—"}</td></tr>`;
+  const bas = "<tr><th>Kod</th><th>Ad</th><th>Kurum</th><th>Yıl</th>"
+    + "<th>Aralık</th><th>A (km²)</th></tr>";
+  let h = "";
+  if (icinde.length) h += `<p class="small"><b>Havza içinde (${icinde.length})</b></p>`
+    + `<table class="tbl small">${bas}${icinde.map(sat).join("")}</table>`;
+  if (disinda.length) h += `<p class="small"><b>Çevrede (${disinda.length})</b></p>`
+    + `<table class="tbl small">${bas}${disinda.map(sat).join("")}</table>`;
+  if (!h) h = '<p class="small">Bu alanda yeterli uzunlukta AGİ yok.</p>';
+  $("agiListe").innerHTML = h;
+  $("agiListe").querySelectorAll(".agi-sat").forEach(tr => {
+    tr.onclick = () => {
+      const s = ist.find(x => x.kod === tr.dataset.kod);
+      if (s) { agiSec(s); map.setView([s.enlem, s.boylam], Math.max(map.getZoom(), 11)); }
+    };
+  });
+}
+
+async function agiYukle() {
+  const enAz = +$("agiEnAzYil").value || 10;
+  const kurum = $("agiKurum").value;
+  setStatus("tfaStatus", "AGİ'ler getiriliyor…", "loading");
+  try {
+    let r;
+    if (S.havza) {
+      r = await api("/api/agi-havza", {
+        geometri: (S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza),
+        tampon_derece: +$("agiTampon").value || 0,
+        en_az_yil: enAz, kurum,
+      });
+    } else {
+      const b = map.getBounds();
+      const q = new URLSearchParams({
+        bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
+        en_az_yil: enAz, kurum,
+      });
+      r = await api("/api/agi?" + q.toString());
+    }
+    layers.agi.clearLayers();
+    r.istasyonlar.forEach(s => {
+      if (s.enlem == null || s.boylam == null) return;
+      const m = L.circleMarker([s.enlem, s.boylam], { radius: 5 });
+      m.agi = s;
+      m.bindTooltip(`${s.kod} — ${s.ad || ""} (${s.yil_sayisi} yıl)`, { sticky: true });
+      m.on("click", () => agiSec(s));
+      m.addTo(layers.agi);
+    });
+    layers.agi.addTo(map);
+    agiIsaretle();
+    agiListele(r.istasyonlar);
+    setStatus("tfaStatus", `${r.istasyonlar.length} istasyon bulundu — `
+      + "haritadan ya da listeden birini seçin.", "ok");
+  } catch (e) {
+    setStatus("tfaStatus", "AGİ'ler getirilemedi: " + e.message, "err");
+  }
+}
+
+async function agiKatmanAc() {
+  try {
+    const b = await api("/api/agi-bilgi");
+    if (!b.var) {
+      $("btnAgiHavza").disabled = true;
+      $("agiInfo").textContent =
+        "veri yok — tools/agi_veritabani_olustur.py ile üretin";
+      return;
+    }
+    if (!$("agiInfo").textContent) {
+      $("agiInfo").textContent = `${b.istasyon.toLocaleString("tr")} istasyon · `
+        + `${b.pik.toLocaleString("tr")} yıllık pik · ${b.ilk_yil}–${b.son_yil}`;
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+}
+
+$("btnAgiHavza").onclick = agiYukle;
+
+/* ---- NTFA sonuç tablosu (Excel SONUÇLAR sayfasının karşılığı) ---- */
+function tfaCiz(o) {
+  const T = o.tekerrur;
+  const bas = (h) => `<th style="text-align:right">${h}</th>`;
+  let h = `<h3 class="small">${o.istasyon}</h3>`;
+
+  h += '<p class="small"><b>Tekerrür debileri (m³/s)</b></p><table class="tbl small">'
+    + "<tr><th>Dağılım</th>" + T.map(t => bas(t)).join("") + "<th>Kabul</th></tr>";
+  o.debiler.forEach(d => {
+    h += `<tr${d.kabul_edilen ? ' style="font-weight:600"' : ""}><td>${d.dagilim}</td>`
+      + d.q.map(v => `<td style="text-align:right">${v == null ? "—" : fmt(v, 1)}</td>`).join("")
+      + `<td style="text-align:center">${d.kabul_edilen ? "****" : ""}</td></tr>`;
+  });
+  h += "</table>";
+
+  const p = o.parametreler;
+  h += '<p class="small"><b>İstatistik parametreler</b></p><table class="tbl small">'
+    + `<tr><td>Yıl sayısı</td><td style="text-align:right">${p.yil_sayisi}</td>`
+    + `<td>Lineer ortalama</td><td style="text-align:right">${fmt(p.lineer_ortalama, 3)}</td></tr>`
+    + `<tr><td>Lineer çarpıklık</td><td style="text-align:right">${fmt(p.lineer_carpiklik, 4)}</td>`
+    + `<td>Lineer std. sapma</td><td style="text-align:right">${fmt(p.lineer_standart_sapma, 3)}</td></tr>`
+    + `<tr><td>Logaritmik çarpıklık</td><td style="text-align:right">${fmt(p.logaritmik_carpiklik, 4)}</td>`
+    + `<td>Logaritmik ortalama</td><td style="text-align:right">${fmt(p.logaritmik_ortalama, 4)}</td></tr>`
+    + `<tr><td></td><td></td><td>Logaritmik std. sapma</td>`
+    + `<td style="text-align:right">${fmt(p.logaritmik_standart_sapma, 4)}</td></tr></table>`;
+
+  h += '<p class="small"><b>Simirnov-Kolmogorov testi</b></p><table class="tbl small">'
+    + "<tr><th>Dağılım</th>" + bas("Teorik Pi") + bas("Amprik Pi") + bas("Dmaks")
+    + bas("Gözlem") + o.ks_anlamlilik.map(a => bas(Math.round(a * 100) + "%")).join("") + "</tr>";
+  o.ks_testi.forEach(s => {
+    if (s.dmax == null) {
+      h += `<tr><td>${s.dagilim}</td><td colspan="9" class="small">—3 &gt; Cs &gt; 3, hesaplanmadı</td></tr>`;
+      return;
+    }
+    h += `<tr><td>${s.dagilim}</td>`
+      + `<td style="text-align:right">${fmt(s.teorik_pi, 4)}</td>`
+      + `<td style="text-align:right">${fmt(s.amprik_pi, 4)}</td>`
+      + `<td style="text-align:right">${fmt(s.dmax, 4)}</td>`
+      + `<td style="text-align:right">${fmt(s.gozlem, 2)}</td>`
+      + o.ks_anlamlilik.map(a =>
+          `<td style="text-align:center">${s.kabul[a] ? "Kabul" : "Red"}</td>`).join("")
+      + "</tr>";
+  });
+  h += "</table>";
+  h += `<p class="small"><b>NOT:</b> ${o.kabul_edilen_adi} dağılımı uygundur.</p>`;
+  $("tfaSonuc").innerHTML = h;
+}
+
+$("btnTfa").onclick = async () => {
+  if (!S.agiSecili) return;
+  setStatus("tfaStatus", "Frekans analizi yapılıyor…", "loading");
+  try {
+    const o = await api("/api/tfa", {
+      kod: S.agiSecili.kod,
+      ilk_yil: +$("tfaIlkYil").value || 0,
+      son_yil: +$("tfaSonYil").value || 0,
+      dusuk_guveni_at: $("tfaDusukAt").checked,
+    });
+    S.tfa = o;
+    tfaCiz(o);
+    setStatus("tfaStatus", `${o.parametreler.yil_sayisi} yıllık seri — `
+      + `kabul edilen dağılım: ${o.kabul_edilen_adi}.`, "ok");
+  } catch (e) {
+    setStatus("tfaStatus", "Analiz yapılamadı: " + e.message, "err");
+  }
+};
 
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
