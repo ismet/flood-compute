@@ -217,6 +217,30 @@ else:
     assert eski and "plv" in eski[0], "PLV oranları kayboldu"
     assert "P24" not in eski[0], "eski tablo hâlâ P24 döndürüyor"
 
+    # Adım 4'ün varsayılan kümesi: ölçüm veri tabanı + eski KML BİRLEŞİMİ.
+    # Eski ağ kaldırılmadı; MGM'nin seyrek olduğu bölgelerde Thiessen
+    # geometrisini o taşıyor. İki taraf da kümede olmalı.
+    d = c.get("/api/stations/default").json()
+    sts = d["istasyonlar"]
+    assert d["olcumlu"] > 1000, f"ölçümlü istasyon az: {d['olcumlu']}"
+    assert d["ek"] > 1000, f"eski KML kümesi kayboldu: {d['ek']}"
+    assert len(sts) == d["olcumlu"] + d["ek"]
+    assert all(s.get("lat") is not None and s.get("lon") is not None for s in sts)
+    # kodlu istasyonlar Adım 5'te kimlikle eşleşmeli, arama yapılmamalı
+    kodlu = next(s for s in sts if s.get("kod") and s["yil_sayisi"] >= 25)
+    e2 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
+        {"ad": kodlu["name"], "lat": kodlu["lat"], "lon": kodlu["lon"],
+         "kod": kodlu["kod"]}]}).json()["eslesme"]
+    assert e2[0]["yontem"] == "kod" and e2[0]["mesafe_km"] == 0.0
+    # kodsuz (eski KML) istasyon koordinatla bağlanmalı
+    kodsuz = next(s for s in sts if not s.get("kod"))
+    e3 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
+        {"ad": kodsuz["name"], "lat": kodsuz["lat"], "lon": kodsuz["lon"],
+         "kod": None}]}).json()["eslesme"]
+    assert e3[0]["yontem"] in ("koordinat", "koordinat-kısa", "ad", None)
+
+    print(f"Thiessen kümesi OK: {len(sts)} istasyon "
+          f"({d['olcumlu']} ölçümlü + {d['ek']} eski ağdan)")
     print(f"MGM/yağış frekansı OK: {b['istasyon']} istasyon, "
           f"{b['frekansa_uygun']} frekansa uygun, {kod} → "
           f"P2={p['2']} P100={p['100']} mm ({f['kabul_edilen_adi']}, "

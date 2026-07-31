@@ -102,6 +102,92 @@ def istasyon(kod):
     return _satir(r)
 
 
+AYNI_KM = 0.5           # bu kadar yakın iki kayıt, adları farklı olsa da aynı
+AD_AYNI_KM = 3.0        # adları da tutuyorsa bu uzaklığa kadar aynı sayılır
+
+
+def olcum_kumesi():
+    """Ölçüm veri tabanındaki koordinatlı istasyonlar (Thiessen noktası olarak)."""
+    db = _baglanti()
+    return [{"name": r["ad"], "lat": r["lat"], "lon": r["lon"],
+             "kurum": r["kurum"] or "DMİ", "kod": r["kod"], "il": r["il"],
+             "yil_sayisi": r["maks_yil"], "kot": r["kot"], "kaynak": "mgm"}
+            for r in db.execute(
+                "SELECT * FROM istasyon WHERE lat IS NOT NULL ORDER BY ad")]
+
+
+def _ad_tutar(a, b):
+    a, b = _norm(a), _norm(b)
+    return bool(a and b and (a == b or a.startswith(b) or b.startswith(a)))
+
+
+def birlestir(olcum, ek):
+    """İki istasyon kümesini tekilleştirerek birleştirir.
+
+    MGM koordinatları kaynak dosyada DERECE-DAKİKA olarak yazılmış, yani
+    ~1.5 km'ye yuvarlı; bu yüzden aynı istasyon iki kümede birebir aynı
+    noktaya düşmüyor — 2315 KML istasyonunun yalnız %1'i bir MGM istasyonunun
+    200 m'si içinde, %23'ü 2 km içinde. Eşik bu çözünürlüğe göre seçildi.
+
+    Kural bilerek TUTUCU: yalnız 0.5 km'den yakınlar, ya da 3 km'den yakın olup
+    adı da tutanlar aynı sayılır. Fazla birleştirmek gerçek bir istasyonu
+    silerdi; az birleştirmek ise iki Voronoi noktasını 1 km arayla bırakır ve
+    ikisi de aynı MGM istasyonuna bağlanacağı için ağırlıklı yağışı neredeyse
+    hiç değiştirmez. Hatanın ucuz tarafı bu.
+
+    Çakışmada ÖLÇÜM kaydı kazanır: `kod` taşıdığı için P24 eşleştirmesi arama
+    değil kimlik eşleşmesine iner.
+    """
+    out = list(olcum)
+    for s in ek:
+        lat, lon = s.get("lat"), s.get("lon")
+        if lat is None or lon is None:
+            continue
+        ayni = False
+        for m in olcum:
+            d = _mesafe_km(lat, lon, m["lat"], m["lon"])
+            if d <= AYNI_KM or (d <= AD_AYNI_KM and _ad_tutar(s.get("name"), m["name"])):
+                ayni = True
+                break
+        if not ayni:
+            out.append({"name": s.get("name"), "lat": lat, "lon": lon,
+                        "kurum": s.get("kurum") or "DMİ", "kod": None,
+                        "il": "", "yil_sayisi": 0, "kot": s.get("kot"),
+                        "kaynak": "kml"})
+    return out
+
+
+def thiessen_kumesi(ek_dosya=None):
+    """Adım 4'ün varsayılan istasyon kümesi — ölçüm veri tabanı + eski KML.
+
+    Eski `bir_cikti.kml` KALDIRILMADI, birleştirildi. İki küme farklı işler
+    görüyor: ölçüm veri tabanı P24'ü besliyor, eski KML ise MGM ağının
+    seyrek olduğu yerlerde Thiessen geometrisini ayakta tutuyor — 1734
+    istasyonu ölçüm veri tabanında yok ve atılsalardı o bölgelerde havza tek
+    bir uzak istasyonun hücresine düşerdi.
+
+    Ölçüm karşılığı olmayan istasyonlar `kod` taşımaz; Adım 5'te en yakın
+    uygun MGM istasyonuna koordinatla bağlanırlar.
+    """
+    global _kume_onbellek
+    anahtar = ek_dosya or ""
+    if _kume_onbellek and _kume_onbellek[0] == anahtar:
+        return _kume_onbellek[1]
+    olcum = olcum_kumesi()
+    if not ek_dosya or not os.path.exists(ek_dosya):
+        kume = olcum
+    else:
+        from backend.core import thiessen
+        with open(ek_dosya, "rb") as f:
+            kume = birlestir(olcum, thiessen.parse_kmz(f.read()))
+    # Birleştirme 1734×1267 mesafe hesabı; küme sabit olduğu için bir kez.
+    _kume_onbellek = (anahtar, kume)
+    return kume
+
+
+_kume_onbellek = None
+
+
 def yillik_maks(kod, ilk_yil=None, son_yil=None):
     """Yıllık en büyük günlük yağış serisi (mm), yıla göre sıralı."""
     db = _baglanti()
@@ -242,12 +328,24 @@ def eslestir(istasyonlar, en_az_yil=EN_AZ_YIL, en_cok_km=25.0,
     for s in hepsi:
         ada_gore.setdefault(_norm(s["ad"]), []).append(s)
 
+    ko_gore = {s["kod"]: s for s in hepsi}
     out = []
     for g in istasyonlar:
         ad = g.get("ad") or g.get("name") or ""
         lat, lon = g.get("lat"), g.get("lon")
         kayit = {"ad": ad, "eslesen": None, "yontem": None,
                  "mesafe_km": None, "adaylar": []}
+
+        # İstasyon zaten bu veri tabanından geldiyse (Adım 4'ün varsayılan
+        # kümesi) aramaya gerek yok — kimliği belli. Arama yalnız kullanıcının
+        # yüklediği KMZ ya da haritaya elle koyduğu noktalar için gerekir.
+        kod = g.get("kod")
+        if kod and kod in ko_gore:
+            kayit["eslesen"] = ko_gore[kod]
+            kayit["yontem"] = "kod"
+            kayit["mesafe_km"] = 0.0
+            out.append(kayit)
+            continue
 
         if lat is not None and lon is not None:
             yakin = sorted(

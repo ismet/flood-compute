@@ -291,8 +291,13 @@
 
     <!-- ADIM 4: Thiessen -->
     <section class="page hidden" data-page="4">
-      <p class="hint">Varsayılan istasyon seti (<code>data/stations/bir_cikti.kml</code>, MGM
-      istasyon ağı) otomatik kullanılır; isterseniz başka bir KMZ/KML yükleyin. Thiessen
+      <p class="hint">Varsayılan küme, <b>MGM ölçüm veri tabanı</b>
+      (<code>data/mgm/mgm.sqlite</code>, 1267 istasyon — Adım 5'te P2–P100 bunların
+      ölçümünden hesaplanır) ile eski istasyon ağının
+      (<code>data/stations/bir_cikti.kml</code>) <b>birleşimidir</b>. Ölçüm karşılığı
+      olmayan 1733 istasyon, MGM ağının seyrek olduğu bölgelerde Thiessen
+      geometrisini ayakta tutar; onların yağışı Adım 5'te en yakın uygun MGM
+      istasyonundan gelir. İsterseniz başka bir KMZ/KML yükleyin. Thiessen
       poligonları havzaya kesilerek alan ağırlıkları bulunur.</p>
       <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan</button>
       <input type="file" id="kmzFile" accept=".kmz,.kml">

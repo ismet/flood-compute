@@ -1729,12 +1729,14 @@ map.on("click", (ev) => {
 });
 
 async function useDefaultStations() {
-  setStatus("thStatus", "Varsayılan istasyonlar yükleniyor…", "loading");
+  setStatus("thStatus", "MGM istasyonları yükleniyor…", "loading");
   try {
     const r = await api("/api/stations/default");
     if (!r.istasyonlar.length)
-      return setStatus("thStatus", "Varsayılan KMZ bulunamadı (data/stations/)", "err");
-    await loadStationSet(r.istasyonlar, r.dosya);
+      return setStatus("thStatus",
+        "İstasyon kümesi boş (python tools/mgm_veritabani_olustur.py)", "err");
+    await loadStationSet(r.istasyonlar,
+      `${r.istasyonlar.length} istasyon — ${r.olcumlu} ölçümlü (MGM), ${r.ek} ek (KML)`);
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
 $("btnDefaultSt").onclick = useDefaultStations;
@@ -2376,7 +2378,10 @@ async function mgmOtomatikEslestir() {
   setStatus("rainStatus", "MGM istasyonları eşleştiriliyor ve frekans analizi yapılıyor…", "");
   try {
     const d = await api("/api/mgm-eslestir", {
-      istasyonlar: w.map(t => ({ ad: t.name, lat: t.lat, lon: t.lon })),
+      // kod varsa istasyon zaten MGM veri tabanından geliyor (Adım 4'ün
+      // varsayılan kümesi) — arama değil kimlik eşleşmesi. Koordinat/ad
+      // araması yalnız yüklenen KMZ ve elle konan noktalar için gerekir.
+      istasyonlar: w.map(t => ({ ad: t.name, lat: t.lat, lon: t.lon, kod: t.kod })),
       en_az_yil: 10, en_cok_km: 25, hesapla: true,
     });
     S.rainMeta = S.rainMeta || {};

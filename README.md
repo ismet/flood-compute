@@ -21,7 +21,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/dem/` | (Opsiyonel) yerel DEM'ler (EPSG:4326 GeoTIFF, VRT, ERDAS .img veya ESRI Grid klasörü). ASTER 30 m grid'i `data/dem/aster30m/` altına yerleştirin. Yoksa Copernicus GLO-30 karoları otomatik indirilir (`data/dem/cache/`). |
 | `data/corine/` | (Opsiyonel) yerel CORINE 2018 GeoTIFF (sınıf kodları 111–523 veya grid kodu 1–44). Havzayı kapsayan yerel raster yoksa **EEA CLC2018 servisinden otomatik indirilir** (100 m, resmi lejand renklerinden sınıflandırılır, `data/corine/cache/` altına önbelleklenir). |
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
-| `data/stations/` | Varsayılan istasyon seti (`bir_cikti.kml`, 2315 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
+| `data/stations/` | Eski istasyon ağı (`bir_cikti.kml`, 2315 istasyon). **Kaldırılmadı, MGM ölçüm veri tabanıyla birleştirilir**: Adım 4'ün varsayılan kümesi = 1267 ölçümlü MGM istasyonu + karşılığı olmayan 1733 KML istasyonu = 3000. İkisi farklı iş görüyor — ölçüm veri tabanı P24'ü besler, eski ağ MGM'nin seyrek olduğu bölgelerde Thiessen geometrisini ayakta tutar. Arayüzden farklı bir KMZ/KML de yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
 | `data/tables/mgm_plv_2020.json` | MGM 2020 tablosu — **yalnız 14 plüviyograf (PLV) oranı** için kullanılır. Dosyadaki P2–P500 sütunları duruyor ama `/api/mgm-stations` bunları **bilerek döndürmüyor**: P2–P100 artık `data/mgm/mgm.sqlite`'taki ham ölçümden hesaplanıyor. İki yağış kaynağını paralel tutmak, bir projede hangisinin kullanıldığını belirsiz bırakıyordu. `tools/extract_mgm_plv.py` ile üretilir. |
 | `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 24+ tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 5'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
@@ -45,9 +45,20 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    otomatik indirilir); seçilen hidrolojik zemin grubuna (A/B/C/D) göre
    `data/tables/corine_cn.json` tablosundan alansal ağırlıklı CN(II);
    CN(III) Excel'deki dönüşüm tablosuyla.
-4. **Thiessen** — Varsayılan `bir_cikti.kml` istasyonları otomatik yüklenir (veya
-   KMZ/KML yüklenir); Voronoi hücreleri havzaya kesilerek alan ağırlıkları
-   (DATAGİR H kolonu karşılığı) bulunur. Haritada yalnız pay alan istasyonlar çizilir.
+4. **Thiessen** — Varsayılan küme otomatik yüklenir: **MGM ölçüm veri tabanının
+   1267 istasyonu + eski `bir_cikti.kml`'in ölçüm karşılığı olmayan 1733
+   istasyonu = 3000**. (Veya kendi KMZ/KML'nizi yükleyin.) Voronoi hücreleri
+   havzaya kesilerek alan ağırlıkları (DATAGİR H kolonu karşılığı) bulunur;
+   haritada yalnız pay alan istasyonlar çizilir.
+
+   Tekilleştirme MGM koordinatlarının **derece-dakika** çözünürlüğüne göre
+   ayarlıdır (aynı istasyon iki kümede ~1.5 km sapabiliyor; 2315 KML
+   istasyonunun yalnız %1'i bir MGM istasyonunun 200 m'si içinde). Kural
+   bilerek tutucu — 0.5 km'den yakınlar, ya da 3 km'den yakın olup adı da
+   tutanlar aynı sayılır. Fazla birleştirmek gerçek bir istasyonu silerdi; az
+   birleştirmek iki Voronoi noktasını bir kilometre arayla bırakır ve ikisi de
+   aynı MGM istasyonuna bağlanacağı için ağırlıklı yağışı neredeyse hiç
+   değiştirmez.
 5. **Yağış** — **📊 Ölçümden hesapla** düğmesi Thiessen istasyonlarını MGM ölçüm
    veritabanına (`data/mgm/mgm.sqlite`) bağlar ve P2–P100'ü her istasyonun
    **yıllık en büyük günlük yağış** serisinden frekans analiziyle üretir — NTFA

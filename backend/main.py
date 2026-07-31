@@ -489,20 +489,29 @@ def api_yzd_region(req: CNReq):
 
 @app.get("/api/stations/default")
 def api_stations_default():
-    """data/stations (yoksa proje kökü) altındaki ilk KMZ/KML'yi varsayılan
-    istasyon seti olarak döner."""
+    """Thiessen'in varsayılan istasyon kümesi — MGM ölçüm veri tabanı + eski KML.
+
+    İki kaynak birleştirilir, silinmez: ölçüm veri tabanı (`data/mgm/mgm.sqlite`)
+    P24'ü besler, eski `data/stations/bir_cikti.kml` ise MGM ağının seyrek
+    olduğu bölgelerde Thiessen geometrisini ayakta tutar. Tekilleştirme
+    `mgm.birlestir()` içinde, MGM koordinatlarının derece-dakika çözünürlüğüne
+    göre ayarlanmış eşiklerle yapılır.
+
+    Kendi kümesini kullanmak isteyen `POST /api/stations` ile KMZ/KML yükler.
+    """
+    from backend.core import mgm
     try:
-        cands = []
-        for d in (os.path.join(ROOT, "data", "stations"), ROOT):
-            if os.path.isdir(d):
-                cands += [os.path.join(d, f) for f in sorted(os.listdir(d))
-                          if f.lower().endswith((".kmz", ".kml"))]
-        if not cands:
-            return {"istasyonlar": [], "dosya": None}
-        from backend.core import thiessen
-        with open(cands[0], "rb") as f:
-            sts = thiessen.parse_kmz(f.read())
-        return {"istasyonlar": sts, "dosya": os.path.basename(cands[0])}
+        kml = None
+        d = os.path.join(ROOT, "data", "stations")
+        if os.path.isdir(d):
+            aday = [os.path.join(d, f) for f in sorted(os.listdir(d))
+                    if f.lower().endswith((".kmz", ".kml"))]
+            kml = aday[0] if aday else None
+        sts = mgm.thiessen_kumesi(kml)
+        n_olcum = sum(1 for s in sts if s.get("kod"))
+        return {"istasyonlar": sts, "kaynak": "mgm+kml",
+                "dosya": f"mgm.sqlite + {os.path.basename(kml)}" if kml else "mgm.sqlite",
+                "olcumlu": n_olcum, "ek": len(sts) - n_olcum}
     except Exception as e:
         return _err(e)
 
