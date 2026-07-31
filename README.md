@@ -254,13 +254,27 @@ hesaba katıyor.
 
 **Net yağış neden P − PET değil:** Türkiye'de PET (1138 mm) yağıştan (740 mm)
 büyüktür; P − PET neredeyse her yerde negatif çıkar ve bu *iklimsel su
-açığıdır*, akış değildir — buharlaşabilecek su düşenden çok olamaz. Bu yüzden
-gerçek buharlaşma (AET) Budyko çerçevesinde Fu (1981) bağıntısıyla kestirilir:
+açığıdır*, akış değildir — buharlaşabilecek su düşenden çok olamaz.
 
-> AET/P = 1 + PET/P − [1 + (PET/P)^ω]^(1/ω), ω = 2.6 (Zhang vd. 2004)
+**Neden aylık hesap:** Net yağış yıllık toplamlardan değil, **aylık su
+bütçesinden** çıkarılır. Türkiye'de yağış kışa, buharlaşma isteği yaza yığılır;
+yıllık toplamlar bu karşıtlığı yutup kışın doğrudan akışa geçen suyu görmez.
+Her ay için: 0 °C altındaki yağış kar olarak birikir ve sıcaklıkla erir
+(derece-gün, 2.5 mm/°C/gün); giren su PET'i aşarsa toprak dolar, AWC'yi aşan
+kısım akışa geçer; açık kalırsa toprak neminden çekilir. Başlangıç neminin
+etkisi sönsün diye 12 ay üç kez döndürülür.
 
-Sonuç kuraklık gradyanı boyunca doğru davranıyor: Rize'de akış katsayısı 0.67
-(enerji sınırlı), Konya'da 0.07 (su sınırlı — kapalı havza).
+**AWC toprak verisinden gelir.** Kullanılabilir su tutma kapasitesi sonucun
+baskın parametresidir (50 mm ile 200 mm arasında ülke akışı 180'den 98 km³'e
+iner), bu yüzden sabit varsayılmaz: ISRIC **SoilGrids v2.0**'dan (1 km, CC-BY)
+kum, kil, organik karbon ve iri taneli malzeme okunup 0–100 cm için Saxton &
+Rawls (2006) pedotransfer fonksiyonlarıyla türetilir —
+`python tools/awc_soilgrids.py`. Türkiye'de **58–172 mm, ortalama 115 mm**.
+
+Sonuç kuraklık gradyanı boyunca doğru davranıyor: Rize'de akış katsayısı 0.64
+(AET, PET'e dayanır — enerji sınırlı), Konya'da **net = 0** ve havza akış
+katsayısı 0.005 — kapalı havzada düşen suyun tamamı buharlaşır. Akışın %87'si
+kış+ilkbaharda, Nisan'da zirve (kar erimesi), Temmuz–Ağustos'ta ~1.5 mm.
 
 Katman açıkken **haritaya tıklayınca** o noktanın P, PET, AET, net yağış ve
 akış katsayısı balonda okunur; seçili katmanın satırı koyu gösterilir. Outlet

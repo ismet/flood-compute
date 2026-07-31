@@ -25,7 +25,8 @@ python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/aka
 python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
-python tools/yagis_haritasi_indir.py                  # one-off: CHELSA bio12 -> data/yagis/yagis_tr.tif
+python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc_tr.tif (run FIRST)
+python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
 docker build -t taskin-hesap .                        # build Docker image
@@ -74,11 +75,17 @@ backend/core/         — Computation engine (no framework dependency)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
   akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
   yagis.py              — Climate layers (CHELSA v2.1, ~1 km): precipitation, PET
-                          and net precipitation (P−AET, Budyko-Fu ω=2.6 ≈ runoff
-                          depth). Colour-ramped XYZ tiles, point query, basin
-                          areal means. Net is NOT P−PET: PET exceeds P over most
-                          of Turkey, so that difference is a climatic deficit,
-                          not runoff.
+                          and net precipitation (≈ runoff depth). Colour-ramped
+                          XYZ tiles, point query, basin areal means. Net is NOT
+                          P−PET: PET exceeds P over most of Turkey, so that
+                          difference is a climatic deficit, not runoff. Net comes
+                          from a MONTHLY Thornthwaite-Mather balance with a
+                          degree-day snow model (see tools/yagis_haritasi_indir.py)
+                          — annual totals hide Turkey's wet-winter/dry-summer
+                          contrast and undercount runoff by ~10%.
+                          nodata is 65535, NOT 0: zero runoff is a legitimate
+                          value over closed basins (Konya: P=389, AET=389, net=0).
+                          Any masking here must compare against src.nodata.
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)

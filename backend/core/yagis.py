@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Yıllık toplam yağış katmanı — CHELSA v2.1 bio12 (1981-2010), ~1 km piksel.
+"""İklim katmanları — CHELSA v2.1 (1981-2010), ~1 km piksel.
+
+Üç katman: yağış (P), potansiyel evapotranspirasyon (PET) ve net yağış
+(P − AET ≈ yıllık akış yüksekliği).
 
 Neden CHELSA: 1005 MGM istasyonuna karşı yapılan karşılaştırmada Türkiye'de
 yıllık yağışta en yüksek uyumu veren ızgara veri seti (Lin CCC 0.824; ERA5-Land
@@ -7,12 +10,16 @@ yıllık yağışta en yüksek uyumu veren ızgara veri seti (Lin CCC 0.824; ERA
 WorldClim, Akdeniz'in dağlık kesiminde yükselti-yağış ilişkisini ters çevirecek
 kadar sapıyor; CHELSA orografik etkiyi hesaba katıyor.
 
-Veri `data/yagis/yagis_tr.tif` (2.5 MB, Türkiye kırpması) —
+Veri `data/yagis/{yagis,pet,net}_tr.tif` (toplam ~6 MB, Türkiye kırpması) —
 `tools/yagis_haritasi_indir.py` ile üretilir. Değerler uint16 ve dosyada
 gömülü ölçek 0.1 ile mm/yıl'a çevrilir.
 
+NODATA 65535'TİR, 0 DEĞİL. Net yağışta sıfır akış meşru bir değerdir (kapalı
+havzada düşen suyun tamamı buharlaşır: Konya P=389, AET=389, net=0); "veri yok"
+ile karıştırılamaz. Buradaki her maske `src.nodata` ile karşılaştırılmalıdır.
+
 Katman altlık değil TEMATİK haritadır: renk merdiveniyle çizilir, tıklanan
-noktanın ve çıkarılan havzanın ortalama yağışı sorgulanabilir. Havza ortalaması
+noktanın ve çıkarılan havzanın ortalaması sorgulanabilir. Havza ortalaması
 hidrolojik olarak asıl işe yarayan büyüklüktür.
 """
 import io
@@ -142,24 +149,28 @@ def karo(z, x, y, katman=VARSAYILAN, saydamlik=190):
 
     src = _kaynak(katman)
     basamak = KATMANLAR[katman]["basamak"]
+    bos = src.nodata if src.nodata is not None else 0
     xmin, ymin, xmax, ymax = karo_sinirlari(z, x, y)
     hedef_tr = tr_from_bounds(xmin, ymin, xmax, ymax, KARO, KARO)
-    ham = np.zeros((KARO, KARO), dtype="uint16")
+    ham = np.full((KARO, KARO), bos, dtype="uint16")
     reproject(source=__import__("rasterio").band(src, 1), destination=ham,
               src_transform=src.transform, src_crs=src.crs,
               dst_transform=hedef_tr, dst_crs="EPSG:3857",
-              resampling=Resampling.bilinear, src_nodata=0, dst_nodata=0)
-    if not ham.any():
+              resampling=Resampling.bilinear, src_nodata=bos, dst_nodata=bos)
+    gecerli = ham != bos
+    if not gecerli.any():
         return None
 
+    # Sıfır akış meşru bir değerdir (kurak havza), boşlukla karıştırılmaz —
+    # renk basamağı ilk sınıftan başlar, saydamlık yalnız nodata'ya uygulanır.
     mm = ham.astype("float32") * _olcek(src)
     rgba = np.zeros((KARO, KARO, 4), dtype="uint8")
-    onceki = 0
+    onceki = -1e-6
     for sinir, renk in basamak:
-        maske = (mm > onceki) & (mm <= sinir)
+        maske = gecerli & (mm > onceki) & (mm <= sinir)
         rgba[maske] = (*renk, saydamlik)
         onceki = sinir
-    rgba[mm <= 0] = (0, 0, 0, 0)
+    rgba[~gecerli] = (0, 0, 0, 0)
 
     tampon = io.BytesIO()
     Image.fromarray(rgba, "RGBA").save(tampon, format="PNG", optimize=True)
@@ -177,8 +188,9 @@ def nokta(lat, lon):
         if not (b.left <= lon <= b.right and b.bottom <= lat <= b.top):
             raise ValueError("Nokta haritanın kapsamı dışında")
         v = next(src.sample([(lon, lat)], 1))[0]
-        out[k] = (float(v) * _olcek(src)) if v else None
-    if out.get("yagis") and out.get("net") is not None:
+        bos = src.nodata if src.nodata is not None else 0
+        out[k] = None if v == bos else float(v) * _olcek(src)
+    if out.get("yagis") is not None and out.get("net") is not None:
         out["aet"] = out["yagis"] - out["net"]
     return out
 
@@ -187,9 +199,10 @@ def _ozet(src, geometri):
     import numpy as np
     from rasterio.mask import mask
 
-    kesit, _ = mask(src, [geometri], crop=True, filled=True, nodata=0)
-    a = kesit[0].astype("float32") * _olcek(src)
-    g = a[a > 0]
+    bos = src.nodata if src.nodata is not None else 0
+    kesit, _ = mask(src, [geometri], crop=True, filled=True, nodata=bos)
+    ham = kesit[0]
+    g = ham[ham != bos].astype("float32") * _olcek(src)   # 0 geçerli değerdir
     if not g.size:
         return None
     return {"piksel": int(g.size), "ortalama_mm": float(g.mean()),
