@@ -22,6 +22,7 @@ python backend/tests/test_btfa_golden.py              # BTFA golden (Karamandere
 python backend/tests/test_mmy_golden.py               # MMY golden (Hershfield PMP, 2 workbooks)
 python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
+python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data
 docker build -t taskin-hesap .                        # build Docker image
@@ -78,6 +79,7 @@ backend/core/         — Computation engine (no framework dependency)
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
+  su.py                 — Water potential/supply from daily flow series (volume, not peak)
   agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
@@ -88,6 +90,11 @@ data/akarsu/          — akarsu.sqlite, DSİ river network at 1/100k–1/500k
                         (~405k lines, 110 MB; gitignored, built by the tool above)
 data/agi/             — agi.sqlite, DSİ+EİE annual peak flows 1935–2020
                         (2732 stations / 36.5k station-years, 3.8 MB)
+data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
+                        8.9M days). Built from the 1.68 GB Data.db; each
+                        station's series is one zlib'd float32 blob (NaN =
+                        missing day), which is why it fits in 11.5 MB and why
+                        a whole station reads in one row.
 ```
 
 ---
@@ -116,6 +123,9 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `POST /api/btfa` | BTFA — regional index-flood from several station codes + basin area |
 | `GET /api/mmy-bolgeler` | Regions that have a Km envelope curve (for MMY) |
 | `POST /api/mmy` | MMY — Hershfield PMP from an annual max daily rainfall series |
+| `GET /api/su-bilgi` | Whether the daily-flow (water potential) database is installed |
+| `GET /api/su-istasyon` | Daily-flow stations in a bbox (`en_az_yil` filters short records) |
+| `POST /api/su` | Water potential: Qort, monthly split, annual volume, FDC, supply reliability |
 | `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |

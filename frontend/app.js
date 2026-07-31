@@ -2419,13 +2419,17 @@ multiLayers.poly.remove(); multiLayers.pts.remove(); // varsayılan gizli
 function setMode(mode) {
   S.mode = mode;
   const multi = mode === "multi", dil = mode === "dilekce", wiz = mode === "wizard";
+  const suM = mode === "su";
   $("modeWizard").classList.toggle("active", wiz);
   $("modeMulti").classList.toggle("active", multi);
   $("modeDilekce").classList.toggle("active", dil);
+  $("modeSu").classList.toggle("active", suM);
   $("steps").classList.toggle("hidden", !wiz);
   if (!wiz) document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
   $("multiMode").classList.toggle("hidden", !multi);
   $("dilekceMode").classList.toggle("hidden", !dil);
+  $("suMode").classList.toggle("hidden", !suM);
+  if (suM) suBaslat(); else layers.su.remove();
   $("rainDock").classList.add("hidden");
   if (multi) {
     // Mansap noktası varsayılan: tek havzadaki outlet (kullanıcı elle değiştirmediyse hep senkron)
@@ -2448,6 +2452,141 @@ function setMode(mode) {
 $("modeWizard").onclick = () => setMode("wizard");
 $("modeMulti").onclick = () => setMode("multi");
 $("modeDilekce").onclick = () => setMode("dilekce");
+$("modeSu").onclick = () => setMode("su");
+
+/* ---------------- SU POTANSİYELİ ----------------
+   Günlük akım serilerinden hacim odaklı değerlendirme. Taşkın tarafındaki
+   AGİ katmanından ayrı bir veri tabanı (2909 istasyon, 1934-2015).        */
+layers.su = L.layerGroup();
+S.suSecili = null;
+
+function suIsaretle() {
+  layers.su.eachLayer(l => {
+    if (!l.su) return;
+    const sec = S.suSecili && S.suSecili.kod === l.su.kod;
+    l.setStyle({ radius: sec ? 8 : 5, color: sec ? "#000" : "#00695c",
+                 weight: sec ? 3 : 1.5, fillColor: "#26a69a", fillOpacity: 0.85 });
+  });
+  $("btnSu").disabled = !S.suSecili;
+}
+
+function suSec(s) {
+  S.suSecili = s;
+  suIsaretle();
+  $("suInfo").innerHTML = `<b>${s.kod}</b> ${(s.ad || "").replace(/_/g, " ")} — `
+    + `${s.ilk_tarih}…${s.son_tarih}, ${(s.veri_gun / 365).toFixed(0)} yıllık veri`
+    + (s.alan_km2 ? ` · yağış alanı ${fmt(s.alan_km2, 1)} km²` : "")
+    + (s.q_ort != null ? ` · Q<sub>ort</sub> ${fmt(s.q_ort, 2)} m³/s` : "");
+  $("suSonuc").innerHTML = "";
+}
+
+async function suBaslat() {
+  layers.su.addTo(map);
+  try {
+    const b = await api("/api/su-bilgi");
+    if (!b.var) {
+      $("btnSuGetir").disabled = true;
+      $("suInfo").textContent = "veri yok — tools/su_veritabani_olustur.py ile üretin";
+    } else if (!S.suSecili) {
+      $("suInfo").textContent = `${b.istasyon.toLocaleString("tr")} istasyon · `
+        + `${b.gun.toLocaleString("tr")} günlük kayıt · ${b.ilk_tarih}…${b.son_tarih}`;
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+}
+
+$("btnSuGetir").onclick = async () => {
+  const b = map.getBounds();
+  setStatus("suStatus", "İstasyonlar getiriliyor…", "loading");
+  try {
+    const q = new URLSearchParams({
+      bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
+      en_az_yil: +$("suEnAzYil").value || 5,
+    });
+    const r = await api("/api/su-istasyon?" + q.toString());
+    layers.su.clearLayers();
+    r.istasyonlar.forEach(s => {
+      if (s.lat == null || s.lon == null) return;
+      const m = L.circleMarker([s.lat, s.lon], { radius: 5 });
+      m.su = s;
+      m.bindTooltip(`${s.kod} — ${(s.ad || "").replace(/_/g, " ")}`, { sticky: true });
+      m.on("click", () => suSec(s));
+      m.addTo(layers.su);
+    });
+    const sat = (s) => `<tr data-kod="${s.kod}" class="su-sat"><td>${s.kod}</td>`
+      + `<td>${(s.ad || "").replace(/_/g, " ")}</td>`
+      + `<td style="text-align:right">${(s.veri_gun / 365).toFixed(0)}</td>`
+      + `<td style="text-align:right">${s.alan_km2 ? fmt(s.alan_km2, 1) : "—"}</td>`
+      + `<td style="text-align:right">${s.q_ort != null ? fmt(s.q_ort, 2) : "—"}</td></tr>`;
+    $("suListe").innerHTML = r.istasyonlar.length
+      ? '<table class="tbl small"><tr><th>Kod</th><th>Ad</th><th>Yıl</th>'
+        + "<th>A (km²)</th><th>Q<sub>ort</sub></th></tr>"
+        + r.istasyonlar.map(sat).join("") + "</table>"
+      : '<p class="small">Bu pencerede yeterli uzunlukta istasyon yok.</p>';
+    $("suListe").querySelectorAll(".su-sat").forEach(tr => {
+      tr.onclick = () => {
+        const s = r.istasyonlar.find(x => x.kod === tr.dataset.kod);
+        if (s) { suSec(s); map.setView([s.lat, s.lon], Math.max(map.getZoom(), 10)); }
+      };
+    });
+    suIsaretle();
+    setStatus("suStatus", `${r.istasyonlar.length} istasyon — birini seçin.`, "ok");
+  } catch (e) {
+    setStatus("suStatus", "İstasyonlar getirilemedi: " + e.message, "err");
+  }
+};
+
+$("btnSu").onclick = async () => {
+  if (!S.suSecili) return;
+  setStatus("suStatus", "Hesaplanıyor…", "loading");
+  try {
+    const o = await api("/api/su", {
+      kod: S.suSecili.kod,
+      ilk_yil: +$("suIlkYil").value || 0,
+      son_yil: +$("suSonYil").value || 0,
+      talep_ls: $("suTalep").value === "" ? null : +$("suTalep").value,
+    });
+    S.su = o;
+    const i = o.istasyon, d = o.donem;
+    const sag = (v, n = 2) => `<td style="text-align:right">${v == null ? "—" : fmt(v, n)}</td>`;
+    let h = `<h3 class="small">${i.kod} — ${(i.ad || "").replace(/_/g, " ")}</h3>`
+      + '<table class="tbl small">'
+      + `<tr><td>Dönem</td><td>${d.ilk_su_yili}–${d.son_su_yili} su yılı `
+      + `(${d.tam_yil} tam yıl, ${d.gun.toLocaleString("tr")} gün)</td></tr>`
+      + `<tr><td>Ortalama akım Q<sub>ort</sub></td><td><b>${fmt(o.q_ort, 3)}</b> m³/s</td></tr>`
+      + `<tr><td>Yıllık hacim</td><td><b>${fmt(o.yillik_hacim_hm3, 1)}</b> hm³/yıl</td></tr>`
+      + (o.ozgul_verim_ls_km2 != null
+          ? `<tr><td>Özgül verim</td><td>${fmt(o.ozgul_verim_ls_km2, 2)} L/s/km²</td></tr>`
+            + `<tr><td>Yıllık verim</td><td>${fmt(o.yillik_verim_mm, 0)} mm</td></tr>` : "")
+      + `<tr><td>En küçük / en büyük günlük</td><td>${fmt(o.q_min, 3)} / `
+      + `${fmt(o.q_maks, 1)} m³/s</td></tr></table>`;
+
+    h += '<p class="small"><b>Güvenilir debiler</b> (debi süreklilik eğrisinden)</p>'
+      + '<table class="tbl small"><tr><th>Aşılma süresi</th>'
+      + Object.keys(o.guvenilir_debi).map(p => `<th style="text-align:right">%${p}</th>`).join("")
+      + "</tr><tr><td>Q (m³/s)</td>"
+      + Object.values(o.guvenilir_debi).map(v => sag(v, 3)).join("") + "</tr></table>";
+
+    h += '<p class="small"><b>Aylık dağılım</b> (su yılı)</p><table class="tbl small">'
+      + "<tr><th>Ay</th>" + o.aylik.map(a => `<th style="text-align:right">${a.ad.slice(0, 3)}</th>`).join("")
+      + "</tr><tr><td>Q<sub>ort</sub></td>" + o.aylik.map(a => sag(a.q_ort, 2)).join("")
+      + "</tr><tr><td>hm³</td>" + o.aylik.map(a => sag(a.hacim_hm3, 1)).join("")
+      + "</tr></table>";
+
+    if (o.temin) {
+      const t = o.temin;
+      h += `<p class="small"><b>Su temini</b> — talep ${fmt(t.talep_ls, 0)} L/s `
+        + `(${fmt(t.yillik_talep_hm3, 2)} hm³/yıl)</p><table class="tbl small">`
+        + `<tr><td>Karşılanma güvenilirliği</td><td><b>%${fmt(t.guvenilirlik_yuzde, 1)}</b> `
+        + `(${t.karsilanan_gun.toLocaleString("tr")} / ${t.toplam_gun.toLocaleString("tr")} gün)</td></tr>`
+        + `<tr><td>Yıllık ortalama açık</td><td>${fmt(t.yillik_acik_hm3, 3)} hm³</td></tr></table>`;
+    }
+    $("suSonuc").innerHTML = h;
+    setStatus("suStatus", `Q_ort = ${fmt(o.q_ort, 3)} m³/s · `
+      + `${fmt(o.yillik_hacim_hm3, 1)} hm³/yıl.`, "ok");
+  } catch (e) {
+    setStatus("suStatus", "Hesaplanamadı: " + e.message, "err");
+  }
+};
 
 /* ---------------- DİLEKÇE (MGM veri talebi) ---------------- */
 let dilStGrid = null, dilInited = false;

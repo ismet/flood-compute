@@ -26,6 +26,7 @@
       <button id="modeWizard" class="mode-btn active">Tek Havza</button>
       <button id="modeMulti" class="mode-btn">Ara Havza</button>
       <button id="modeDilekce" class="mode-btn">Dilekçe</button>
+      <button id="modeSu" class="mode-btn" title="AGİ günlük akım serilerinden su potansiyeli ve su temini güvenilirliği. Taşkın hesabından bağımsızdır.">Su Potansiyeli</button>
     </div>
 
     <nav id="steps">
@@ -79,6 +80,31 @@
       </div>
       <div id="multiStatus" class="status"></div>
       <div id="multiResults"></div>
+    </section>
+
+    <!-- SU POTANSİYELİ MODU -->
+    <section id="suMode" class="hidden">
+      <p class="hint">AGİ'lerin <b>günlük akım</b> serilerinden su potansiyeli
+      (1934–2015, 2909 istasyon). Taşkın hesabından bağımsızdır: burada pik değil
+      <b>hacim</b> önemlidir — ortalama akım, aylık dağılım, yıllık hacim, debi
+      süreklilik eğrisi ve verilen bir talebin ne kadar süre karşılandığı.
+      Haritayı istediğiniz yere getirip istasyonları listeleyin.</p>
+
+      <div class="rain-tools">
+        <button id="btnSuGetir" class="primary" title="Haritada görünen pencere içindeki günlük akım istasyonlarını getirir.">📍 Görünen alandaki istasyonlar</button>
+        <label class="inline" title="Bu kadar yıldan kısa serisi olan istasyonlar listelenmez.">En az yıl<input id="suEnAzYil" type="number" min="1" step="1" value="10" style="width:70px"></label>
+      </div>
+      <div id="suInfo" class="small"></div>
+      <div id="suListe" class="small"></div>
+
+      <div class="rain-tools" style="margin-top:4px">
+        <label class="inline" title="Analize girecek ilk su yılı (1 Ekim başlangıçlı). Boş = tümü.">İlk su yılı<input id="suIlkYil" type="number" step="1" placeholder="tümü" style="width:90px"></label>
+        <label class="inline">Son su yılı<input id="suSonYil" type="number" step="1" placeholder="tümü" style="width:90px"></label>
+        <label class="inline" title="Sürekli su talebi. Serinin yüzde kaçında bu debinin karşılandığı ve yıllık açık hacmi hesaplanır.">Talep (L/s)<input id="suTalep" type="number" step="1" placeholder="ör. 250" style="width:90px"></label>
+        <button id="btnSu" class="primary" disabled>Potansiyeli hesapla</button>
+      </div>
+      <div id="suStatus" class="status"></div>
+      <div id="suSonuc"></div>
     </section>
 
     <!-- DİLEKÇE MODU -->

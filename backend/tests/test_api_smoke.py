@@ -110,4 +110,22 @@ else:
         print(f"BTFA OK: {bt['kullanilan_sayisi']} istasyon, "
               f"Q2 = {bt['q2_indeks']:.1f}, Q100 = {bt['btfa']['q'][5]:.1f} m³/s")
 
+# --- su potansiyeli (kurulu değilse atlanır)
+sb = c.get("/api/su-bilgi").json()
+if not sb.get("var"):
+    print("Su potansiyeli atlandı: veri tabanı yok "
+          "(tools/su_veritabani_olustur.py ile üretilir)")
+else:
+    r = c.get("/api/su-istasyon", params={"bati": 27.5, "guney": 40.5, "dogu": 30.5,
+                                          "kuzey": 41.8, "en_az_yil": 20}).json()
+    assert r["istasyonlar"], "pencerede günlük akım istasyonu yok"
+    o = c.post("/api/su", json={"kod": r["istasyonlar"][0]["kod"],
+                                "talep_ls": 250}).json()
+    assert o["q_ort"] > 0 and o["yillik_hacim_hm3"] > 0, o.get("hata")
+    assert len(o["aylik"]) == 12 and o["aylik"][0]["ad"] == "Ekim"
+    assert 0 <= o["temin"]["guvenilirlik_yuzde"] <= 100
+    print(f"Su potansiyeli OK: {sb['istasyon']} istasyon, "
+          f"{o['istasyon']['kod']} Qort = {o['q_ort']:.2f} m³/s, "
+          f"{o['yillik_hacim_hm3']:.0f} hm³/yıl")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")

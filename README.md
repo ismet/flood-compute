@@ -27,6 +27,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
+| `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (6 adım)
 
@@ -117,6 +118,20 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    derinlik 6. adımdaki **OET** yağışına yazılarak muhtemel maksimum feyezan
    (Q<sub>OET</sub>) elde edilir. `backend/core/mmy.py`, golden test:
    `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
+
+## Su Potansiyeli modu
+
+Üst kısımdaki **Su Potansiyeli** düğmesiyle geçilir; taşkın hesabından
+bağımsızdır. Burada pik değil **hacim** sorulur: bir AGİ'nin günlük akım
+serisinden ortalama akım (Q<sub>ort</sub>), yıllık hacim (hm³), özgül verim
+(L/s/km²), yıllık verim (mm), su yılı bazında aylık dağılım ve **debi
+süreklilik eğrisi** ile güvenilir debiler (Q50/Q75/Q90/Q95) çıkarılır.
+
+**Su temini** için bir talep (L/s) girilirse serinin yüzde kaçında bu debinin
+karşılandığı (güvenilirlik) ve yıllık ortalama açık hacmi hesaplanır.
+
+Haritayı ilgilendiğiniz alana getirip **Görünen alandaki istasyonlar** ile
+listeleyin, birini seçip hesaplayın. `backend/core/su.py`.
 
 ## Ara Havza (çok parçalı havza) modu
 

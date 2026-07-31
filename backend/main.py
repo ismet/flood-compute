@@ -942,6 +942,47 @@ def api_mmy(g: MmyGirdi):
         return _err(e)
 
 
+@app.get("/api/su-bilgi")
+def api_su_bilgi():
+    """Su potansiyeli (günlük akım) veri tabanı kurulu mu."""
+    from backend.core import su
+    try:
+        return su.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/su-istasyon")
+def api_su_istasyon(bati: float, guney: float, dogu: float, kuzey: float,
+                    en_az_yil: int = 5):
+    """Pencere içindeki günlük akım istasyonları."""
+    from backend.core import su
+    try:
+        return {"istasyonlar": su.pencere((bati, guney, dogu, kuzey),
+                                          en_az_yil=en_az_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+class SuGirdi(BaseModel):
+    kod: str
+    ilk_yil: int = 0                    # su yılı sınırları (boş = tümü)
+    son_yil: int = 0
+    talep_ls: float | None = None       # sürekli su talebi (L/s)
+
+
+@app.post("/api/su")
+def api_su(g: SuGirdi):
+    """Su potansiyeli: ortalama akım, aylık dağılım, yıllık hacim, süreklilik
+    eğrisi, güvenilir debiler ve (talep verilirse) karşılanma güvenilirliği."""
+    from backend.core import su
+    try:
+        return su.potansiyel(g.kod, g.ilk_yil or None, g.son_yil or None,
+                             talep_ls=g.talep_ls)
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""
