@@ -865,6 +865,47 @@ def api_tfa(g: TfaGirdi):
         return _err(e)
 
 
+class BtfaGirdi(BaseModel):
+    kodlar: list[str]                   # bölgesel analize girecek AGİ'ler
+    alan_km2: float                     # proje havzasının yağış alanı
+    us: float | None = None             # alan-debi üssü (boşsa veriden hesaplanır)
+    katsayi: float | None = None        # bağıntı katsayısı (üs elle verildiyse, vars. 1)
+    katsayi_serbest: bool = False       # regresyonda a serbest mi, a=1 mi
+    disla: list[str] = []               # büyüme eğrisine katılmayacaklar
+    transfer_kod: str = ""              # tek istasyondan alan oranıyla aktarım
+    transfer_ussu: float = 2.0 / 3.0
+    ilk_yil: int = 0
+    son_yil: int = 0
+    dusuk_guveni_at: bool = False
+
+
+@app.post("/api/btfa")
+def api_btfa(g: BtfaGirdi):
+    """Bölgesel Taşkın Frekans Analizi (BTFA) — indeks-debi yöntemi.
+
+    Seçilen AGİ'lerin her biri için NTFA yapılır, boyutsuz büyüme eğrileri
+    (QT/Q2) ortalanır ve havzanın indeks debisi alan-debi bağıntısından
+    bulunarak Q2…Q10000 üretilir."""
+    from backend.core import agi, btfa
+    try:
+        seriler = []
+        for kod in g.kodlar:
+            ist = agi.istasyon(kod)
+            s = agi.seri(kod, g.ilk_yil or None, g.son_yil or None, g.dusuk_guveni_at)
+            seriler.append({"kod": kod, "ad": ist["ad"], "alan": ist["yagis_alani"],
+                            "x": [k["q"] for k in s]})
+        eksik = [s["kod"] for s in seriler if not s["alan"]]
+        if eksik:
+            raise ValueError("Yağış alanı bilinmeyen istasyon bölgesel analize "
+                             f"giremez: {', '.join(eksik)}")
+        return btfa.bolgesel(seriler, g.alan_km2, us=g.us, katsayi=g.katsayi,
+                             katsayi_serbest=g.katsayi_serbest, disla=g.disla,
+                             transfer_kod=g.transfer_kod or None,
+                             transfer_ussu=g.transfer_ussu)
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""

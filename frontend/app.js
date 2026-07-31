@@ -169,7 +169,11 @@ function activateStep(n) {
     $("rasyonelBox").open = true;
   }
   if (n === 6) updateComputeReady();
-  if (n === 7) agiKatmanAc();
+  if (n === 7) {
+    agiKatmanAc();
+    // havza çıkarıldıysa alanı BTFA'ya taşı (kullanıcı yine de değiştirebilir)
+    if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
+  }
 }
 const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`).classList.add("done");
 const setStatus = (id, msg, cls = "") => {
@@ -480,7 +484,9 @@ map.on("moveend zoomend", () => {
    İstasyonlar havza poligonuyla sorgulanır; tampon dışarıyı da kapsar, çünkü
    çıkarılan havzada AGİ olmayabilir ve komşu havza karşılaştırması gerekir.  */
 layers.agi = L.layerGroup();
-S.agiSecili = null;
+S.agiSecili = null;        // noktasal analiz (tek istasyon)
+S.agiBolgesel = new Set(); // bölgesel analiz (çok istasyon)
+S.agiListe = [];
 
 const agiRenk = (s) => (s.kurum === "EİE" ? "#6a1b9a" : "#e65100");
 
@@ -489,15 +495,32 @@ function agiIsaretle() {
     const s = l.agi;
     if (!s) return;
     const secili = S.agiSecili && S.agiSecili.kod === s.kod;
+    const bolgesel = S.agiBolgesel.has(s.kod);
     l.setStyle({
-      radius: secili ? 8 : 5,
-      color: secili ? "#000" : agiRenk(s),
-      weight: secili ? 3 : 1.5,
+      radius: secili ? 8 : (bolgesel ? 7 : 5),
+      color: secili ? "#000" : (bolgesel ? "#00695c" : agiRenk(s)),
+      weight: secili ? 3 : (bolgesel ? 2.5 : 1.5),
       fillColor: agiRenk(s),
       fillOpacity: s.icinde === false ? 0.25 : 0.85,
     });
   });
   $("btnTfa").disabled = !S.agiSecili;
+  $("btnBtfa").disabled = S.agiBolgesel.size < 2;
+  const n = S.agiBolgesel.size;
+  $("btfaStatus").textContent = n
+    ? `${n} istasyon bölgesel analize işaretli` + (n < 2 ? " — en az 2 gerekir" : "")
+    : "";
+  // aktarım açılır listesi yalnız işaretlilerden seçilebilsin
+  const sec = $("btfaTransfer"), onceki = sec.value;
+  sec.innerHTML = '<option value="">yok</option>'
+    + S.agiListe.filter(s => S.agiBolgesel.has(s.kod))
+        .map(s => `<option value="${s.kod}">${s.kod} — ${s.ad || ""}</option>`).join("");
+  sec.value = S.agiBolgesel.has(onceki) ? onceki : "";
+}
+
+function agiBolgeselDegis(kod, ac) {
+  if (ac) S.agiBolgesel.add(kod); else S.agiBolgesel.delete(kod);
+  agiIsaretle();
 }
 
 function agiSec(s) {
@@ -512,28 +535,47 @@ function agiSec(s) {
 }
 
 function agiListele(ist) {
+  S.agiListe = ist;
   const icinde = ist.filter(s => s.icinde !== false);
   const disinda = ist.filter(s => s.icinde === false);
+  // Yağış alanı bilinmeyen istasyon bölgesel analize giremez (indeks debi
+  // bağıntısı alana dayanıyor); kutusu kapalı gösterilir.
   const sat = (s) => `<tr data-kod="${s.kod}" class="agi-sat">`
+    + `<td><input type="checkbox" class="agi-bol" data-kod="${s.kod}"`
+    + `${S.agiBolgesel.has(s.kod) ? " checked" : ""}`
+    + `${s.yagis_alani ? "" : " disabled title='yağış alanı bilinmiyor'"}></td>`
     + `<td>${s.kod}</td><td>${s.ad || ""}</td><td>${s.kurum}</td>`
     + `<td style="text-align:right">${s.yil_sayisi}</td>`
     + `<td style="text-align:right">${s.ilk_yil}–${s.son_yil}</td>`
     + `<td style="text-align:right">${s.yagis_alani ? fmt(s.yagis_alani, 1) : "—"}</td></tr>`;
-  const bas = "<tr><th>Kod</th><th>Ad</th><th>Kurum</th><th>Yıl</th>"
-    + "<th>Aralık</th><th>A (km²)</th></tr>";
-  let h = "";
+  const bas = "<tr><th title='bölgesel analize dahil et'>BTFA</th><th>Kod</th><th>Ad</th>"
+    + "<th>Kurum</th><th>Yıl</th><th>Aralık</th><th>A (km²)</th></tr>";
+  let h = '<div class="rain-tools"><button id="agiHepsi" class="small-btn">'
+    + "Tümünü BTFA'ya ekle</button>"
+    + '<button id="agiHicbiri" class="small-btn">Seçimi temizle</button></div>';
   if (icinde.length) h += `<p class="small"><b>Havza içinde (${icinde.length})</b></p>`
     + `<table class="tbl small">${bas}${icinde.map(sat).join("")}</table>`;
   if (disinda.length) h += `<p class="small"><b>Çevrede (${disinda.length})</b></p>`
     + `<table class="tbl small">${bas}${disinda.map(sat).join("")}</table>`;
-  if (!h) h = '<p class="small">Bu alanda yeterli uzunlukta AGİ yok.</p>';
+  if (!icinde.length && !disinda.length) h = '<p class="small">Bu alanda yeterli uzunlukta AGİ yok.</p>';
   $("agiListe").innerHTML = h;
+
+  $("agiListe").querySelectorAll(".agi-bol").forEach(cb => {
+    cb.onclick = (e) => { e.stopPropagation(); agiBolgeselDegis(cb.dataset.kod, cb.checked); };
+  });
   $("agiListe").querySelectorAll(".agi-sat").forEach(tr => {
     tr.onclick = () => {
       const s = ist.find(x => x.kod === tr.dataset.kod);
       if (s) { agiSec(s); map.setView([s.enlem, s.boylam], Math.max(map.getZoom(), 11)); }
     };
   });
+  const hepsi = $("agiHepsi"), hicbiri = $("agiHicbiri");
+  if (hepsi) hepsi.onclick = () => {
+    ist.forEach(s => { if (s.yagis_alani) S.agiBolgesel.add(s.kod); });
+    agiListele(ist);
+  };
+  if (hicbiri) hicbiri.onclick = () => { S.agiBolgesel.clear(); agiListele(ist); };
+  agiIsaretle();
 }
 
 async function agiYukle() {
@@ -657,6 +699,82 @@ $("btnTfa").onclick = async () => {
       + `kabul edilen dağılım: ${o.kabul_edilen_adi}.`, "ok");
   } catch (e) {
     setStatus("tfaStatus", "Analiz yapılamadı: " + e.message, "err");
+  }
+};
+
+/* ---- BTFA: bölgesel taşkın frekans analizi (indeks-debi) ---- */
+function btfaCiz(o) {
+  const T = o.tekerrur;
+  const sag = (v, d = 1) => `<td style="text-align:right">${v == null ? "—" : fmt(v, d)}</td>`;
+  let h = '<p class="small"><b>Bölgesel analizde kullanılan AGİ\'ler</b> '
+    + `(${o.kullanilan_sayisi} istasyon)</p><table class="tbl small">`
+    + "<tr><th>İstasyon</th><th>Ad</th><th>A (km²)</th><th>N</th><th>Dağılım</th>"
+    + T.map(t => `<th style="text-align:right">Q${t}</th>`).join("")
+    + '<th style="text-align:right">Q<sub>maks</sub></th></tr>';
+  o.istasyonlar.forEach(s => {
+    const disi = !s.kullanildi;
+    h += `<tr${disi ? ' style="opacity:.5"' : ""}><td>${s.kod}</td><td>${s.ad || ""}</td>`
+      + sag(s.alan, 1) + `<td style="text-align:right">${s.yil_sayisi ?? "—"}</td>`
+      + `<td>${disi ? (s.hata || "dışarıda") : (s.dagilim || "").toUpperCase()}</td>`
+      + (s.q || []).map(v => sag(v)).join("") + sag(s.gozlem_maks) + "</tr>";
+  });
+  h += "</table>";
+
+  h += '<p class="small"><b>Bölgesel büyüme eğrisi</b> (Q<sub>T</sub>/Q<sub>2</sub> ortalaması)'
+    + '</p><table class="tbl small"><tr><th>T (yıl)</th>'
+    + T.map(t => `<th style="text-align:right">${t}</th>`).join("") + "</tr><tr><td>oran</td>"
+    + o.buyume_egrisi.map(v => sag(v, 4)).join("") + "</tr></table>";
+
+  const b = o.bagintis, rs = b.regresyon_serbest, r1 = b.regresyon_a1;
+  h += '<p class="small"><b>İndeks debi bağıntısı</b> — kullanılan: '
+    + `Q2 = ${fmt(b.katsayi, 4)} · A<sup>${fmt(b.us, 4)}</sup> (${b.kaynak})`
+    + `<br>veriden: a=1 ile A<sup>${fmt(r1.us, 4)}</sup> (R²=${fmt(r1.r2, 3)}) · `
+    + `serbest ${fmt(rs.katsayi, 4)}·A<sup>${fmt(rs.us, 4)}</sup> (R²=${fmt(rs.r2, 3)}), `
+    + `n=${rs.n}</p>`;
+
+  const bt = o.btfa;
+  h += `<p class="small"><b>Havza taşkın debileri</b> — A = ${fmt(o.alan_km2, 2)} km², `
+    + `Q<sub>2</sub> = ${fmt(o.q2_indeks, 2)} m³/s</p><table class="tbl small">`
+    + "<tr><th>Yöntem</th>" + bt.tekerrur.map((t, i) =>
+        `<th style="text-align:right">${t}${i >= bt.ekstrapole_baslangic ? "*" : ""}</th>`).join("")
+    + "</tr><tr><td><b>BTFA</b></td>" + bt.q.map(v => sag(v)).join("") + "</tr>";
+  if (o.ntfa_transfer) {
+    const t2 = o.ntfa_transfer;
+    h += `<tr><td>NTFA aktarım<br><span class="small">${t2.kod}, `
+      + `(A/${fmt(t2.kaynak_alan, 1)})<sup>${fmt(t2.us, 3)}</sup></span></td>`
+      + t2.q.map(v => sag(v)).join("") + "</tr>";
+  }
+  h += "</table><p class='small'>* Q500 ve üzeri, Q10–Q100'den ekstrapole edilmiştir "
+    + "(k = 1.692 / 1.99 / 2.98) — Excel'deki (Q100−Q10)·1.692+Q10 ile aynı.</p>";
+  $("btfaSonuc").innerHTML = h;
+}
+
+$("btnBtfa").onclick = async () => {
+  const alan = +$("btfaAlan").value || +$("inpA").value;
+  if (!alan) return setStatus("btfaStatus",
+    "Havza alanı (km²) gerekli — 1. adımda havzayı çıkarın ya da elle yazın.", "err");
+  setStatus("btfaStatus", "Bölgesel analiz yapılıyor…", "loading");
+  try {
+    const o = await api("/api/btfa", {
+      kodlar: [...S.agiBolgesel],
+      alan_km2: alan,
+      us: $("btfaUs").value === "" ? null : +$("btfaUs").value,
+      katsayi: $("btfaKatsayi").value === "" ? null : +$("btfaKatsayi").value,
+      katsayi_serbest: $("btfaSerbest").checked,
+      transfer_kod: $("btfaTransfer").value,
+      transfer_ussu: +$("btfaTransferUs").value || (2 / 3),
+      ilk_yil: +$("tfaIlkYil").value || 0,
+      son_yil: +$("tfaSonYil").value || 0,
+      dusuk_guveni_at: $("tfaDusukAt").checked,
+    });
+    S.btfa = o;
+    btfaCiz(o);
+    const at = o.istasyonlar.length - o.kullanilan_sayisi;
+    setStatus("btfaStatus", `${o.kullanilan_sayisi} istasyon kullanıldı`
+      + (at ? `, ${at} tanesi dışarıda kaldı` : "")
+      + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s.`, "ok");
+  } catch (e) {
+    setStatus("btfaStatus", "Bölgesel analiz yapılamadı: " + e.message, "err");
   }
 };
 

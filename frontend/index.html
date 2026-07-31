@@ -321,6 +321,28 @@
       </div>
       <div id="tfaStatus" class="status"></div>
       <div id="tfaSonuc"></div>
+
+      <hr>
+      <p class="hint"><b>Bölgesel analiz (BTFA)</b> — indeks-debi yöntemi.
+      Listeden <b>birden çok</b> AGİ işaretleyin: her biri için NTFA yapılır,
+      boyutsuz büyüme eğrileri (Q<sub>T</sub>/Q<sub>2</sub>) ortalanır ve
+      havzanın indeks debisi alan–debi bağıntısından bulunarak
+      Q<sub>2</sub>…Q<sub>10000</sub> üretilir. Havzada AGİ yoksa ya da seri
+      kısaysa noktasal analizden daha güvenilirdir.</p>
+
+      <div class="rain-tools">
+        <label class="inline" title="Proje havzasının yağış alanı. Havza çıkarıldıysa 1. adımdaki alandan otomatik gelir.">Havza alanı A (km²)<input id="btfaAlan" type="number" step="0.01" style="width:100px"></label>
+        <label class="inline" title="Q2 = katsayı × A^üs bağıntısının üssü. Boş bırakılırsa seçili istasyonlardan en küçük kareler ile hesaplanır. Rapordaki sayıyı birebir tutturmak için elle yazın.">Üs (boş = hesapla)<input id="btfaUs" type="number" step="0.0001" placeholder="ör. 0.8968" style="width:100px"></label>
+        <label class="inline" title="Üs elle verildiğinde kullanılacak katsayı. DSİ raporlarında genelde 1'dir (Q2 = A^üs).">Katsayı<input id="btfaKatsayi" type="number" step="0.0001" placeholder="1" style="width:80px"></label>
+        <label class="chk" title="Üs hesaplanırken katsayı da serbest bırakılsın mı (Q2 = a·A^b). Kapalıysa a = 1 alınır — DSİ yazımı böyledir."><input type="checkbox" id="btfaSerbest"> katsayı serbest</label>
+      </div>
+      <div class="rain-tools" style="margin-top:2px">
+        <label class="inline" title="Karşılaştırma satırı: seçilen tek istasyonun noktasal sonucunu alan oranıyla havzaya taşır. Q_havza = Q_AGİ × (A_havza/A_AGİ)^üs">Aktarım AGİ'si<select id="btfaTransfer"><option value="">yok</option></select></label>
+        <label class="inline">Aktarım üssü<input id="btfaTransferUs" type="number" step="0.001" value="0.667" style="width:80px"></label>
+        <button id="btnBtfa" class="primary" disabled>Bölgesel analiz yap</button>
+      </div>
+      <div id="btfaStatus" class="status"></div>
+      <div id="btfaSonuc"></div>
     </section>
   </aside>
 

@@ -93,6 +93,17 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    aynı üç bloktur: tekerrür debileri, istatistik parametreler, K-S testi.
    `backend/core/tfa.py`, golden test: `backend/tests/test_tfa_golden.py`.
 
+   Aynı adımın altında **BTFA (Bölgesel Taşkın Frekans Analizi)** vardır:
+   listeden birden çok AGİ işaretlenir, her biri için NTFA yapılır, boyutsuz
+   büyüme eğrileri (Q<sub>T</sub>/Q<sub>2</sub>) ortalanarak bölgesel eğri
+   kurulur ve havzanın indeks debisi alan–debi bağıntısından
+   (Q<sub>2</sub> = a·A<sup>b</sup>) bulunarak Q<sub>2</sub>…Q<sub>10000</sub>
+   üretilir. Havzada AGİ yoksa veya seri kısaysa noktasal analizden
+   güvenilirdir. Karşılaştırma için tek istasyondan alan oranıyla aktarım
+   (Q<sub>havza</sub> = Q<sub>AGİ</sub>·(A/A<sub>AGİ</sub>)<sup>2/3</sup>) da
+   ayrı satır olarak verilir. `backend/core/btfa.py`, golden test:
+   `backend/tests/test_btfa_golden.py` (Karamandere).
+
 ## Ara Havza (çok parçalı havza) modu
 
 Üst kısımdaki **Ara Havza** düğmesiyle geçilir. Panelde net numaralı sıra izlenir
@@ -214,6 +225,12 @@ kot profili yeniden üretilir.
   sabit +0.01. Bunlar hangi dağılımın kabul edildiğini değiştirebildiği için
   “düzeltmek” sonuçları Excel'den ayırırdı; `backend/core/tfa.py` içinde
   `_CDF_B` ve `NORMAL_DMAX_DUZELTME` olarak işaretlidir.
+* BTFA'da alan–debi üssü **veriden hesaplanır**; örnek dosyadaki (Karamandere)
+  0.8968 üssü o dosyanın kendi 15 istasyonunun en küçük kareler uyumundan
+  çıkmıyor (serbest uyum 0.0827·A<sup>1.3146</sup>), elle girilmiş. Rapordaki
+  sayıyı birebir tutturmak gerekirse arayüzdeki **Üs** kutusuna yazın; boş
+  bırakılırsa seçili istasyonlardan hesaplanan bağıntı kullanılır. Her iki
+  bağıntı (a=1 ve a serbest) R² ile birlikte ekranda gösterilir.
 
 ## Web'e deploy
 
@@ -244,5 +261,6 @@ python backend/tests/test_reservoir_golden.py    :: Rezervuar öteleme birebir (
 python backend/tests/test_kmz_export.py          :: KMZ yazıcı gidiş-dönüş (vektör.oku ile)
 python backend/tests/test_raster.py              :: Raster altlık XYZ karo servisi + CRS
 python backend/tests/test_tfa_golden.py          :: NTFA birebir (6 dağılım × T2–T10000 + K-S)
+python backend/tests/test_btfa_golden.py         :: BTFA birebir (Karamandere indeks-debi)
 python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
 ```

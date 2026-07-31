@@ -101,4 +101,13 @@ else:
     print(f"AGİ/NTFA OK: {b['istasyon']} istasyon, pencerede "
           f"{len(r['istasyonlar'])} — {kod} kabul edilen: {o['kabul_edilen_adi']}")
 
+    kodlar = [s["kod"] for s in r["istasyonlar"] if s["yagis_alani"]][:8]
+    if len(kodlar) >= 2:
+        bt = c.post("/api/btfa", json={"kodlar": kodlar, "alan_km2": 115.0}).json()
+        assert bt["kullanilan_sayisi"] >= 2, bt.get("hata")
+        assert len(bt["buyume_egrisi"]) == 6 and bt["buyume_egrisi"][0] == 1.0
+        assert len(bt["btfa"]["q"]) == 9 and bt["btfa"]["q"][0] > 0
+        print(f"BTFA OK: {bt['kullanilan_sayisi']} istasyon, "
+              f"Q2 = {bt['q2_indeks']:.1f}, Q100 = {bt['btfa']['q'][5]:.1f} m³/s")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")
