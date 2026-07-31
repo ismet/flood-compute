@@ -576,10 +576,20 @@ def api_dplv():
 
 @app.get("/api/mgm-stations")
 def api_mgm_stations():
-    """MGM 2020 PLV: istasyon 24 saatlik tekerrürlü yağışları + PLV oranları."""
+    """MGM 2020 tablosu — YALNIZ plüviyograf (PLV) oranları.
+
+    Bu tablonun P24 sütunları bilerek döndürülmüyor. P2…P100 artık
+    `/api/mgm-frekans` ile 1290 istasyonun ham yıllık maksimum ölçümünden
+    hesaplanıyor; hazır tekerrür tablosunu paralelde tutmak, iki farklı
+    kaynaktan iki farklı yağış üretip hangisinin kullanıldığını belirsiz
+    bırakırdı. Uçtan tümüyle çıkarmak, kazara yeniden bağlanmasını da önler.
+    """
     from backend.core import tables
     try:
-        return tables.load("mgm_plv_2020")
+        d = tables.load("mgm_plv_2020")
+        return {**d, "istasyonlar": [{"no": s.get("no"), "ad": s["ad"],
+                                      "plv": s["plv"]}
+                                     for s in d["istasyonlar"]]}
     except Exception as e:
         return _err(e)
 
@@ -827,6 +837,97 @@ def api_agi_seri(kod: str, ilk_yil: int = 0, son_yil: int = 0,
     try:
         return {"istasyon": agi.istasyon(kod),
                 "seri": agi.seri(kod, ilk_yil or None, son_yil or None, dusuk_guveni_at)}
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/mgm-bilgi")
+def api_mgm_bilgi():
+    """MGM meteoroloji veri tabanı kurulu mu, kaç istasyon frekansa uygun."""
+    from backend.core import mgm
+    try:
+        return mgm.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/mgm")
+def api_mgm(bati: float, guney: float, dogu: float, kuzey: float,
+            en_az_yil: int = 10):
+    """Pencere içindeki MGM istasyonları (yıllık maksimum serisi olanlar)."""
+    from backend.core import mgm
+    try:
+        return {"istasyonlar": mgm.pencere((bati, guney, dogu, kuzey),
+                                           en_az_yil=en_az_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/mgm-seri")
+def api_mgm_seri(kod: str, tur: str = ""):
+    """Bir MGM istasyonunun yıllık maksimum serisi ya da istenen rasat türü."""
+    from backend.core import mgm
+    try:
+        out = {"istasyon": mgm.istasyon(kod), "turler": mgm.turler(kod)}
+        out["seri"] = mgm.seri(kod, tur) if tur else mgm.yillik_maks(kod)
+        return out
+    except Exception as e:
+        return _err(e)
+
+
+class MgmFrekansGirdi(BaseModel):
+    kod: str
+    ilk_yil: int = 0
+    son_yil: int = 0
+
+
+@app.post("/api/mgm-frekans")
+def api_mgm_frekans(g: MgmFrekansGirdi):
+    """Yağış frekans analizi — NTFA ile aynı hesap, girdi yıllık en büyük
+    günlük yağış (mm). Sonuçtaki `P24`, Adım 5 tablosunun P2…P100 sütunları."""
+    from backend.core import mgm
+    try:
+        return mgm.frekans(g.kod, g.ilk_yil or None, g.son_yil or None)
+    except Exception as e:
+        return _err(e)
+
+
+class MgmEslesGirdi(BaseModel):
+    istasyonlar: list[dict]             # [{ad|name, lat, lon}] — Thiessen satırları
+    en_az_yil: int = 10
+    en_cok_km: float = 25.0
+    tercih_yil: int = 25                # yarıçap içinde bu uzunluktaki seri yeğlenir
+    hesapla: bool = True                # eşleşenler için P2…P100'ü de üret
+
+
+@app.post("/api/mgm-eslestir")
+def api_mgm_eslestir(g: MgmEslesGirdi):
+    """Thiessen istasyonlarını MGM veri tabanına bağlar ve P2…P100 hesaplar.
+
+    Önce koordinat, sonra ad denenir — KMZ'deki ad serbest metindir, koordinat
+    ölçülmüş büyüklüktür. Eşleşmenin hangi yolla ve kaç km'den kurulduğu
+    döndürülür ki kullanıcı kararı denetleyebilsin."""
+    from backend.core import mgm
+    try:
+        out = mgm.eslestir(g.istasyonlar, en_az_yil=g.en_az_yil,
+                           en_cok_km=g.en_cok_km, tercih_yil=g.tercih_yil)
+        if g.hesapla:
+            onbellek = {}
+            for k in out:
+                e = k.get("eslesen")
+                if not e:
+                    continue
+                kod = e["kod"]
+                if kod not in onbellek:
+                    try:
+                        f = mgm.frekans(kod)
+                        onbellek[kod] = {"P24": f["P24"],
+                                         "dagilim": f["kabul_edilen_adi"],
+                                         "yil_sayisi": f["parametreler"]["yil_sayisi"]}
+                    except Exception as hata:
+                        onbellek[kod] = {"hata": str(hata)}
+                k["frekans"] = onbellek[kod]
+        return {"eslesme": out}
     except Exception as e:
         return _err(e)
 

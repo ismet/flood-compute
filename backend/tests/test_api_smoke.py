@@ -182,4 +182,44 @@ else:
           f"{tm['gozlem']} gözlem + {tm['dolduruldu']} dolduruldu, "
           f"havza çıkışı {tm['outlet']['q_ort']:.3f} m³/s")
 
+# --- MGM meteoroloji veri tabanı + yağış frekans analizi
+b = c.get("/api/mgm-bilgi").json()
+if not b.get("var"):
+    print("MGM atlandı: veri tabanı yok "
+          "(python tools/mgm_veritabani_olustur.py)")
+else:
+    r = c.get("/api/mgm", params={"bati": 27.0, "guney": 40.5, "dogu": 28.5,
+                                  "kuzey": 41.5, "en_az_yil": 20}).json()
+    assert r["istasyonlar"], "pencerede MGM istasyonu bulunamadı"
+    kod = r["istasyonlar"][0]["kod"]
+    f = c.post("/api/mgm-frekans", json={"kod": kod}).json()
+    assert f["birim"] == "mm" and f["kabul_edilen"], f.get("hata")
+    p = f["P24"]
+    assert set(p) == {"2", "5", "10", "25", "50", "100"}
+    # tekerrür arttıkça yağış artmalı — dağılım uydurması bozuksa burada patlar
+    art = [p[k] for k in ("2", "5", "10", "25", "50", "100")]
+    assert art == sorted(art), f"P24 tekerrürle artmıyor: {p}"
+
+    # Thiessen satırlarından eşleştirme: koordinat önce, kısa seri yeğlenmez
+    es = c.post("/api/mgm-eslestir", json={"istasyonlar": [
+        {"ad": "Çorlu", "lat": 41.1667, "lon": 27.7833},
+        {"ad": "LÜLEBURGAZ", "lat": None, "lon": None},
+    ]}).json()["eslesme"]
+    assert es[0]["yontem"] == "koordinat" and es[0]["eslesen"]["ad"] == "ÇORLU"
+    assert es[1]["yontem"] == "ad", "koordinatsız satır adla eşleşmeliydi"
+    assert es[0]["frekans"]["P24"]["100"] > es[0]["frekans"]["P24"]["2"]
+    assert es[0]["frekans"]["yil_sayisi"] >= 25
+
+    # Eski MGM 2020 tablosu ARTIK P24 VERMEMELİ — P2…P100'ün tek kaynağı ölçüm
+    # veritabanıdır; hazır tekerrür tablosu yalnız plüviyograf oranları için
+    # duruyor. İki kaynak paralel dururken hangisinin kullanıldığı belirsizdi.
+    eski = c.get("/api/mgm-stations").json()["istasyonlar"]
+    assert eski and "plv" in eski[0], "PLV oranları kayboldu"
+    assert "P24" not in eski[0], "eski tablo hâlâ P24 döndürüyor"
+
+    print(f"MGM/yağış frekansı OK: {b['istasyon']} istasyon, "
+          f"{b['frekansa_uygun']} frekansa uygun, {kod} → "
+          f"P2={p['2']} P100={p['100']} mm ({f['kabul_edilen_adi']}, "
+          f"{f['parametreler']['yil_sayisi']} yıl)")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")

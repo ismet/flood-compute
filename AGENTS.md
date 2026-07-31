@@ -25,6 +25,7 @@ python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/aka
 python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
+python tools/mgm_veritabani_olustur.py                # one-off: DMI-tümü/*.xls -> data/mgm/mgm.sqlite
 python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
 python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
 python tools/net_yagis_dogrulama.py                   # validate net layer vs AGİ gauges (slow: DEM delineation)
@@ -101,6 +102,21 @@ backend/core/         — Computation engine (no framework dependency)
   su.py                 — Water potential: basin → nearby gauges → record gaps →
                           regression gap-filling → area-ratio transfer to the outlet
   agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
+  mgm.py                — MGM weather-station database (1290 stations, every
+                          observation sheet). Supplies P2…P100 for step 5 by
+                          running tfa.py on each station's annual maximum daily
+                          rainfall — same six distributions, same K-S choice,
+                          rainfall in mm instead of discharge.
+                          data/tables/mgm_plv_2020.json IS NO LONGER A P24
+                          SOURCE; /api/mgm-stations deliberately strips its P24
+                          field and serves only pluviograph (PLV) ratios. Two
+                          parallel rainfall sources made it unknowable which one
+                          a project actually used.
+                          Thiessen matching is by COORDINATE first (KMZ names are
+                          free text; dozens of Turkish villages share a name),
+                          and prefers a ≥25-year record inside the radius over a
+                          nearer short one — Lüleburgaz has a 10-year gauge at
+                          5.7 km and a 74-year one at 6.3 km.
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
                         CORINE class → rational C range matrix)
@@ -161,6 +177,11 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `GET /api/yagis/{katman}/{z}/{x}/{y}.png` | XYZ tiles per layer (`yagis`/`pet`/`net`; 204 out of coverage) |
 | `GET /api/yagis-nokta` | P, PET, AET and net precipitation at a point (mm/yr) |
 | `POST /api/yagis-havza` | Areal means over a basin + derived AET and runoff coefficient |
+| `GET /api/mgm-bilgi` | Whether the MGM weather database is installed; how many stations are long enough for frequency analysis |
+| `GET /api/mgm` | MGM stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`) |
+| `GET /api/mgm-seri` | A station's annual-maximum series, or any observation type (`tur`) |
+| `POST /api/mgm-frekans` | Rainfall frequency analysis for one station → P2…P100 (`P24`) |
+| `POST /api/mgm-eslestir` | Match Thiessen stations to MGM stations and compute their P2…P100 |
 | `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
 | `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
 | `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |

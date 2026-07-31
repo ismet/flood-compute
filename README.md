@@ -23,7 +23,8 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
 | `data/stations/` | Varsayılan istasyon seti (`bir_cikti.kml`, 2315 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
-| `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
+| `data/tables/mgm_plv_2020.json` | MGM 2020 tablosu — **yalnız 14 plüviyograf (PLV) oranı** için kullanılır. Dosyadaki P2–P500 sütunları duruyor ama `/api/mgm-stations` bunları **bilerek döndürmüyor**: P2–P100 artık `data/mgm/mgm.sqlite`'taki ham ölçümden hesaplanıyor. İki yağış kaynağını paralel tutmak, bir projede hangisinin kullanıldığını belirsiz bırakıyordu. `tools/extract_mgm_plv.py` ile üretilir. |
+| `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 24+ tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 5'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
@@ -47,9 +48,23 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 4. **Thiessen** — Varsayılan `bir_cikti.kml` istasyonları otomatik yüklenir (veya
    KMZ/KML yüklenir); Voronoi hücreleri havzaya kesilerek alan ağırlıkları
    (DATAGİR H kolonu karşılığı) bulunur. Haritada yalnız pay alan istasyonlar çizilir.
-5. **Yağış** — Her istasyon satırı `Ad P2 P5 P10 P25 P50 P100 [OEY]` formatında
-   yapıştırılır; Thiessen ağırlıklı P24'ler hesaplanır. DPLV zaman-dağılım
-   istasyonu seçilir (TEKİRDAĞ/ÇORLU/KARTAL) veya 14 oran elle yapıştırılır.
+5. **Yağış** — **📊 Ölçümden hesapla** düğmesi Thiessen istasyonlarını MGM ölçüm
+   veritabanına (`data/mgm/mgm.sqlite`) bağlar ve P2–P100'ü her istasyonun
+   **yıllık en büyük günlük yağış** serisinden frekans analiziyle üretir — NTFA
+   ile aynı hesap (altı dağılım, moment yöntemi, Smirnov-Kolmogorov ile kabul).
+   Değerler elle de girilebilir/yapıştırılabilir; OEY her hâlde elle girilir.
+   Tabloda her satırın **kaynağı** görünür: kaç yıllık seri, kabul edilen
+   dağılım, eşleşme koordinatla mı adla mı kuruldu. Eşleştirme önce koordinatla
+   yapılır (KMZ adları serbest metindir, aynı adı taşıyan onlarca yer vardır) ve
+   yarıçap içinde ≥25 yıllık seri varsa daha yakındaki kısa seriye yeğlenir —
+   Lüleburgaz'da 5.7 km'de 10 yıllık, 6.3 km'de 74 yıllık istasyon var.
+   DPLV zaman-dağılım istasyonu ayrıca seçilir (TEKİRDAĞ/ÇORLU/KARTAL, ya da
+   MGM 2020 tablosundan) veya 14 oran elle yapıştırılır.
+
+   ⚠ **P100'e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor:
+   komşu iki istasyonda SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl)
+   P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var; aykırı bir değer
+   gördüğünüzde satırdan başka istasyon seçin.
 6. **Hesap** — Tek tıkla:
    * **DSİ Sentetik**: qp = 414·A⁻⁰·²²⁵·(L·Lc/√S)⁻⁰·¹⁶ → BH2 boyutsuz birim
      hidrograf 0.5 sa adıma örneklenir; 2/4/6/8/12/18/24 saatlik sağanaklar
