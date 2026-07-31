@@ -148,10 +148,26 @@ ve **kapak açıklığı programı** (grafik + tablo + CSV). `reservoir.route_co
 ## Raster altlıklar (1/25000 pafta vb.)
 
 Harita panelindeki **🗺 1/25000 altlık** aracı ile koordinatlı raster pafta yüklenir
-(GeoTIFF, MrSID `.sid` + world file `.sdw`). `.sid` dosyaları GDAL ile GeoTIFF'e
-çevrilir. Altlık EPSG:3857'ye yeniden projeksiyonlanarak XYZ karo servisi üzerinden
-haritada gösterilir (`/api/raster/{ad}/{z}/{x}/{y}.png`). `backend/core/raster.py`,
+(GeoTIFF, MrSID `.sid` + world file `.sdw`). Altlık EPSG:3857'ye yeniden
+projeksiyonlanarak XYZ karo servisi üzerinden haritada gösterilir
+(`/api/raster/{ad}/{z}/{x}/{y}.png`). `backend/core/raster.py`,
 `backend/tests/test_raster.py`.
+
+**MrSID (`.sid`) desteği ortama bağlıdır.** Sürücü tescillidir (Extensis DSDK ile
+derlenir) ve ne PyPI rasterio tekerleklerinde ne de Debian'ın `gdal-bin`
+paketinde bulunur:
+
+* **Yerelde (Windows):** OSGeo4W'den `gdal` + `gdal-mrsid` paketlerini kurun;
+  uygulama `C:\OSGeo4W\bin\gdal_translate.exe`'yi kendiliğinden bulup dosyayı
+  GeoTIFF'e çevirir. Başka yere kurulduysa `GDAL_TRANSLATE` ortam değişkenine
+  tam yolu yazın.
+* **Sunucuda (Docker):** kod çözücü **yoktur ve kurulamaz**. Dosyayı kendi
+  bilgisayarınızda bir kez GeoTIFF'e çevirip onu yükleyin —
+  `gdal_translate -of GTiff pafta.sid pafta.tif` ya da QGIS → Dışa Aktar →
+  Farklı Kaydet → GeoTIFF. GeoTIFF dönüşümsüz yüklenir.
+
+Arayüz `.sid` seçilir seçilmez (`/api/raster-converter`) ortama uygun uyarıyı
+gösterir; desteklenmiyorsa yükleme hiç başlatılmaz.
 
 ## KMZ dışa aktarımı
 

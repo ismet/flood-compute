@@ -324,9 +324,32 @@ async function loadRasterLayers() {
 }
 loadRasterLayers();
 
+/* MrSID kod çözücüsü var mı — .sid seçilir seçilmez söyle. Sunucuda sürücü
+   kurulamıyor (tescilli DSDK); kullanıcının yüzlerce MB'ı yükleyip sonunda
+   hata almasındansa dosya seçilirken uyarmak gerekiyor.                    */
+let mrsidDurum = null;
+(async function mrsidSorgula() {
+  try { mrsidDurum = await api("/api/raster-converter"); } catch (e) { /* uç yoksa geç */ }
+})();
+
+function sidUyar(dosyalar) {
+  if (!mrsidDurum || mrsidDurum.mrsid) return false;
+  if (!dosyalar.some(f => /\.(sid|ecw)$/i.test(f.name))) return false;
+  setStatus("delinStatus", mrsidDurum.sunucu
+    ? "Bu sunucu .sid (MrSID) okuyamıyor — sürücü tescilli olduğu için kurulamıyor. "
+      + "Dosyayı QGIS ile ya da “gdal_translate -of GTiff pafta.sid pafta.tif” "
+      + "komutuyla GeoTIFF'e çevirip onu yükleyin (GeoTIFF doğrudan açılır)."
+    : "MrSID kod çözücüsü kurulu değil. OSGeo4W'den 'gdal-mrsid' eklentisini kurun "
+      + "ya da dosyayı elle GeoTIFF'e çevirip yükleyin.", "err");
+  return true;
+}
+
+$("rasterFile").onchange = () => sidUyar(Array.from($("rasterFile").files || []));
+
 $("btnRasterAdd").onclick = async () => {
   const dosyalar = Array.from($("rasterFile").files || []);
   if (!dosyalar.length) return setStatus("delinStatus", "Önce raster dosyasını seçin", "err");
+  if (sidUyar(dosyalar)) return;             // boşuna yükleme yapma
   const sid = dosyalar.some(f => /\.sid$/i.test(f.name));
   const worldVar = dosyalar.some(f => /\.(sdw|tfw|wld|prj)$/i.test(f.name));
   if (sid && !worldVar && !$("rasterCrs").value.trim()) {

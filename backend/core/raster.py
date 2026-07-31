@@ -7,10 +7,12 @@ Kaynak hangi projeksiyonda olursa olsun (ör. ED50/WGS84 UTM) karo üretimi
 sırasında yeniden projeksiyonlanır.
 
 MrSID (.sid) NOTU: MrSID tescilli bir formattır ve GDAL sürücüsü ancak
-LizardTech DSDK ile derlenirse gelir — PyPI rasterio tekerleklerinde YOKTUR.
-Bu yüzden .sid doğrudan okunamaz; QGIS/GeoExpress gibi bir araçla bir kez
-GeoTIFF'e çevrilip buraya yüklenmelidir. `.sid` yüklenirse anlaşılır bir hata
-döner (sessizce başarısız olmaz).
+LizardTech/Extensis DSDK ile derlenirse gelir — PyPI rasterio tekerleklerinde
+YOKTUR. Windows'ta yerelde OSGeo4W'nin gdal-mrsid eklentisi kurulup dosya
+kendiliğinden çevrilebilir; Docker'daki sunucuda bu mümkün değildir (Debian'ın
+gdal-bin paketi de sürücüyü içermez), orada dosya kullanıcı tarafından bir kez
+GeoTIFF'e çevrilip yüklenmelidir. Her iki durumda da anlaşılır bir hata döner
+(sessizce başarısız olmaz) ve arayüz .sid seçilmeden önce uyarır.
 
 Georeferans dosyada gömülü değilse (ArcInfo world file .sdw/.tfw ile gelen
 taramalarda CRS çoğu kez tanımsızdır) `crs` parametresiyle EPSG kodu verilir.
@@ -97,18 +99,29 @@ def _kapat(ad):
 
 _CEVIRICI = None    # (gdal_translate yolu, MrSID destekliyor mu) — bir kez aranır
 
+WINDOWS = os.name == "nt"
+
 # MrSID okuyabilen gdal_translate'in aranacağı yerler. GDAL_TRANSLATE ortam
-# değişkeni her şeyin önüne geçer.
+# değişkeni her şeyin önüne geçer. PATH ayrıca shutil.which ile taranır.
 CEVIRICI_ADAYLARI = [
     r"C:\OSGeo4W\bin\gdal_translate.exe",
     r"C:\OSGeo4W64\bin\gdal_translate.exe",
     r"C:\Program Files\QGIS*\bin\gdal_translate.exe",
     r"C:\Program Files\GDAL\gdal_translate.exe",
+] if WINDOWS else [
+    "/usr/bin/gdal_translate",
+    "/usr/local/bin/gdal_translate",
+    "/opt/gdal/bin/gdal_translate",
 ]
 
-KURULUM_YARDIMI = (
-    "Bu biçim rasterio'nun paketlediği GDAL ile okunamıyor. MrSID (.sid) ve ECW "
-    "gibi tescilli formatların kod çözücüsü ayrı bir eklenti gerektirir.\n"
+_ORTAK = ("Bu biçim rasterio'nun paketlediği GDAL ile okunamıyor. MrSID (.sid) ve "
+          "ECW gibi tescilli formatların kod çözücüsü ayrı bir eklenti gerektirir.\n")
+
+# Yerelde çalışırken eklenti kurulabilir; sunucuda (Docker) kurulamaz, çünkü
+# sürücü LizardTech/Extensis DSDK ile derlenmek zorunda ve Debian'ın gdal-bin'i
+# de onu içermez. Bu yüzden iki ortama iki ayrı yönerge veriliyor: Linux'ta
+# OSGeo4W adımlarını göstermek kullanıcıyı boşuna uğraştırıyordu.
+YARDIM_WINDOWS = _ORTAK + (
     "Çözüm — OSGeo4W'den hazır eklentiyi kurun (QGIS gerekmez, ~11 MB):\n"
     "  1) https://trac.osgeo.org/osgeo4w/ adresinden osgeo4w-setup.exe indirin\n"
     "  2) Advanced Install → paketlerden 'gdal' ve 'gdal-mrsid' seçin\n"
@@ -119,11 +132,31 @@ KURULUM_YARDIMI = (
     "(GeoTIFF doğrudan, dönüşümsüz yüklenir)."
 )
 
+YARDIM_SUNUCU = _ORTAK + (
+    "Bu sunucuda MrSID kod çözücüsü yok; kurulamaz da — sürücü tescilli DSDK ile "
+    "derlenir ve Debian/Ubuntu'nun gdal-bin paketi bile onu içermez.\n"
+    "Çözüm — dosyayı KENDİ bilgisayarınızda bir kez GeoTIFF'e çevirip onu yükleyin:\n"
+    "  • QGIS ile: .sid'i katman olarak ekleyin → sağ tık → Dışa Aktar → "
+    "Farklı Kaydet… → biçim GeoTIFF\n"
+    "  • ya da komut satırında: gdal_translate -of GTiff pafta.sid pafta.tif\n"
+    "GeoTIFF doğrudan, dönüşümsüz yüklenir; georeferans dosyada yoksa CRS "
+    "kutusuna EPSG kodunu yazmayı unutmayın.\n"
+    "(Sunucuya MrSID'li bir GDAL kurabiliyorsanız GDAL_TRANSLATE ortam "
+    "değişkenine gdal_translate yolunu yazın; uygulama onu kullanır.)"
+)
+
+KURULUM_YARDIMI = YARDIM_WINDOWS if WINDOWS else YARDIM_SUNUCU
+
 
 def cevirici_durumu():
-    """Arayüzde göstermek için: MrSID dönüştürücü var mı, nerede."""
+    """Arayüzde göstermek için: MrSID dönüştürücü var mı, nerede.
+
+    Arayüz bunu açılışta sorup .sid seçilmeden önce uyarı gösterir — kullanıcı
+    yüzlerce MB'ı yükleyip sonunda hata almasın.
+    """
     yol, var = _gdal_translate_bul()
-    return {"mrsid": var, "gdal_translate": yol}
+    return {"mrsid": var, "gdal_translate": yol, "sunucu": not WINDOWS,
+            "yardim": KURULUM_YARDIMI}
 
 
 def crs_coz(metin):
