@@ -205,6 +205,13 @@
         <span id="akarsuInfo" class="small"></span>
       </div>
       <div class="rain-tools" style="margin-top:2px">
+        <label class="chk" title="Yıllık toplam yağış (CHELSA v2.1, 1981-2010 normali, ~1 km piksel). Türkiye'de 1005 MGM istasyonuna karşı en yüksek uyumu veren ızgara veri setidir. Katman haritada gösterilir; havza çıkarıldıysa alansal ortalama yağış da hesaplanır."><input type="checkbox" id="yagisAc"> 🌧 Yıllık yağış haritası</label>
+        <label class="inline" title="Katmanın saydamlığı.">Saydamlık<input id="yagisOpak" type="range" min="20" max="100" value="75" style="width:90px"></label>
+        <button id="btnYagisHavza" class="small-btn" title="Çıkarılmış havzanın üzerine düşen piksellerin ortalama yıllık yağışı — alansal ortalama, tek noktanın değerinden çok daha anlamlıdır.">Havza ortalaması</button>
+      </div>
+      <div id="yagisLejant" class="small"></div>
+      <div id="yagisInfo" class="small"></div>
+      <div class="rain-tools" style="margin-top:2px">
         <button id="btnEditGeom" class="small-btn" title="Havza sınırını ve dere ağını haritada elle düzenleyin: köşe noktalarını sürükleyin, çift tıklayarak yeni köşe ekleyin. Uygulayınca alan, L, Lc ve kot profili düzenlenmiş geometriden yeniden üretilir.">✏️ Havza / dere düzenle</button>
         <button id="btnEditApply" class="small-btn hidden">✓ Uygula ve yeniden hesapla</button>
         <button id="btnEditCancel" class="small-btn hidden">✕ Vazgeç</button>

@@ -1043,6 +1043,57 @@ def api_su(g: SuGirdi):
         return _err(e)
 
 
+@app.get("/api/yagis-bilgi")
+def api_yagis_bilgi():
+    """Yıllık toplam yağış katmanı kurulu mu, kaynağı/lejantı nedir."""
+    from backend.core import yagis
+    try:
+        return yagis.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/yagis/{z}/{x}/{y}.png")
+def api_yagis_karo(z: int, x: int, y: int):
+    """Yağış katmanı XYZ karo servisi (renk merdivenli, saydam)."""
+    from fastapi.responses import Response
+    from backend.core import yagis
+    try:
+        if not (0 <= z <= 22):
+            raise ValueError("geçersiz zoom")
+        png = yagis.karo(z, x, y)
+    except Exception as e:
+        return _err(e)
+    if png is None:
+        return Response(status_code=204)
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/api/yagis-nokta")
+def api_yagis_nokta(lat: float, lon: float):
+    """Tıklanan noktanın yıllık toplam yağışı (mm)."""
+    from backend.core import yagis
+    try:
+        return yagis.nokta(lat, lon)
+    except Exception as e:
+        return _err(e)
+
+
+class YagisHavzaGirdi(BaseModel):
+    geometri: dict
+
+
+@app.post("/api/yagis-havza")
+def api_yagis_havza(g: YagisHavzaGirdi):
+    """Havza üzerindeki alansal ortalama yıllık yağış."""
+    from backend.core import yagis
+    try:
+        return yagis.havza_ortalamasi(g.geometri)
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""

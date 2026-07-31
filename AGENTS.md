@@ -25,6 +25,7 @@ python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/aka
 python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
+python tools/yagis_haritasi_indir.py                  # one-off: CHELSA bio12 -> data/yagis/yagis_tr.tif
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
 docker build -t taskin-hesap .                        # build Docker image
@@ -72,6 +73,8 @@ backend/core/         — Computation engine (no framework dependency)
   kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
   akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
+  yagis.py              — Annual precipitation layer (CHELSA v2.1, ~1 km): colour-
+                          ramped XYZ tiles, point query, basin areal mean
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
@@ -134,6 +137,10 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `GET /api/raster-layers` | List raster basemaps |
 | `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
 | `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
+| `GET /api/yagis-bilgi` | Precipitation layer metadata + colour-ramp legend |
+| `GET /api/yagis/{z}/{x}/{y}.png` | Precipitation XYZ tiles (204 when out of coverage) |
+| `GET /api/yagis-nokta` | Annual precipitation at a point (mm) |
+| `POST /api/yagis-havza` | Areal mean annual precipitation over a basin polygon |
 | `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
 | `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
 | `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |

@@ -952,6 +952,88 @@ $("btnMmy").onclick = async () => {
   }
 };
 
+/* ---- yıllık toplam yağış katmanı (CHELSA v2.1, ~1 km) ----
+   Altlık değil tematik harita: renk merdiveniyle çizilir. Asıl işe yarayan
+   büyüklük havzanın ALANSAL ortalaması — dağlık havzada tek nokta yanıltır. */
+let yagisBilgi = null;
+layers.yagis = L.tileLayer("/api/yagis/{z}/{x}/{y}.png", {
+  opacity: 0.75, maxZoom: 18, crossOrigin: true,
+  attribution: "Yağış: CHELSA v2.1",
+});
+
+function yagisLejantCiz(b) {
+  if (!b || !b.lejant) return;
+  let onceki = 0;
+  $("yagisLejant").innerHTML = "<b>mm/yıl</b> "
+    + b.lejant.map(l => {
+        const et = l.deger >= 10000 ? `${onceki}+` : `${onceki}–${l.deger}`;
+        onceki = l.deger;
+        return `<span style="display:inline-block;padding:0 4px;margin:1px;`
+          + `background:${l.renk};color:${l.deger > 500 ? "#fff" : "#000"};`
+          + `border-radius:2px">${et}</span>`;
+      }).join("");
+}
+
+$("yagisAc").onchange = async () => {
+  if (!$("yagisAc").checked) {
+    layers.yagis.remove();
+    $("yagisLejant").innerHTML = "";
+    return;
+  }
+  try {
+    yagisBilgi = yagisBilgi || await api("/api/yagis-bilgi");
+    if (!yagisBilgi.var) {
+      $("yagisAc").checked = false;
+      $("yagisAc").disabled = true;
+      $("yagisInfo").textContent =
+        "veri yok — tools/yagis_haritasi_indir.py ile indirin";
+      return;
+    }
+    layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100).addTo(map);
+    yagisLejantCiz(yagisBilgi);
+    $("yagisInfo").innerHTML = `${yagisBilgi.kaynak} · ~${yagisBilgi.cozunurluk_m} m `
+      + `piksel · ${yagisBilgi.lisans}`;
+  } catch (e) {
+    $("yagisAc").checked = false;
+    $("yagisInfo").textContent = "Yağış katmanı açılamadı: " + e.message;
+  }
+};
+$("yagisOpak").oninput = () =>
+  layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
+
+$("btnYagisHavza").onclick = async () => {
+  if (!S.havza) {
+    $("yagisInfo").textContent = "Önce havzayı çıkarın.";
+    return;
+  }
+  $("yagisInfo").textContent = "Havza ortalaması hesaplanıyor…";
+  try {
+    const g = S.havza.features ? S.havza.features[0].geometry
+                               : (S.havza.geometry || S.havza);
+    const r = await api("/api/yagis-havza", { geometri: g });
+    S.yagisHavza = r;
+    $("yagisInfo").innerHTML = `Havza alansal ortalama yağış: `
+      + `<b>${fmt(r.ortalama_mm, 0)} mm/yıl</b> `
+      + `(medyan ${fmt(r.medyan_mm, 0)}, aralık ${fmt(r.en_az_mm, 0)}–`
+      + `${fmt(r.en_cok_mm, 0)}, ±${fmt(r.std_mm, 0)} · ${r.piksel} piksel)`;
+  } catch (e) {
+    $("yagisInfo").textContent = "Hesaplanamadı: " + e.message;
+  }
+};
+
+/* veri kurulu değilse seçeneği kapat */
+(async function yagisDurum() {
+  try {
+    yagisBilgi = await api("/api/yagis-bilgi");
+    if (!yagisBilgi.var) {
+      $("yagisAc").disabled = true;
+      $("btnYagisHavza").disabled = true;
+      $("yagisInfo").textContent =
+        "veri yok — tools/yagis_haritasi_indir.py ile indirin";
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+})();
+
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
    (dere verilmediyse) dere ağı DEM'den üretilir.                          */

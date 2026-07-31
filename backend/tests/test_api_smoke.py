@@ -110,6 +110,29 @@ else:
         print(f"BTFA OK: {bt['kullanilan_sayisi']} istasyon, "
               f"Q2 = {bt['q2_indeks']:.1f}, Q100 = {bt['btfa']['q'][5]:.1f} m³/s")
 
+# --- yıllık yağış katmanı (kurulu değilse atlanır)
+yb = c.get("/api/yagis-bilgi").json()
+if not yb.get("var"):
+    print("Yağış katmanı atlandı: veri yok "
+          "(tools/yagis_haritasi_indir.py ile indirilir)")
+else:
+    # bilinen normallere yakın mı — katman yanlış yere oturursa burada patlar
+    for lat, lon, ad, alt, ust in ((41.02, 40.52, "Rize", 1800, 2800),
+                                   (37.87, 32.49, "Konya", 250, 500),
+                                   (39.92, 32.85, "Ankara", 300, 550)):
+        v = c.get("/api/yagis-nokta", params={"lat": lat, "lon": lon}).json()["yagis_mm"]
+        assert alt <= v <= ust, f"{ad}: {v} mm beklenen {alt}-{ust} dışında"
+    t = c.get("/api/yagis/8/148/97.png")
+    assert t.status_code in (200, 204)
+    if t.status_code == 200:
+        assert t.content[:8] == b"\x89PNG\r\n\x1a\n", "karo PNG değil"
+    geo = {"type": "Polygon", "coordinates": [[[29.9, 40.5], [30.4, 40.5],
+                                               [30.4, 40.9], [29.9, 40.9], [29.9, 40.5]]]}
+    hv = c.post("/api/yagis-havza", json={"geometri": geo}).json()
+    assert hv["piksel"] > 100 and 200 < hv["ortalama_mm"] < 3000, hv.get("hata")
+    print(f"Yağış katmanı OK: {yb['kaynak']}, ~{yb['cozunurluk_m']} m, "
+          f"örnek havza ortalaması {hv['ortalama_mm']:.0f} mm/yıl")
+
 # --- su potansiyeli (kurulu değilse atlanır)
 sb = c.get("/api/su-bilgi").json()
 if not sb.get("var"):

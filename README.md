@@ -27,6 +27,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
+| `data/yagis/` | `yagis_tr.tif` — **yıllık toplam yağış** haritası (CHELSA v2.1 bio12, 1981–2010 normali, ~1 km piksel, 2.3 MB). Haritada tematik katman olarak gösterilir; nokta ve havza alansal ortalaması sorgulanır. Yeniden indirmek: `python tools/yagis_haritasi_indir.py`. |
 | `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (6 adım)
@@ -231,6 +232,23 @@ paketinde bulunur:
 
 Arayüz `.sid` seçilir seçilmez (`/api/raster-converter`) ortama uygun uyarıyı
 gösterir; desteklenmiyorsa yükleme hiç başlatılmaz.
+
+## Yıllık yağış katmanı
+
+Harita panelindeki **🌧 Yıllık yağış haritası** kutusuyla açılır. Kaynak
+**CHELSA v2.1** (bio12, 1981–2010 normali, 30 arc-sec ≈ 1 km piksel, CC0).
+
+Neden CHELSA: 1005 MGM istasyonuna karşı yapılan karşılaştırmada Türkiye'de
+yıllık yağışta en yüksek uyumu veren ızgara veri seti — Lin uyum katsayısı
+**0.824**; ERA5-Land 0.760, CHIRPS 0.742, WorldClim 0.712 (Keserci vd. 2026,
+*Int. J. Climatology*). WorldClim, Akdeniz'in dağlık kesiminde yükselti–yağış
+ilişkisini ters çevirecek kadar sapıyor (CCC 0.081); CHELSA orografik etkiyi
+hesaba katıyor.
+
+Katman renk merdiveniyle çizilir ve lejant panelde gösterilir. **Havza
+ortalaması** düğmesi, çıkarılmış havzanın üzerine düşen piksellerin **alansal
+ortalamasını** verir (medyan, aralık ve standart sapmayla birlikte) — dağlık
+havzada tek noktanın değeri yanıltıcıdır. `backend/core/yagis.py`.
 
 ## KMZ dışa aktarımı
 
