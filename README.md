@@ -122,16 +122,31 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 ## Su Potansiyeli modu
 
 Üst kısımdaki **Su Potansiyeli** düğmesiyle geçilir; taşkın hesabından
-bağımsızdır. Burada pik değil **hacim** sorulur: bir AGİ'nin günlük akım
-serisinden ortalama akım (Q<sub>ort</sub>), yıllık hacim (hm³), özgül verim
-(L/s/km²), yıllık verim (mm), su yılı bazında aylık dağılım ve **debi
-süreklilik eğrisi** ile güvenilir debiler (Q50/Q75/Q90/Q95) çıkarılır.
+bağımsızdır. Burada pik değil **hacim** sorulur. Panel beş adımda ilerler:
 
-**Su temini** için bir talep (L/s) girilirse serinin yüzde kaçında bu debinin
-karşılandığı (güvenilirlik) ve yıllık ortalama açık hacmi hesaplanır.
+1. **Havza** — Outlet'e tıklanır; havza sınırı ve alanı taşkın modundaki 1.
+   adımın aynısıyla (DEM'den) çıkarılır. Orada zaten çıkarıldıysa otomatik
+   kullanılır; alan elle de yazılabilir.
+2. **Yıl aralığı** — Su yılı (1 Ekim – 30 Eylül) ilk/son yılı, istasyon
+   uzunluk eşiği ve havza dışını da kapsayacak tampon.
+3. **Civardaki AGİ'ler** — Havza poligonunun içindeki ve tampon kadar
+   çevresindeki günlük akım istasyonları haritaya ve listeye gelir; havza
+   içinde olanlar ayrıca işaretlenir. Analize girecekler onay kutusuyla seçilir
+   (yağış alanı bilinmeyenler seçilemez — havzaya taşınamazlar).
+4. **Ölçüm periyotları** — İstasyon × su yılı matrisi: yeşil = tam yıl,
+   sarı = eksik (kısmi gözlem), gri = veri yok. Altında istasyon çiftlerinin
+   yıllık ortalama akım regresyonları (r, r², ortak yıl) sıralanır.
+5. **Tamamlama ve taşıma** — Havzayı temsil edecek AGİ seçilir; eksik su
+   yılları, r² eşiğini geçen en iyi ilişkili istasyondan
+   `Q = kesim + eğim·Q_verici` ile doldurulur. Doldurulan yıllar sarı, hiçbir
+   istasyonda veri olmadığı için boş kalanlar kırmızı gösterilir — **uydurma
+   yapılmaz**. Tamamlanan seri son olarak alan oranıyla havza çıkışına taşınır
+   (`Q_havza = Q_AGİ·(A_havza/A_AGİ)^üs`, hacimde üs ≈ 1) ve Q<sub>ort</sub>,
+   yıllık hacim (hm³), özgül verim (L/s/km²) ve yıllık verim (mm) verilir.
 
-Haritayı ilgilendiğiniz alana getirip **Görünen alandaki istasyonlar** ile
-listeleyin, birini seçip hesaplayın. `backend/core/su.py`.
+Tek istasyonun kendi başına potansiyeli (aylık dağılım, debi süreklilik eğrisi,
+güvenilir debiler Q50/Q75/Q90/Q95 ve bir talebin karşılanma güvenilirliği) için
+`POST /api/su` ucu ayrıca kullanılabilir. `backend/core/su.py`.
 
 ## Ara Havza (çok parçalı havza) modu
 

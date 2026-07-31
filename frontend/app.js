@@ -1277,6 +1277,7 @@ map.on("click", async (ev) => {
     markDone(1);
     renderAdayKanallar(r);
     updateComputeReady();
+    if (S.mode === "su") suHavzaGuncelle();   // su akışı 1. adımı havzayla başlıyor
   } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
 });
 
@@ -2458,133 +2459,244 @@ $("modeSu").onclick = () => setMode("su");
    Günlük akım serilerinden hacim odaklı değerlendirme. Taşkın tarafındaki
    AGİ katmanından ayrı bir veri tabanı (2909 istasyon, 1934-2015).        */
 layers.su = L.layerGroup();
-S.suSecili = null;
+S.suSecili = new Set();      // periyot/regresyona girecek istasyonlar
+S.suListe = [];
 
 function suIsaretle() {
   layers.su.eachLayer(l => {
     if (!l.su) return;
-    const sec = S.suSecili && S.suSecili.kod === l.su.kod;
-    l.setStyle({ radius: sec ? 8 : 5, color: sec ? "#000" : "#00695c",
-                 weight: sec ? 3 : 1.5, fillColor: "#26a69a", fillOpacity: 0.85 });
+    const sec = S.suSecili.has(l.su.kod);
+    const hedef = $("suHedef").value === l.su.kod;
+    l.setStyle({
+      radius: hedef ? 9 : (sec ? 7 : 5),
+      color: hedef ? "#000" : (sec ? "#00695c" : "#78909c"),
+      weight: hedef ? 3 : (sec ? 2.5 : 1.2),
+      fillColor: l.su.icinde ? "#26a69a" : "#90a4ae",
+      fillOpacity: 0.85,
+    });
   });
-  $("btnSu").disabled = !S.suSecili;
+  $("btnSuPeriyot").disabled = S.suSecili.size < 1;
+  $("btnSuTamamla").disabled = !$("suHedef").value;
 }
 
-function suSec(s) {
-  S.suSecili = s;
+function suHedefDoldur() {
+  const sec = $("suHedef"), onceki = sec.value;
+  sec.innerHTML = '<option value="">— seçin —</option>'
+    + S.suListe.filter(s => S.suSecili.has(s.kod))
+        .map(s => `<option value="${s.kod}">${s.kod} — ${(s.ad || "").replace(/_/g, " ")}`
+                  + `${s.alan_km2 ? " (" + fmt(s.alan_km2, 0) + " km²)" : ""}</option>`).join("");
+  sec.value = S.suSecili.has(onceki) ? onceki : "";
   suIsaretle();
-  $("suInfo").innerHTML = `<b>${s.kod}</b> ${(s.ad || "").replace(/_/g, " ")} — `
-    + `${s.ilk_tarih}…${s.son_tarih}, ${(s.veri_gun / 365).toFixed(0)} yıllık veri`
-    + (s.alan_km2 ? ` · yağış alanı ${fmt(s.alan_km2, 1)} km²` : "")
-    + (s.q_ort != null ? ` · Q<sub>ort</sub> ${fmt(s.q_ort, 2)} m³/s` : "");
-  $("suSonuc").innerHTML = "";
+}
+
+function suHavzaGuncelle() {
+  const a = +$("inpA").value;
+  if (a && !$("suAlan").value) $("suAlan").value = a;
+  $("suHavzaInfo").innerHTML = S.havza
+    ? `Havza çıkarıldı — alan <b>${fmt(a, 2)} km²</b>`
+      + (S.outlet ? ` · outlet ${fmt(S.outlet.snap_lat ?? S.outlet.lat, 5)}, `
+                    + `${fmt(S.outlet.snap_lon ?? S.outlet.lon, 5)}` : "")
+    : "Havza yok — outlet seçip çıkarın (ya da alanı elle yazıp doğrudan 3. adıma geçin).";
 }
 
 async function suBaslat() {
   layers.su.addTo(map);
+  suHavzaGuncelle();
   try {
     const b = await api("/api/su-bilgi");
     if (!b.var) {
       $("btnSuGetir").disabled = true;
       $("suInfo").textContent = "veri yok — tools/su_veritabani_olustur.py ile üretin";
-    } else if (!S.suSecili) {
+    } else if (!$("suInfo").textContent) {
       $("suInfo").textContent = `${b.istasyon.toLocaleString("tr")} istasyon · `
         + `${b.gun.toLocaleString("tr")} günlük kayıt · ${b.ilk_tarih}…${b.son_tarih}`;
     }
   } catch (e) { /* uç yoksa sessiz geç */ }
 }
 
+/* 1) havza — taşkın modundaki çıkarımın aynısını kullanır */
+$("btnSuHavza").onclick = () => { $("btnPick").click(); };
+
+/* 3) civardaki AGİ'ler */
 $("btnSuGetir").onclick = async () => {
-  const b = map.getBounds();
-  setStatus("suStatus", "İstasyonlar getiriliyor…", "loading");
+  setStatus("suStatus", "AGİ'ler getiriliyor…", "loading");
   try {
-    const q = new URLSearchParams({
-      bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
-      en_az_yil: +$("suEnAzYil").value || 5,
-    });
-    const r = await api("/api/su-istasyon?" + q.toString());
+    let r;
+    if (S.havza) {
+      r = await api("/api/su-havza", {
+        geometri: (S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza),
+        tampon_derece: +$("suTampon").value || 0,
+        en_az_yil: +$("suEnAzYil").value || 5,
+      });
+    } else {
+      const b = map.getBounds();
+      const q = new URLSearchParams({
+        bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
+        en_az_yil: +$("suEnAzYil").value || 5,
+      });
+      r = await api("/api/su-istasyon?" + q.toString());
+    }
+    S.suListe = r.istasyonlar;
+    S.suSecili = new Set(r.istasyonlar.filter(s => s.alan_km2).map(s => s.kod));
     layers.su.clearLayers();
     r.istasyonlar.forEach(s => {
       if (s.lat == null || s.lon == null) return;
       const m = L.circleMarker([s.lat, s.lon], { radius: 5 });
       m.su = s;
       m.bindTooltip(`${s.kod} — ${(s.ad || "").replace(/_/g, " ")}`, { sticky: true });
-      m.on("click", () => suSec(s));
+      m.on("click", () => {
+        if (S.suSecili.has(s.kod)) S.suSecili.delete(s.kod); else S.suSecili.add(s.kod);
+        suListele();
+      });
       m.addTo(layers.su);
     });
-    const sat = (s) => `<tr data-kod="${s.kod}" class="su-sat"><td>${s.kod}</td>`
-      + `<td>${(s.ad || "").replace(/_/g, " ")}</td>`
-      + `<td style="text-align:right">${(s.veri_gun / 365).toFixed(0)}</td>`
-      + `<td style="text-align:right">${s.alan_km2 ? fmt(s.alan_km2, 1) : "—"}</td>`
-      + `<td style="text-align:right">${s.q_ort != null ? fmt(s.q_ort, 2) : "—"}</td></tr>`;
-    $("suListe").innerHTML = r.istasyonlar.length
-      ? '<table class="tbl small"><tr><th>Kod</th><th>Ad</th><th>Yıl</th>'
-        + "<th>A (km²)</th><th>Q<sub>ort</sub></th></tr>"
-        + r.istasyonlar.map(sat).join("") + "</table>"
-      : '<p class="small">Bu pencerede yeterli uzunlukta istasyon yok.</p>';
-    $("suListe").querySelectorAll(".su-sat").forEach(tr => {
-      tr.onclick = () => {
-        const s = r.istasyonlar.find(x => x.kod === tr.dataset.kod);
-        if (s) { suSec(s); map.setView([s.lat, s.lon], Math.max(map.getZoom(), 10)); }
-      };
-    });
-    suIsaretle();
-    setStatus("suStatus", `${r.istasyonlar.length} istasyon — birini seçin.`, "ok");
+    suListele();
+    const ic = r.istasyonlar.filter(s => s.icinde).length;
+    setStatus("suStatus", `${r.istasyonlar.length} istasyon`
+      + (S.havza ? ` (${ic} tanesi havza içinde)` : "")
+      + " — analize girecekleri işaretleyin.", "ok");
   } catch (e) {
-    setStatus("suStatus", "İstasyonlar getirilemedi: " + e.message, "err");
+    setStatus("suStatus", "AGİ'ler getirilemedi: " + e.message, "err");
   }
 };
 
-$("btnSu").onclick = async () => {
-  if (!S.suSecili) return;
-  setStatus("suStatus", "Hesaplanıyor…", "loading");
+function suListele() {
+  const sat = (s) => `<tr><td><input type="checkbox" class="su-cb" data-kod="${s.kod}"`
+    + `${S.suSecili.has(s.kod) ? " checked" : ""}`
+    + `${s.alan_km2 ? "" : " disabled title='yağış alanı yok — havzaya taşınamaz'"}></td>`
+    + `<td>${s.kod}</td><td>${(s.ad || "").replace(/_/g, " ")}</td>`
+    + `<td>${s.icinde ? "içinde" : "çevre"}</td>`
+    + `<td style="text-align:right">${(s.veri_gun / 365).toFixed(0)}</td>`
+    + `<td style="text-align:right">${s.alan_km2 ? fmt(s.alan_km2, 1) : "—"}</td>`
+    + `<td style="text-align:right">${s.q_ort != null ? fmt(s.q_ort, 2) : "—"}</td></tr>`;
+  $("suListe").innerHTML = S.suListe.length
+    ? '<table class="tbl small"><tr><th>✓</th><th>Kod</th><th>Ad</th><th>Konum</th>'
+      + "<th>Yıl</th><th>A (km²)</th><th>Q<sub>ort</sub></th></tr>"
+      + S.suListe.map(sat).join("") + "</table>"
+    : '<p class="small">Bu alanda yeterli uzunlukta istasyon yok.</p>';
+  $("suListe").querySelectorAll(".su-cb").forEach(cb => {
+    cb.onclick = () => {
+      if (cb.checked) S.suSecili.add(cb.dataset.kod); else S.suSecili.delete(cb.dataset.kod);
+      suHedefDoldur();
+    };
+  });
+  suHedefDoldur();
+}
+
+/* 4) ölçüm periyotları + korelasyon */
+$("btnSuPeriyot").onclick = async () => {
+  const ilk = +$("suIlkYil").value, son = +$("suSonYil").value;
+  if (!(ilk && son && son >= ilk)) return setStatus("suStatus",
+    "Geçerli bir yıl aralığı girin.", "err");
+  setStatus("suStatus", "Periyotlar çıkarılıyor…", "loading");
   try {
-    const o = await api("/api/su", {
-      kod: S.suSecili.kod,
-      ilk_yil: +$("suIlkYil").value || 0,
-      son_yil: +$("suSonYil").value || 0,
-      talep_ls: $("suTalep").value === "" ? null : +$("suTalep").value,
+    const r = await api("/api/su-periyot",
+      { kodlar: [...S.suSecili], ilk_yil: ilk, son_yil: son });
+    S.suPeriyot = r;
+    const t = r.tablo;
+    const renk = { tam: "#2e7d32", eksik: "#f9a825", yok: "#e0e0e0" };
+    let h = '<p class="small"><b>Ölçüm periyotları</b> — '
+      + '<span style="color:#2e7d32">■</span> tam yıl · '
+      + '<span style="color:#f9a825">■</span> eksik (kısmi gözlem) · '
+      + '<span style="color:#bdbdbd">■</span> veri yok</p>'
+      + '<div style="overflow-x:auto"><table class="tbl small"><tr><th>İstasyon</th>'
+      + t.yillar.map(y => `<th style="writing-mode:vertical-rl;font-weight:400">${y}</th>`).join("")
+      + "<th>tam</th><th>eksik</th></tr>";
+    t.istasyonlar.forEach(s => {
+      h += `<tr><td title="${(s.ad || "").replace(/_/g, " ")}">${s.kod}</td>`
+        + s.yillar.map(y => `<td title="${y.yil}: ${y.durum}${y.q != null
+            ? " · " + fmt(y.q, 2) + " m³/s, " + y.gun + " gün" : ""}"`
+            + ` style="background:${renk[y.durum]};padding:0 3px"></td>`).join("")
+        + `<td style="text-align:right">${s.tam_yil}</td>`
+        + `<td style="text-align:right">${s.eksik_yil}</td></tr>`;
     });
-    S.su = o;
-    const i = o.istasyon, d = o.donem;
-    const sag = (v, n = 2) => `<td style="text-align:right">${v == null ? "—" : fmt(v, n)}</td>`;
-    let h = `<h3 class="small">${i.kod} — ${(i.ad || "").replace(/_/g, " ")}</h3>`
-      + '<table class="tbl small">'
-      + `<tr><td>Dönem</td><td>${d.ilk_su_yili}–${d.son_su_yili} su yılı `
-      + `(${d.tam_yil} tam yıl, ${d.gun.toLocaleString("tr")} gün)</td></tr>`
-      + `<tr><td>Ortalama akım Q<sub>ort</sub></td><td><b>${fmt(o.q_ort, 3)}</b> m³/s</td></tr>`
-      + `<tr><td>Yıllık hacim</td><td><b>${fmt(o.yillik_hacim_hm3, 1)}</b> hm³/yıl</td></tr>`
-      + (o.ozgul_verim_ls_km2 != null
-          ? `<tr><td>Özgül verim</td><td>${fmt(o.ozgul_verim_ls_km2, 2)} L/s/km²</td></tr>`
-            + `<tr><td>Yıllık verim</td><td>${fmt(o.yillik_verim_mm, 0)} mm</td></tr>` : "")
-      + `<tr><td>En küçük / en büyük günlük</td><td>${fmt(o.q_min, 3)} / `
-      + `${fmt(o.q_maks, 1)} m³/s</td></tr></table>`;
+    h += "</table></div>";
 
-    h += '<p class="small"><b>Güvenilir debiler</b> (debi süreklilik eğrisinden)</p>'
-      + '<table class="tbl small"><tr><th>Aşılma süresi</th>'
-      + Object.keys(o.guvenilir_debi).map(p => `<th style="text-align:right">%${p}</th>`).join("")
-      + "</tr><tr><td>Q (m³/s)</td>"
-      + Object.values(o.guvenilir_debi).map(v => sag(v, 3)).join("") + "</tr></table>";
+    const ky = r.korelasyon.filter(k => k.r2 != null).sort((a, b) => b.r2 - a.r2);
+    if (ky.length) {
+      h += '<p class="small"><b>İstasyon çiftleri arasındaki ilişki</b> '
+        + "(yıllık ortalama akım regresyonu, en iyi 12)</p><table class='tbl small'>"
+        + "<tr><th>A</th><th>B</th><th>ortak yıl</th><th>r</th><th>r²</th></tr>"
+        + ky.slice(0, 12).map(k => `<tr><td>${k.a}</td><td>${k.b}</td>`
+            + `<td style="text-align:right">${k.ortak_yil}</td>`
+            + `<td style="text-align:right">${fmt(k.r, 3)}</td>`
+            + `<td style="text-align:right">${fmt(k.r2, 3)}</td></tr>`).join("")
+        + "</table>";
+    }
+    $("suPeriyot").innerHTML = h;
+    const eksikToplam = t.istasyonlar.reduce((a, s) => a + s.eksik_yil, 0);
+    setStatus("suStatus", `${t.istasyonlar.length} istasyon × ${t.yillar.length} yıl — `
+      + `toplam ${eksikToplam} eksik yıl. Temsil AGİ'sini seçip tamamlayın.`, "ok");
+  } catch (e) {
+    setStatus("suStatus", "Periyotlar çıkarılamadı: " + e.message, "err");
+  }
+};
 
-    h += '<p class="small"><b>Aylık dağılım</b> (su yılı)</p><table class="tbl small">'
-      + "<tr><th>Ay</th>" + o.aylik.map(a => `<th style="text-align:right">${a.ad.slice(0, 3)}</th>`).join("")
-      + "</tr><tr><td>Q<sub>ort</sub></td>" + o.aylik.map(a => sag(a.q_ort, 2)).join("")
-      + "</tr><tr><td>hm³</td>" + o.aylik.map(a => sag(a.hacim_hm3, 1)).join("")
-      + "</tr></table>";
+$("suHedef").onchange = suIsaretle;
 
-    if (o.temin) {
-      const t = o.temin;
-      h += `<p class="small"><b>Su temini</b> — talep ${fmt(t.talep_ls, 0)} L/s `
-        + `(${fmt(t.yillik_talep_hm3, 2)} hm³/yıl)</p><table class="tbl small">`
-        + `<tr><td>Karşılanma güvenilirliği</td><td><b>%${fmt(t.guvenilirlik_yuzde, 1)}</b> `
-        + `(${t.karsilanan_gun.toLocaleString("tr")} / ${t.toplam_gun.toLocaleString("tr")} gün)</td></tr>`
-        + `<tr><td>Yıllık ortalama açık</td><td>${fmt(t.yillik_acik_hm3, 3)} hm³</td></tr></table>`;
+/* 5) eksikleri tamamla + havza çıkışına taşı */
+$("btnSuTamamla").onclick = async () => {
+  const hedef = $("suHedef").value;
+  if (!hedef) return;
+  const alan = +$("suAlan").value || +$("inpA").value;
+  setStatus("suStatus", "Regresyonla tamamlanıyor…", "loading");
+  try {
+    const o = await api("/api/su-tamamla", {
+      hedef, vericiler: [...S.suSecili],
+      ilk_yil: +$("suIlkYil").value, son_yil: +$("suSonYil").value,
+      en_az_r2: +$("suR2").value || 0.5,
+      havza_alani_km2: alan || null, us: +$("suUs").value || 1,
+    });
+    S.suTamam = o;
+    const i = o.istasyon;
+    let h = `<h3 class="small">${i.kod} — ${(i.ad || "").replace(/_/g, " ")}`
+      + `${i.alan_km2 ? " (" + fmt(i.alan_km2, 1) + " km²)" : ""}</h3>`;
+
+    const il = Object.entries(o.iliskiler).sort((a, b) => b[1].r2 - a[1].r2);
+    h += '<p class="small"><b>Kabul edilen ilişkiler</b> (eksik yıl doldurmada '
+      + "kullanılma sırası)</p>";
+    h += il.length
+      ? '<table class="tbl small"><tr><th>Verici</th><th>r²</th><th>ortak yıl</th>'
+        + "<th>bağıntı</th></tr>"
+        + il.map(([k, v]) => `<tr><td>${k}</td>`
+            + `<td style="text-align:right">${fmt(v.r2, 3)}</td>`
+            + `<td style="text-align:right">${v.ortak_yil}</td>`
+            + `<td>Q = ${fmt(v.kesim, 3)} + ${fmt(v.egim, 4)}·Q<sub>${k}</sub></td></tr>`).join("")
+        + "</table>"
+      : '<p class="small">r² eşiğini geçen ilişki yok — eşiği düşürün ya da başka '
+        + "istasyon işaretleyin.</p>";
+
+    h += `<p class="small"><b>Yıllık seri</b> — ${o.gozlem} gözlem, `
+      + `${o.dolduruldu} regresyonla dolduruldu`
+      + (o.bos ? `, <b>${o.bos} yıl boş kaldı</b>` : "") + "</p>"
+      + '<div style="overflow-x:auto"><table class="tbl small"><tr><th>Su yılı</th>'
+      + o.seri.map(s => `<th style="font-weight:400">${s.yil}</th>`).join("") + "</tr>"
+      + "<tr><td>Q (m³/s)</td>" + o.seri.map(s =>
+          `<td style="text-align:right;${s.kaynak === "gözlem" ? ""
+            : s.q == null ? "background:#ffcdd2" : "background:#fff9c4"}"`
+          + ` title="${s.kaynak === "gözlem" ? "gözlem"
+              : s.kaynak ? s.kaynak + " ile dolduruldu (r²=" + fmt(s.r2, 3) + ")"
+              : "veri yok"}">${s.q == null ? "—" : fmt(s.q, 2)}</td>`).join("")
+      + "</tr></table></div>";
+
+    if (o.outlet) {
+      const u = o.outlet;
+      h += `<p class="small"><b>Havza çıkışına taşınmış potansiyel</b> — `
+        + `(${fmt(u.havza_alani_km2, 1)} / ${fmt(u.kaynak_alan_km2, 1)})`
+        + `<sup>${fmt(u.us, 2)}</sup> = ${fmt(u.oran, 4)}</p><table class="tbl small">`
+        + `<tr><td>Ortalama akım Q<sub>ort</sub></td><td><b>${fmt(u.q_ort, 3)}</b> m³/s</td></tr>`
+        + `<tr><td>Yıllık hacim</td><td><b>${fmt(u.yillik_hacim_hm3, 2)}</b> hm³/yıl</td></tr>`
+        + `<tr><td>Özgül verim</td><td>${fmt(u.ozgul_verim_ls_km2, 2)} L/s/km²</td></tr>`
+        + `<tr><td>Yıllık verim</td><td>${fmt(u.yillik_verim_mm, 0)} mm</td></tr>`
+        + `<tr><td>Kullanılan yıl</td><td>${u.yil_sayisi}</td></tr></table>`;
     }
     $("suSonuc").innerHTML = h;
-    setStatus("suStatus", `Q_ort = ${fmt(o.q_ort, 3)} m³/s · `
-      + `${fmt(o.yillik_hacim_hm3, 1)} hm³/yıl.`, "ok");
+    setStatus("suStatus", o.outlet
+      ? `Havza çıkışı: Q_ort = ${fmt(o.outlet.q_ort, 3)} m³/s · `
+        + `${fmt(o.outlet.yillik_hacim_hm3, 2)} hm³/yıl.`
+      : `${o.gozlem} gözlem + ${o.dolduruldu} dolduruldu (havza alanı girilmedi).`, "ok");
   } catch (e) {
-    setStatus("suStatus", "Hesaplanamadı: " + e.message, "err");
+    setStatus("suStatus", "Tamamlanamadı: " + e.message, "err");
   }
 };
 

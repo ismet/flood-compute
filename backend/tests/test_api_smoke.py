@@ -128,4 +128,25 @@ else:
           f"{o['istasyon']['kod']} Qort = {o['q_ort']:.2f} m³/s, "
           f"{o['yillik_hacim_hm3']:.0f} hm³/yıl")
 
+    # havza akışı: poligondan AGİ -> periyot tablosu -> regresyonla tamamlama
+    geo = {"type": "Polygon", "coordinates": [[[30.0, 40.6], [30.4, 40.6],
+                                               [30.4, 40.9], [30.0, 40.9], [30.0, 40.6]]]}
+    hv = c.post("/api/su-havza", json={"geometri": geo, "tampon_derece": 0.35,
+                                       "en_az_yil": 20}).json()
+    kod = [s["kod"] for s in hv["istasyonlar"] if s["alan_km2"]][:5]
+    assert len(kod) >= 2, "havza çevresinde alanı bilinen istasyon yok"
+    pr = c.post("/api/su-periyot", json={"kodlar": kod, "ilk_yil": 1975,
+                                         "son_yil": 2005}).json()
+    assert len(pr["tablo"]["yillar"]) == 31
+    assert all(set(y["durum"] for y in s["yillar"]) <= {"tam", "eksik", "yok"}
+               for s in pr["tablo"]["istasyonlar"])
+    tm = c.post("/api/su-tamamla", json={"hedef": kod[0], "vericiler": kod,
+                                         "ilk_yil": 1975, "son_yil": 2005,
+                                         "havza_alani_km2": 115.0}).json()
+    assert len(tm["seri"]) == 31 and tm["gozlem"] > 0, tm.get("hata")
+    assert tm["outlet"]["q_ort"] > 0
+    print(f"Su havza akışı OK: {len(hv['istasyonlar'])} AGİ, {kod[0]} → "
+          f"{tm['gozlem']} gözlem + {tm['dolduruldu']} dolduruldu, "
+          f"havza çıkışı {tm['outlet']['q_ort']:.3f} m³/s")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")

@@ -84,24 +84,46 @@
 
     <!-- SU POTANSİYELİ MODU -->
     <section id="suMode" class="hidden">
-      <p class="hint">AGİ'lerin <b>günlük akım</b> serilerinden su potansiyeli
-      (1934–2015, 2909 istasyon). Taşkın hesabından bağımsızdır: burada pik değil
-      <b>hacim</b> önemlidir — ortalama akım, aylık dağılım, yıllık hacim, debi
-      süreklilik eğrisi ve verilen bir talebin ne kadar süre karşılandığı.
-      Haritayı istediğiniz yere getirip istasyonları listeleyin.</p>
+      <p class="hint">Havzanın <b>su potansiyeli</b>: AGİ'lerin günlük akım
+      serilerinden (1934–2015, 2909 istasyon). Taşkın hesabından bağımsızdır —
+      burada pik değil <b>hacim</b> sorulur. Sıra: havzayı çıkar → yıl aralığını
+      seç → civardaki AGİ'leri getir → ölçüm periyotlarını gör → eksik yılları
+      regresyonla tamamla → havza çıkışına taşı.</p>
 
+      <div class="mstep"><b>1) Havza</b> — outlet'e tıklayıp havzayı ve alanını çıkarın</div>
       <div class="rain-tools">
-        <button id="btnSuGetir" class="primary" title="Haritada görünen pencere içindeki günlük akım istasyonlarını getirir.">📍 Görünen alandaki istasyonlar</button>
+        <button id="btnSuHavza" class="primary" title="Haritada outlet noktasına tıklayın; havza sınırı, alanı ve dere ağı DEM'den çıkarılır. Taşkın modundaki 1. adımın aynısıdır — orada çıkardıysanız otomatik kullanılır.">📍 Outlet seç ve havzayı çıkar</button>
+        <label class="inline" title="Havza alanı. Çıkarımdan otomatik gelir; elle de değiştirebilirsiniz.">A (km²)<input id="suAlan" type="number" step="0.01" style="width:110px"></label>
+      </div>
+      <div id="suHavzaInfo" class="small"></div>
+
+      <div class="mstep"><b>2) Yıl aralığı</b> — su yılı (1 Ekim – 30 Eylül)</div>
+      <div class="rain-tools">
+        <label class="inline">İlk su yılı<input id="suIlkYil" type="number" step="1" value="1970" style="width:90px"></label>
+        <label class="inline">Son su yılı<input id="suSonYil" type="number" step="1" value="2010" style="width:90px"></label>
         <label class="inline" title="Bu kadar yıldan kısa serisi olan istasyonlar listelenmez.">En az yıl<input id="suEnAzYil" type="number" min="1" step="1" value="10" style="width:70px"></label>
+        <label class="inline" title="Havza sınırının bu kadar dışındaki istasyonlar da getirilir. Havzada AGİ olmayabilir, o yüzden geniş tutulur. 1° ≈ 111 km.">Tampon (°)<input id="suTampon" type="number" step="0.05" min="0" value="0.35" style="width:80px"></label>
+      </div>
+
+      <div class="mstep"><b>3) Civardaki AGİ'ler</b></div>
+      <div class="rain-tools">
+        <button id="btnSuGetir" class="primary" title="Havza poligonunun içindeki ve tampon kadar çevresindeki günlük akım istasyonlarını getirir. Havza yoksa görünen harita penceresi kullanılır.">AGİ'leri getir</button>
       </div>
       <div id="suInfo" class="small"></div>
       <div id="suListe" class="small"></div>
 
-      <div class="rain-tools" style="margin-top:4px">
-        <label class="inline" title="Analize girecek ilk su yılı (1 Ekim başlangıçlı). Boş = tümü.">İlk su yılı<input id="suIlkYil" type="number" step="1" placeholder="tümü" style="width:90px"></label>
-        <label class="inline">Son su yılı<input id="suSonYil" type="number" step="1" placeholder="tümü" style="width:90px"></label>
-        <label class="inline" title="Sürekli su talebi. Serinin yüzde kaçında bu debinin karşılandığı ve yıllık açık hacmi hesaplanır.">Talep (L/s)<input id="suTalep" type="number" step="1" placeholder="ör. 250" style="width:90px"></label>
-        <button id="btnSu" class="primary" disabled>Potansiyeli hesapla</button>
+      <div class="mstep"><b>4) Ölçüm periyotları</b> — hangi istasyonda hangi yıl var</div>
+      <div class="rain-tools">
+        <button id="btnSuPeriyot" class="primary" disabled title="İşaretli istasyonların yıl yıl ölçüm durumunu ve aralarındaki korelasyonları çıkarır.">Periyot tablosu ve korelasyon</button>
+      </div>
+      <div id="suPeriyot"></div>
+
+      <div class="mstep"><b>5) Eksik yılları tamamla ve havza çıkışına taşı</b></div>
+      <div class="rain-tools">
+        <label class="inline" title="Havzayı temsil edecek istasyon. Eksik yılları, işaretli diğer istasyonlarla kurulan regresyonla doldurulur.">Temsil AGİ'si<select id="suHedef" style="max-width:260px"></select></label>
+        <label class="inline" title="Bu değerin altındaki ilişkiler eksik yıl doldurmada kullanılmaz.">En az r²<input id="suR2" type="number" step="0.05" min="0" max="1" value="0.5" style="width:80px"></label>
+        <label class="inline" title="Q_havza = Q_AGİ × (A_havza/A_AGİ)^üs. Hacimde alanla yaklaşık doğrusal gittiği için 1.0; taşkın pikinde 2/3 kullanılır.">Alan üssü<input id="suUs" type="number" step="0.01" value="1" style="width:80px"></label>
+        <button id="btnSuTamamla" class="primary" disabled>Tamamla ve taşı</button>
       </div>
       <div id="suStatus" class="status"></div>
       <div id="suSonuc"></div>

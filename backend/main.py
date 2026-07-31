@@ -971,6 +971,64 @@ class SuGirdi(BaseModel):
     talep_ls: float | None = None       # sürekli su talebi (L/s)
 
 
+class SuHavzaGirdi(BaseModel):
+    geometri: dict                      # havza poligonu (GeoJSON geometry)
+    tampon_derece: float = 0.35
+    en_az_yil: int = 10
+
+
+@app.post("/api/su-havza")
+def api_su_havza(g: SuHavzaGirdi):
+    """Havzanın içindeki ve çevresindeki günlük akım istasyonları."""
+    from backend.core import su
+    try:
+        return {"istasyonlar": su.havza(g.geometri, g.tampon_derece, g.en_az_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+class SuPeriyotGirdi(BaseModel):
+    kodlar: list[str]
+    ilk_yil: int
+    son_yil: int
+
+
+@app.post("/api/su-periyot")
+def api_su_periyot(g: SuPeriyotGirdi):
+    """İstasyon × su yılı ölçüm durumu (tam / eksik / yok) + çift korelasyonlar."""
+    from backend.core import su
+    try:
+        return {"tablo": su.periyot_tablosu(g.kodlar, g.ilk_yil, g.son_yil),
+                "korelasyon": su.korelasyon(g.kodlar, g.ilk_yil, g.son_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+class SuTamamlaGirdi(BaseModel):
+    hedef: str                          # havzayı temsil edecek AGİ
+    vericiler: list[str]                # eksik yılların doldurulacağı istasyonlar
+    ilk_yil: int
+    son_yil: int
+    en_az_r2: float = 0.5
+    havza_alani_km2: float | None = None
+    us: float = 1.0                     # alan oranı üssü (hacimde ~1)
+
+
+@app.post("/api/su-tamamla")
+def api_su_tamamla(g: SuTamamlaGirdi):
+    """Eksik su yıllarını regresyonla tamamlar, sonra havza çıkışına taşır."""
+    from backend.core import su
+    try:
+        o = su.tamamla(g.hedef, g.vericiler, g.ilk_yil, g.son_yil, g.en_az_r2)
+        o["istasyon"] = su.istasyon(g.hedef)
+        if g.havza_alani_km2:
+            o["outlet"] = su.outlet(o["seri"], o["istasyon"]["alan_km2"],
+                                    g.havza_alani_km2, g.us)
+        return o
+    except Exception as e:
+        return _err(e)
+
+
 @app.post("/api/su")
 def api_su(g: SuGirdi):
     """Su potansiyeli: ortalama akım, aylık dağılım, yıllık hacim, süreklilik

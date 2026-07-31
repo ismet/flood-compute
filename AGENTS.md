@@ -79,7 +79,8 @@ backend/core/         — Computation engine (no framework dependency)
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
-  su.py                 — Water potential/supply from daily flow series (volume, not peak)
+  su.py                 — Water potential: basin → nearby gauges → record gaps →
+                          regression gap-filling → area-ratio transfer to the outlet
   agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
@@ -126,6 +127,9 @@ All return JSON with `"hata"` key on error. Use `from backend.core import X` ins
 | `GET /api/su-bilgi` | Whether the daily-flow (water potential) database is installed |
 | `GET /api/su-istasyon` | Daily-flow stations in a bbox (`en_az_yil` filters short records) |
 | `POST /api/su` | Water potential: Qort, monthly split, annual volume, FDC, supply reliability |
+| `POST /api/su-havza` | Daily-flow stations inside/around a basin polygon (`tampon_derece`) |
+| `POST /api/su-periyot` | Station × water-year record status (tam/eksik/yok) + pairwise regressions |
+| `POST /api/su-tamamla` | Fill a station's missing years by regression, then transfer to the outlet |
 | `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
