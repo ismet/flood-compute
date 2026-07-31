@@ -779,6 +779,268 @@ def api_akarsu(bati: float, guney: float, dogu: float, kuzey: float,
         return _err(e)
 
 
+@app.get("/api/agi-bilgi")
+def api_agi_bilgi():
+    """AGİ pik akım veri tabanı kurulu mu, kaç istasyon/kayıt var."""
+    from backend.core import agi
+    try:
+        return agi.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/agi")
+def api_agi(bati: float, guney: float, dogu: float, kuzey: float,
+            en_az_yil: int = 10, kurum: str = ""):
+    """Pencere içindeki AGİ'ler (frekans analizine uygun uzunlukta olanlar)."""
+    from backend.core import agi
+    try:
+        return {"istasyonlar": agi.pencere((bati, guney, dogu, kuzey),
+                                           en_az_yil=en_az_yil, kurum=kurum or None)}
+    except Exception as e:
+        return _err(e)
+
+
+class AgiHavzaGirdi(BaseModel):
+    geometri: dict                      # havza poligonu (GeoJSON geometry)
+    tampon_derece: float = 0.25         # havza dışını da göster (bölgesel analiz için)
+    en_az_yil: int = 10
+    kurum: str = ""
+
+
+@app.post("/api/agi-havza")
+def api_agi_havza(g: AgiHavzaGirdi):
+    """Çıkarılan havzanın içindeki ve çevresindeki AGİ'ler."""
+    from backend.core import agi
+    try:
+        return {"istasyonlar": agi.poligon(g.geometri, tampon_derece=g.tampon_derece,
+                                           en_az_yil=g.en_az_yil, kurum=g.kurum or None)}
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/agi-seri")
+def api_agi_seri(kod: str, ilk_yil: int = 0, son_yil: int = 0,
+                 dusuk_guveni_at: bool = False):
+    """Bir AGİ'nin yıllık maksimum akım serisi (analiz öncesi gözden geçirmek için)."""
+    from backend.core import agi
+    try:
+        return {"istasyon": agi.istasyon(kod),
+                "seri": agi.seri(kod, ilk_yil or None, son_yil or None, dusuk_guveni_at)}
+    except Exception as e:
+        return _err(e)
+
+
+class TfaGirdi(BaseModel):
+    kod: str = ""                       # AGİ kodu (veriyi veri tabanından al)
+    x: list[float] | None = None        # ya da doğrudan seri ver
+    yillar: list[int] | None = None
+    ilk_yil: int = 0
+    son_yil: int = 0
+    dusuk_guveni_at: bool = False
+
+
+@app.post("/api/tfa")
+def api_tfa(g: TfaGirdi):
+    """Noktasal Taşkın Frekans Analizi (NTFA) — DSİ ekstrem dağılım hesabı.
+
+    Altı dağılım moment yöntemiyle uydurulur, Simirnov-Kolmogorov testiyle
+    karşılaştırılır; Dmax'ı en küçük olan "kabul edilen" dağılımdır."""
+    from backend.core import agi, tfa
+    try:
+        ad, x, yillar = g.kod, g.x, g.yillar
+        if g.kod:
+            ist = agi.istasyon(g.kod)
+            s = agi.seri(g.kod, g.ilk_yil or None, g.son_yil or None, g.dusuk_guveni_at)
+            x = [k["q"] for k in s]
+            yillar = [k["yil"] for k in s]
+            ad = f"{ist['kod']} {ist['ad']}".strip()
+        if not x:
+            raise ValueError("Analiz için seri gerekli (kod ya da x)")
+        sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar)
+        if g.kod:
+            sonuc["istasyon_bilgi"] = agi.istasyon(g.kod)
+        return sonuc
+    except Exception as e:
+        return _err(e)
+
+
+class BtfaGirdi(BaseModel):
+    kodlar: list[str]                   # bölgesel analize girecek AGİ'ler
+    alan_km2: float                     # proje havzasının yağış alanı
+    us: float | None = None             # alan-debi üssü (boşsa veriden hesaplanır)
+    katsayi: float | None = None        # bağıntı katsayısı (üs elle verildiyse, vars. 1)
+    katsayi_serbest: bool = False       # regresyonda a serbest mi, a=1 mi
+    disla: list[str] = []               # büyüme eğrisine katılmayacaklar
+    transfer_kod: str = ""              # tek istasyondan alan oranıyla aktarım
+    transfer_ussu: float = 2.0 / 3.0
+    ilk_yil: int = 0
+    son_yil: int = 0
+    dusuk_guveni_at: bool = False
+
+
+@app.post("/api/btfa")
+def api_btfa(g: BtfaGirdi):
+    """Bölgesel Taşkın Frekans Analizi (BTFA) — indeks-debi yöntemi.
+
+    Seçilen AGİ'lerin her biri için NTFA yapılır, boyutsuz büyüme eğrileri
+    (QT/Q2) ortalanır ve havzanın indeks debisi alan-debi bağıntısından
+    bulunarak Q2…Q10000 üretilir."""
+    from backend.core import agi, btfa
+    try:
+        seriler = []
+        for kod in g.kodlar:
+            ist = agi.istasyon(kod)
+            s = agi.seri(kod, g.ilk_yil or None, g.son_yil or None, g.dusuk_guveni_at)
+            seriler.append({"kod": kod, "ad": ist["ad"], "alan": ist["yagis_alani"],
+                            "x": [k["q"] for k in s]})
+        eksik = [s["kod"] for s in seriler if not s["alan"]]
+        if eksik:
+            raise ValueError("Yağış alanı bilinmeyen istasyon bölgesel analize "
+                             f"giremez: {', '.join(eksik)}")
+        return btfa.bolgesel(seriler, g.alan_km2, us=g.us, katsayi=g.katsayi,
+                             katsayi_serbest=g.katsayi_serbest, disla=g.disla,
+                             transfer_kod=g.transfer_kod or None,
+                             transfer_ussu=g.transfer_ussu)
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/mmy-bolgeler")
+def api_mmy_bolgeler():
+    """Km zarf eğrisi tanımlı bölgeler (MMY hesabı için)."""
+    from backend.core import mmy
+    try:
+        return {"bolgeler": mmy.bolgeler()}
+    except Exception as e:
+        return _err(e)
+
+
+class MmyGirdi(BaseModel):
+    p: list[float]                      # 1 günlük yıllık en büyük yağışlar (mm)
+    bolge_no: int
+    m1_ort: float = 1.0                 # Hershfield abaklarından okunur
+    m2_ort: float = 1.0
+    m1_s: float = 1.0
+    m2_s: float = 1.0
+    gun_katsayisi: bool = False         # sabit saat -> gerçek 24 saat (1.13)
+    istasyon: str = ""
+
+
+@app.post("/api/mmy")
+def api_mmy(g: MmyGirdi):
+    """Muhtemel Maksimum Yağış (MMY/PMP) — Hershfield yöntemi.
+
+    Çıkan yağış derinliği, hesap adımındaki P24_OET girdisine yazılarak
+    muhtemel maksimum feyezan (QOET) elde edilir."""
+    from backend.core import mmy
+    try:
+        return mmy.hesapla(g.p, g.bolge_no, m1_ort=g.m1_ort, m2_ort=g.m2_ort,
+                           m1_s=g.m1_s, m2_s=g.m2_s,
+                           gun_katsayisi=g.gun_katsayisi, istasyon=g.istasyon)
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/su-bilgi")
+def api_su_bilgi():
+    """Su potansiyeli (günlük akım) veri tabanı kurulu mu."""
+    from backend.core import su
+    try:
+        return su.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/su-istasyon")
+def api_su_istasyon(bati: float, guney: float, dogu: float, kuzey: float,
+                    en_az_yil: int = 5):
+    """Pencere içindeki günlük akım istasyonları."""
+    from backend.core import su
+    try:
+        return {"istasyonlar": su.pencere((bati, guney, dogu, kuzey),
+                                          en_az_yil=en_az_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+class SuGirdi(BaseModel):
+    kod: str
+    ilk_yil: int = 0                    # su yılı sınırları (boş = tümü)
+    son_yil: int = 0
+    talep_ls: float | None = None       # sürekli su talebi (L/s)
+
+
+class SuHavzaGirdi(BaseModel):
+    geometri: dict                      # havza poligonu (GeoJSON geometry)
+    tampon_derece: float = 0.35
+    en_az_yil: int = 10
+
+
+@app.post("/api/su-havza")
+def api_su_havza(g: SuHavzaGirdi):
+    """Havzanın içindeki ve çevresindeki günlük akım istasyonları."""
+    from backend.core import su
+    try:
+        return {"istasyonlar": su.havza(g.geometri, g.tampon_derece, g.en_az_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+class SuPeriyotGirdi(BaseModel):
+    kodlar: list[str]
+    ilk_yil: int
+    son_yil: int
+
+
+@app.post("/api/su-periyot")
+def api_su_periyot(g: SuPeriyotGirdi):
+    """İstasyon × su yılı ölçüm durumu (tam / eksik / yok) + çift korelasyonlar."""
+    from backend.core import su
+    try:
+        return {"tablo": su.periyot_tablosu(g.kodlar, g.ilk_yil, g.son_yil),
+                "korelasyon": su.korelasyon(g.kodlar, g.ilk_yil, g.son_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+class SuTamamlaGirdi(BaseModel):
+    hedef: str                          # havzayı temsil edecek AGİ
+    vericiler: list[str]                # eksik yılların doldurulacağı istasyonlar
+    ilk_yil: int
+    son_yil: int
+    en_az_r2: float = 0.5
+    havza_alani_km2: float | None = None
+    us: float = 1.0                     # alan oranı üssü (hacimde ~1)
+
+
+@app.post("/api/su-tamamla")
+def api_su_tamamla(g: SuTamamlaGirdi):
+    """Eksik su yıllarını regresyonla tamamlar, sonra havza çıkışına taşır."""
+    from backend.core import su
+    try:
+        o = su.tamamla(g.hedef, g.vericiler, g.ilk_yil, g.son_yil, g.en_az_r2)
+        o["istasyon"] = su.istasyon(g.hedef)
+        if g.havza_alani_km2:
+            o["outlet"] = su.outlet(o["seri"], o["istasyon"]["alan_km2"],
+                                    g.havza_alani_km2, g.us)
+        return o
+    except Exception as e:
+        return _err(e)
+
+
+@app.post("/api/su")
+def api_su(g: SuGirdi):
+    """Su potansiyeli: ortalama akım, aylık dağılım, yıllık hacim, süreklilik
+    eğrisi, güvenilir debiler ve (talep verilirse) karşılanma güvenilirliği."""
+    from backend.core import su
+    try:
+        return su.potansiyel(g.kod, g.ilk_yil or None, g.son_yil or None,
+                             talep_ls=g.talep_ls)
+    except Exception as e:
+        return _err(e)
+
+
 @app.get("/api/raster-layers")
 def api_raster_layers():
     """Kayıtlı koordinatlı raster altlıklar (1/25000 paftalar vb.)."""

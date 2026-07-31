@@ -85,4 +85,68 @@ r = c.get("/api/project/load/duman_testi")
 assert r.json()["x"] == 1
 print("proje kayıt OK")
 
+# --- AGİ veri tabanı + noktasal frekans analizi (kurulu değilse atlanır)
+b = c.get("/api/agi-bilgi").json()
+if not b.get("var"):
+    print("AGİ atlandı: veri tabanı yok "
+          "(tools/agi_veritabani_olustur.py ile üretilir)")
+else:
+    r = c.get("/api/agi", params={"bati": 32.0, "guney": 39.0, "dogu": 36.0,
+                                  "kuzey": 41.0, "en_az_yil": 20}).json()
+    assert r["istasyonlar"], "pencerede AGİ bulunamadı"
+    kod = r["istasyonlar"][0]["kod"]
+    o = c.post("/api/tfa", json={"kod": kod}).json()
+    assert o["kabul_edilen"] in ("normal", "ln2", "ln3", "p3", "lp3", "gumbel")
+    assert len(o["tekerrur"]) == 10 and len(o["debiler"]) == 6
+    print(f"AGİ/NTFA OK: {b['istasyon']} istasyon, pencerede "
+          f"{len(r['istasyonlar'])} — {kod} kabul edilen: {o['kabul_edilen_adi']}")
+
+    kodlar = [s["kod"] for s in r["istasyonlar"] if s["yagis_alani"]][:8]
+    if len(kodlar) >= 2:
+        bt = c.post("/api/btfa", json={"kodlar": kodlar, "alan_km2": 115.0}).json()
+        assert bt["kullanilan_sayisi"] >= 2, bt.get("hata")
+        assert len(bt["buyume_egrisi"]) == 6 and bt["buyume_egrisi"][0] == 1.0
+        assert len(bt["btfa"]["q"]) == 9 and bt["btfa"]["q"][0] > 0
+        print(f"BTFA OK: {bt['kullanilan_sayisi']} istasyon, "
+              f"Q2 = {bt['q2_indeks']:.1f}, Q100 = {bt['btfa']['q'][5]:.1f} m³/s")
+
+# --- su potansiyeli (kurulu değilse atlanır)
+sb = c.get("/api/su-bilgi").json()
+if not sb.get("var"):
+    print("Su potansiyeli atlandı: veri tabanı yok "
+          "(tools/su_veritabani_olustur.py ile üretilir)")
+else:
+    r = c.get("/api/su-istasyon", params={"bati": 27.5, "guney": 40.5, "dogu": 30.5,
+                                          "kuzey": 41.8, "en_az_yil": 20}).json()
+    assert r["istasyonlar"], "pencerede günlük akım istasyonu yok"
+    o = c.post("/api/su", json={"kod": r["istasyonlar"][0]["kod"],
+                                "talep_ls": 250}).json()
+    assert o["q_ort"] > 0 and o["yillik_hacim_hm3"] > 0, o.get("hata")
+    assert len(o["aylik"]) == 12 and o["aylik"][0]["ad"] == "Ekim"
+    assert 0 <= o["temin"]["guvenilirlik_yuzde"] <= 100
+    print(f"Su potansiyeli OK: {sb['istasyon']} istasyon, "
+          f"{o['istasyon']['kod']} Qort = {o['q_ort']:.2f} m³/s, "
+          f"{o['yillik_hacim_hm3']:.0f} hm³/yıl")
+
+    # havza akışı: poligondan AGİ -> periyot tablosu -> regresyonla tamamlama
+    geo = {"type": "Polygon", "coordinates": [[[30.0, 40.6], [30.4, 40.6],
+                                               [30.4, 40.9], [30.0, 40.9], [30.0, 40.6]]]}
+    hv = c.post("/api/su-havza", json={"geometri": geo, "tampon_derece": 0.35,
+                                       "en_az_yil": 20}).json()
+    kod = [s["kod"] for s in hv["istasyonlar"] if s["alan_km2"]][:5]
+    assert len(kod) >= 2, "havza çevresinde alanı bilinen istasyon yok"
+    pr = c.post("/api/su-periyot", json={"kodlar": kod, "ilk_yil": 1975,
+                                         "son_yil": 2005}).json()
+    assert len(pr["tablo"]["yillar"]) == 31
+    assert all(set(y["durum"] for y in s["yillar"]) <= {"tam", "eksik", "yok"}
+               for s in pr["tablo"]["istasyonlar"])
+    tm = c.post("/api/su-tamamla", json={"hedef": kod[0], "vericiler": kod,
+                                         "ilk_yil": 1975, "son_yil": 2005,
+                                         "havza_alani_km2": 115.0}).json()
+    assert len(tm["seri"]) == 31 and tm["gozlem"] > 0, tm.get("hata")
+    assert tm["outlet"]["q_ort"] > 0
+    print(f"Su havza akışı OK: {len(hv['istasyonlar'])} AGİ, {kod[0]} → "
+          f"{tm['gozlem']} gözlem + {tm['dolduruldu']} dolduruldu, "
+          f"havza çıkışı {tm['outlet']['q_ort']:.3f} m³/s")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")

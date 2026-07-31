@@ -18,7 +18,12 @@ python backend/tests/test_kmz_export.py               # KMZ writer round-trip
 python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS
 python backend/tests/test_corine_c.py                 # CORINE -> rational C derivation
 python backend/tests/test_akarsu.py                   # DSİ river layer (skips if data absent)
+python backend/tests/test_tfa_golden.py               # NTFA golden (ornek.xlsm, 6 distributions)
+python backend/tests/test_btfa_golden.py              # BTFA golden (Karamandere index-flood)
+python backend/tests/test_mmy_golden.py               # MMY golden (Hershfield PMP, 2 workbooks)
 python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
+python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
+python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
 docker build -t taskin-hesap .                        # build Docker image
@@ -42,6 +47,51 @@ Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, `gis.py:41`), `HOST`, `PORT`
 
 ## Frontend
 
+```
+backend/main.py       — FastAPI app, 37 endpoints, Pydantic models, HTTP Basic auth
+backend/core/         — Computation engine (no framework dependency)
+  engine.py           — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff
+  snyder.py           — Snyder synthetic UH
+  rational.py         — Rasyonel (A ≤ 1 km²)
+  reservoir.py        — Storage-Indication routing + controlled gates
+  routing.py          — Multi-basin (ara havza) hydrograph routing
+  gis.py              — Basin delineation, DEM handling (~907 lines)
+  tables.py           — JSON table loader + interpolation helpers (data layer)
+  corine.py           — CORINE → CN lookup + rational C derivation (same pass)
+  corine_online.py    — EEA CLC2018 WMS downloader
+  thiessen.py         — Voronoi/Thiessen weights from KMZ
+  snowmelt.py         — Degree-day snowmelt (KAR1)
+  yzd_region.py       — YZD region (A/B/C) from basin polygon
+  report.py           — Word (.docx) flood report
+  dilekce.py          — MGM petition (.docx/.pdf)
+  _delineate_subprocess.py   — subprocess entry point: python -m
+  _multi_delineate_subprocess.py
+  _import_basin_subprocess.py — subprocess entry point: python -m
+  vektor.py             — KML/KMZ/GeoJSON parser for basin import
+  kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
+  raster.py             — Georeferenced raster basemaps → XYZ tile service
+  akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
+  tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
+  btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
+  mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
+  su.py                 — Water potential: basin → nearby gauges → record gaps →
+                          regression gap-filling → area-ratio transfer to the outlet
+  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
+frontend/             — 3 files: index.html, app.js (all logic), style.css
+data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
+                        CORINE class → rational C range matrix)
+data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
+data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
+data/akarsu/          — akarsu.sqlite, DSİ river network at 1/100k–1/500k
+                        (~405k lines, 110 MB; gitignored, built by the tool above)
+data/agi/             — agi.sqlite, DSİ+EİE annual peak flows 1935–2020
+                        (2732 stations / 36.5k station-years, 3.8 MB)
+data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
+                        8.9M days). Built from the 1.68 GB Data.db; each
+                        station's series is one zlib'd float32 blob (NaN =
+                        missing day), which is why it fits in 11.5 MB and why
+                        a whole station reads in one row.
+```
 - **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue
 - Mounted at `/static/`; `index.html` served at `/` via `FileResponse` with `Cache-Control: no-cache`
 - Leaflet + Chart.js from CDNs (unpkg, cdn.jsdelivr)
@@ -77,6 +127,20 @@ data/akarsu/akarsu.sqlite    — DSİ river network (~405k lines, 110 MB; gitign
 | `GET /api/raster-layers` | List raster basemaps |
 | `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
 | `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
+| `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
+| `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
+| `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |
+| `GET /api/agi-seri` | One station's annual peak series (`kod`, year range, confidence filter) |
+| `POST /api/tfa` | NTFA — at-site frequency analysis from a station code or a raw series |
+| `POST /api/btfa` | BTFA — regional index-flood from several station codes + basin area |
+| `GET /api/mmy-bolgeler` | Regions that have a Km envelope curve (for MMY) |
+| `POST /api/mmy` | MMY — Hershfield PMP from an annual max daily rainfall series |
+| `GET /api/su-bilgi` | Whether the daily-flow (water potential) database is installed |
+| `GET /api/su-istasyon` | Daily-flow stations in a bbox (`en_az_yil` filters short records) |
+| `POST /api/su` | Water potential: Qort, monthly split, annual volume, FDC, supply reliability |
+| `POST /api/su-havza` | Daily-flow stations inside/around a basin polygon (`tampon_derece`) |
+| `POST /api/su-periyot` | Station × water-year record status (tam/eksik/yok) + pairwise regressions |
+| `POST /api/su-tamamla` | Fill a station's missing years by regression, then transfer to the outlet |
 | `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
 | `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
 | `POST /api/cn` | CORINE CN from basin polygon + soil group |
@@ -112,3 +176,31 @@ data/akarsu/akarsu.sqlite    — DSİ river network (~405k lines, 110 MB; gitign
 - **Return period inverse**: T = 10^((x+0.98)/0.99), x = (Q−Q10)/(Q100−Q10)
 - **Reservoir**: Storage-Indication (2S/Δt+O)₁ = (I₀+I₁) + (2S/Δt−O)₀
 - **Multi-basin**: Q_mansap(t) = Q_ara(t) + Σ Q_memba_i(t − Tc_ara)
+- **NTFA** (`tfa.py`): moment fits for Normal / Log-Normal 2P & 3P / Pearson-3 /
+  Log-Pearson-3 / Gumbel; plotting position m/(N+1); the distribution with the
+  smallest Smirnov-Kolmogorov Dmax is the accepted one. Golden-matched to
+  `ornek.xlsm`, so three template quirks are reproduced deliberately: the normal
+  tail uses √(44/7) instead of √(2π), its 3rd polynomial coefficient is
+  1.78147937 (literature: 1.781477937), and the Normal Dmax carries a +0.01
+  penalty (`SONUÇLAR!AD27`). Changing any of these can flip which distribution
+  is accepted — see `NORMAL_DMAX_DUZELTME` and `_CDF_B`.
+- **BTFA** (`btfa.py`): index-flood. Each station's accepted at-site fit gives
+  Q2…Q100; the dimensionless ratios QT/Q2 are averaged into a regional growth
+  curve; the basin's index flood comes from Q2 = a·A^b and Q_T = Q2·(QT/Q2).
+  Q500+ reuse the app-wide extrapolation. Golden-matched to
+  `Karamandere NTFA-BTFA.xlsx` (T7.2BTFA). **The exponent in that workbook
+  (0.8968) is not reproducible from its own 15 stations** — least squares gives
+  0.0827·A^1.3146 — so it was entered by hand. The fit is therefore computed and
+  reported, but `us`/`katsayi` let the caller pin the report's number.
+  Homogeneity is Dalrymple (1960): each station's own Q10/Q2 is read back onto
+  the regional curve as an equivalent T, compared against the Gumbel-reduced-
+  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`.
+- **MMY** (`mmy.py`): Hershfield PMP,
+  `MMY = Port·M1·M2 + Km·S·M1·M2`, Km read from a regional envelope
+  (`data/tables/mmy_km.json`, 9 regions extracted from the source workbook's
+  X-KM sheet) using **Excel LOOKUP step semantics against the ADJUSTED mean** —
+  interpolating instead would not reproduce the workbook. The M1/M2 chart
+  factors are inputs (default 1.0): the source workbooks hold them as
+  macro-written literals, the charts themselves are not in the files, and
+  inventing a curve would silently shift the result. The output feeds the
+  existing `P24_OET` input, which already yields QOET (the PMF).

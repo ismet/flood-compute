@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
-<link rel="stylesheet" href="/static/style.css?v=52">
+<link rel="stylesheet" href="/static/style.css?v=53">
 </head>
 <body>
 <div id="app">
@@ -26,6 +26,7 @@
       <button id="modeWizard" class="mode-btn active">Tek Havza</button>
       <button id="modeMulti" class="mode-btn">Ara Havza</button>
       <button id="modeDilekce" class="mode-btn">Dilekçe</button>
+      <button id="modeSu" class="mode-btn" title="AGİ günlük akım serilerinden su potansiyeli ve su temini güvenilirliği. Taşkın hesabından bağımsızdır.">Su Potansiyeli</button>
     </div>
 
     <nav id="steps">
@@ -35,6 +36,7 @@
       <button class="step" data-step="4">4<span>Thiessen</span></button>
       <button class="step" data-step="5">5<span>Yağış</span></button>
       <button class="step" data-step="6">6<span>Hesap</span></button>
+      <button class="step" data-step="7">7<span>Frekans</span></button>
     </nav>
 
     <!-- ARA HAVZA MODU -->
@@ -78,6 +80,53 @@
       </div>
       <div id="multiStatus" class="status"></div>
       <div id="multiResults"></div>
+    </section>
+
+    <!-- SU POTANSİYELİ MODU -->
+    <section id="suMode" class="hidden">
+      <p class="hint">Havzanın <b>su potansiyeli</b>: AGİ'lerin günlük akım
+      serilerinden (1934–2015, 2909 istasyon). Taşkın hesabından bağımsızdır —
+      burada pik değil <b>hacim</b> sorulur. Sıra: havzayı çıkar → yıl aralığını
+      seç → civardaki AGİ'leri getir → ölçüm periyotlarını gör → eksik yılları
+      regresyonla tamamla → havza çıkışına taşı.</p>
+
+      <div class="mstep"><b>1) Havza</b> — outlet'e tıklayıp havzayı ve alanını çıkarın</div>
+      <div class="rain-tools">
+        <button id="btnSuHavza" class="primary" title="Haritada outlet noktasına tıklayın; havza sınırı, alanı ve dere ağı DEM'den çıkarılır. Taşkın modundaki 1. adımın aynısıdır — orada çıkardıysanız otomatik kullanılır.">📍 Outlet seç ve havzayı çıkar</button>
+        <label class="inline" title="Havza alanı. Çıkarımdan otomatik gelir; elle de değiştirebilirsiniz.">A (km²)<input id="suAlan" type="number" step="0.01" style="width:110px"></label>
+      </div>
+      <div id="suHavzaInfo" class="small"></div>
+
+      <div class="mstep"><b>2) Yıl aralığı</b> — su yılı (1 Ekim – 30 Eylül)</div>
+      <div class="rain-tools">
+        <label class="inline">İlk su yılı<input id="suIlkYil" type="number" step="1" value="1970" style="width:90px"></label>
+        <label class="inline">Son su yılı<input id="suSonYil" type="number" step="1" value="2010" style="width:90px"></label>
+        <label class="inline" title="Bu kadar yıldan kısa serisi olan istasyonlar listelenmez.">En az yıl<input id="suEnAzYil" type="number" min="1" step="1" value="10" style="width:70px"></label>
+        <label class="inline" title="Havza sınırının bu kadar dışındaki istasyonlar da getirilir. Havzada AGİ olmayabilir, o yüzden geniş tutulur. 1° ≈ 111 km.">Tampon (°)<input id="suTampon" type="number" step="0.05" min="0" value="0.35" style="width:80px"></label>
+      </div>
+
+      <div class="mstep"><b>3) Civardaki AGİ'ler</b></div>
+      <div class="rain-tools">
+        <button id="btnSuGetir" class="primary" title="Havza poligonunun içindeki ve tampon kadar çevresindeki günlük akım istasyonlarını getirir. Havza yoksa görünen harita penceresi kullanılır.">AGİ'leri getir</button>
+      </div>
+      <div id="suInfo" class="small"></div>
+      <div id="suListe" class="small"></div>
+
+      <div class="mstep"><b>4) Ölçüm periyotları</b> — hangi istasyonda hangi yıl var</div>
+      <div class="rain-tools">
+        <button id="btnSuPeriyot" class="primary" disabled title="İşaretli istasyonların yıl yıl ölçüm durumunu ve aralarındaki korelasyonları çıkarır.">Periyot tablosu ve korelasyon</button>
+      </div>
+      <div id="suPeriyot"></div>
+
+      <div class="mstep"><b>5) Eksik yılları tamamla ve havza çıkışına taşı</b></div>
+      <div class="rain-tools">
+        <label class="inline" title="Havzayı temsil edecek istasyon. Eksik yılları, işaretli diğer istasyonlarla kurulan regresyonla doldurulur.">Temsil AGİ'si<select id="suHedef" style="max-width:260px"></select></label>
+        <label class="inline" title="Bu değerin altındaki ilişkiler eksik yıl doldurmada kullanılmaz.">En az r²<input id="suR2" type="number" step="0.05" min="0" max="1" value="0.5" style="width:80px"></label>
+        <label class="inline" title="Q_havza = Q_AGİ × (A_havza/A_AGİ)^üs. Hacimde alanla yaklaşık doğrusal gittiği için 1.0; taşkın pikinde 2/3 kullanılır.">Alan üssü<input id="suUs" type="number" step="0.01" value="1" style="width:80px"></label>
+        <button id="btnSuTamamla" class="primary" disabled>Tamamla ve taşı</button>
+      </div>
+      <div id="suStatus" class="status"></div>
+      <div id="suSonuc"></div>
     </section>
 
     <!-- DİLEKÇE MODU -->
@@ -289,6 +338,85 @@
       <div id="compStatus" class="status"></div>
       <div id="results"></div>
     </section>
+
+    <!-- 7) NOKTASAL TAŞKIN FREKANS ANALİZİ (NTFA) -->
+    <section class="page hidden" data-page="7">
+      <p class="hint">DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik
+      akım veri tabanı (1935–2020) üzerinde <b>noktasal frekans analizi</b>.
+      Altı dağılım moment yöntemiyle uydurulur, Simirnov-Kolmogorov testiyle
+      karşılaştırılır; D<sub>maks</sub>'ı en küçük olan dağılım kabul edilir.
+      Bu hesap gözlenmiş akıma dayanır — sentetik yöntemlerden bağımsızdır.</p>
+
+      <div class="rain-tools">
+        <button id="btnAgiHavza" class="primary" title="Çıkarılmış havzanın içindeki ve çevresindeki AGİ'leri haritaya getirir. Havza yoksa görünen harita penceresi kullanılır.">📍 AGİ'leri haritaya getir</button>
+        <label class="inline" title="Havza sınırının bu kadar dışındaki istasyonlar da listelenir (bölgesel karşılaştırma için). 1 derece ≈ 111 km.">Tampon (°)<input id="agiTampon" type="number" step="0.05" min="0" value="0.25" style="width:70px"></label>
+        <label class="inline" title="Frekans analizi için anlamlı en kısa seri. DSİ uygulamasında 10 yılın altındaki seriler kullanılmaz.">En az yıl<input id="agiEnAzYil" type="number" step="1" min="3" value="10" style="width:60px"></label>
+        <label class="inline">Kurum
+          <select id="agiKurum">
+            <option value="">Hepsi</option>
+            <option value="DSİ">DSİ</option>
+            <option value="EİE">EİE</option>
+          </select></label>
+      </div>
+      <div id="agiInfo" class="small"></div>
+      <div id="agiListe" class="small"></div>
+
+      <div class="rain-tools" style="margin-top:4px">
+        <label class="inline" title="Analize dahil edilecek ilk su yılı. Boş bırakılırsa serinin tamamı kullanılır.">İlk yıl<input id="tfaIlkYil" type="number" step="1" placeholder="tümü" style="width:80px"></label>
+        <label class="inline">Son yıl<input id="tfaSonYil" type="number" step="1" placeholder="tümü" style="width:80px"></label>
+        <label class="chk" title="Eski yıllıkların OCR'ında değeri şüpheli bulunan kayıtları analiz dışı bırakır (Güven kolonu 'düşük' olanlar)."><input type="checkbox" id="tfaDusukAt"> düşük güvenli kayıtları at</label>
+        <button id="btnTfa" class="primary" disabled>Frekans analizi yap</button>
+      </div>
+      <div id="tfaStatus" class="status"></div>
+      <div id="tfaSonuc"></div>
+
+      <hr>
+      <p class="hint"><b>Bölgesel analiz (BTFA)</b> — indeks-debi yöntemi.
+      Listeden <b>birden çok</b> AGİ işaretleyin: her biri için NTFA yapılır,
+      boyutsuz büyüme eğrileri (Q<sub>T</sub>/Q<sub>2</sub>) ortalanır ve
+      havzanın indeks debisi alan–debi bağıntısından bulunarak
+      Q<sub>2</sub>…Q<sub>10000</sub> üretilir. Havzada AGİ yoksa ya da seri
+      kısaysa noktasal analizden daha güvenilirdir.</p>
+
+      <div class="rain-tools">
+        <label class="inline" title="Proje havzasının yağış alanı. Havza çıkarıldıysa 1. adımdaki alandan otomatik gelir.">Havza alanı A (km²)<input id="btfaAlan" type="number" step="0.01" style="width:100px"></label>
+        <label class="inline" title="Q2 = katsayı × A^üs bağıntısının üssü. Boş bırakılırsa seçili istasyonlardan en küçük kareler ile hesaplanır. Rapordaki sayıyı birebir tutturmak için elle yazın.">Üs (boş = hesapla)<input id="btfaUs" type="number" step="0.0001" placeholder="ör. 0.8968" style="width:100px"></label>
+        <label class="inline" title="Üs elle verildiğinde kullanılacak katsayı. DSİ raporlarında genelde 1'dir (Q2 = A^üs).">Katsayı<input id="btfaKatsayi" type="number" step="0.0001" placeholder="1" style="width:80px"></label>
+        <label class="chk" title="Üs hesaplanırken katsayı da serbest bırakılsın mı (Q2 = a·A^b). Kapalıysa a = 1 alınır — DSİ yazımı böyledir."><input type="checkbox" id="btfaSerbest"> katsayı serbest</label>
+      </div>
+      <div class="rain-tools" style="margin-top:2px">
+        <label class="inline" title="Karşılaştırma satırı: seçilen tek istasyonun noktasal sonucunu alan oranıyla havzaya taşır. Q_havza = Q_AGİ × (A_havza/A_AGİ)^üs">Aktarım AGİ'si<select id="btfaTransfer"><option value="">yok</option></select></label>
+        <label class="inline">Aktarım üssü<input id="btfaTransferUs" type="number" step="0.001" value="0.667" style="width:80px"></label>
+        <button id="btnBtfa" class="primary" disabled>Bölgesel analiz yap</button>
+      </div>
+      <div id="btfaStatus" class="status"></div>
+      <div id="btfaSonuc"></div>
+
+      <hr>
+      <p class="hint"><b>Muhtemel Maksimum Yağış (MMY)</b> — Hershfield yöntemi.
+      Bir meteoroloji istasyonunun <b>1 günlük yıllık en büyük yağış</b> serisinden
+      MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2 hesaplanır; K<sub>m</sub>
+      bölgesel zarf eğrisinden düzeltilmiş ortalamaya göre okunur. Çıkan derinlik,
+      6. adımdaki <b>OET</b> yağış satırına yazılarak muhtemel maksimum feyezan
+      (Q<sub>OET</sub>) elde edilir.</p>
+
+      <div class="rain-tools">
+        <label class="inline">Bölge<select id="mmyBolge" style="max-width:320px"></select></label>
+        <label class="inline">İstasyon adı<input id="mmyIstasyon" placeholder="ör. BİNKILIÇ MGİ" style="width:170px"></label>
+      </div>
+      <label class="small" title="Yıllık en büyük 1 günlük yağışlar (mm). Excel'den bir sütun kopyalayıp yapıştırabilirsiniz; satır/boşluk/virgül ayracı kabul edilir.">Yıllık en büyük 1 günlük yağışlar (mm)
+        <textarea id="mmySeri" rows="4" placeholder="69.1&#10;93.1&#10;96.7&#10;…" style="width:100%"></textarea></label>
+      <div class="rain-tools" style="margin-top:2px">
+        <label class="inline" title="Hershfield abağından okunur: en büyük gözlemin ORTALAMAYI şişirmesini düzeltir. Abak, Port(-Pmax)/Port oranı ile N'e bağlıdır — ikisi de hesaplandıktan sonra ekranda gösterilir. Bilinmiyorsa 1 bırakın.">M1<sub>ort</sub><input id="mmyM1o" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="inline" title="Kayıt uzunluğu düzeltmesi (ortalama için), N'e bağlı.">M2<sub>ort</sub><input id="mmyM2o" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="inline" title="En büyük gözlemin STANDART SAPMAYI şişirmesini düzelten katsayı.">M1<sub>s</sub><input id="mmyM1s" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="inline" title="Kayıt uzunluğu düzeltmesi (standart sapma için).">M2<sub>s</sub><input id="mmyM2s" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="chk" title="Sabit saatte okunan günlük yağışı gerçek 24 saatlik maksimuma çeviren katsayı. Örnek DSİ hesaplarında uygulanmamıştır."><input type="checkbox" id="mmyGun"> ×1.13</label>
+        <button id="btnMmy" class="primary">MMY hesapla</button>
+      </div>
+      <div id="mmyStatus" class="status"></div>
+      <div id="mmySonuc"></div>
+    </section>
   </aside>
 
   <main id="mapwrap">
@@ -431,6 +559,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=52"></script>
+<script src="/static/app.js?v=53"></script>
 </body>
 </html>

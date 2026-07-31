@@ -150,7 +150,7 @@ document.querySelectorAll(".step").forEach(b => {
     if (dir) {
       e.preventDefault();
       const n = +b.dataset.step + dir;
-      const next = document.querySelector(`.step[data-step="${n < 1 ? 6 : n > 6 ? 1 : n}"]`);
+      const next = document.querySelector(`.step[data-step="${n < 1 ? 7 : n > 7 ? 1 : n}"]`);
       if (next) next.focus();
     }
   };
@@ -169,6 +169,11 @@ function activateStep(n) {
     $("rasyonelBox").open = true;
   }
   if (n === 6) updateComputeReady();
+  if (n === 7) {
+    agiKatmanAc();
+    // havza çıkarıldıysa alanı BTFA'ya taşı (kullanıcı yine de değiştirebilir)
+    if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
+  }
 }
 const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`).classList.add("done");
 const setStatus = (id, msg, cls = "") => {
@@ -323,9 +328,32 @@ async function loadRasterLayers() {
 }
 loadRasterLayers();
 
+/* MrSID kod çözücüsü var mı — .sid seçilir seçilmez söyle. Sunucuda sürücü
+   kurulamıyor (tescilli DSDK); kullanıcının yüzlerce MB'ı yükleyip sonunda
+   hata almasındansa dosya seçilirken uyarmak gerekiyor.                    */
+let mrsidDurum = null;
+(async function mrsidSorgula() {
+  try { mrsidDurum = await api("/api/raster-converter"); } catch (e) { /* uç yoksa geç */ }
+})();
+
+function sidUyar(dosyalar) {
+  if (!mrsidDurum || mrsidDurum.mrsid) return false;
+  if (!dosyalar.some(f => /\.(sid|ecw)$/i.test(f.name))) return false;
+  setStatus("delinStatus", mrsidDurum.sunucu
+    ? "Bu sunucu .sid (MrSID) okuyamıyor — sürücü tescilli olduğu için kurulamıyor. "
+      + "Dosyayı QGIS ile ya da “gdal_translate -of GTiff pafta.sid pafta.tif” "
+      + "komutuyla GeoTIFF'e çevirip onu yükleyin (GeoTIFF doğrudan açılır)."
+    : "MrSID kod çözücüsü kurulu değil. OSGeo4W'den 'gdal-mrsid' eklentisini kurun "
+      + "ya da dosyayı elle GeoTIFF'e çevirip yükleyin.", "err");
+  return true;
+}
+
+$("rasterFile").onchange = () => sidUyar(Array.from($("rasterFile").files || []));
+
 $("btnRasterAdd").onclick = async () => {
   const dosyalar = Array.from($("rasterFile").files || []);
   if (!dosyalar.length) return setStatus("delinStatus", "Önce raster dosyasını seçin", "err");
+  if (sidUyar(dosyalar)) return;             // boşuna yükleme yapma
   const sid = dosyalar.some(f => /\.sid$/i.test(f.name));
   const worldVar = dosyalar.some(f => /\.(sdw|tfw|wld|prj)$/i.test(f.name));
   if (sid && !worldVar && !$("rasterCrs").value.trim()) {
@@ -449,6 +477,395 @@ map.on("moveend zoomend", () => {
     }
   } catch (e) { /* uç yoksa sessiz geç */ }
 })();
+
+/* ---- AGİ (Akım Gözlem İstasyonu) katmanı + noktasal frekans analizi ----
+   Sentetik yöntemlerden bağımsız ikinci bir yol: gözlenmiş yıllık pik akımlara
+   DSİ ekstrem dağılım hesabı (ornek.xlsm ile birebir, bkz. backend/core/tfa.py).
+   İstasyonlar havza poligonuyla sorgulanır; tampon dışarıyı da kapsar, çünkü
+   çıkarılan havzada AGİ olmayabilir ve komşu havza karşılaştırması gerekir.  */
+layers.agi = L.layerGroup();
+S.agiSecili = null;        // noktasal analiz (tek istasyon)
+S.agiBolgesel = new Set(); // bölgesel analiz (çok istasyon)
+S.agiListe = [];
+
+const agiRenk = (s) => (s.kurum === "EİE" ? "#6a1b9a" : "#e65100");
+
+function agiIsaretle() {
+  layers.agi.eachLayer(l => {
+    const s = l.agi;
+    if (!s) return;
+    const secili = S.agiSecili && S.agiSecili.kod === s.kod;
+    const bolgesel = S.agiBolgesel.has(s.kod);
+    l.setStyle({
+      radius: secili ? 8 : (bolgesel ? 7 : 5),
+      color: secili ? "#000" : (bolgesel ? "#00695c" : agiRenk(s)),
+      weight: secili ? 3 : (bolgesel ? 2.5 : 1.5),
+      fillColor: agiRenk(s),
+      fillOpacity: s.icinde === false ? 0.25 : 0.85,
+    });
+  });
+  $("btnTfa").disabled = !S.agiSecili;
+  $("btnBtfa").disabled = S.agiBolgesel.size < 2;
+  const n = S.agiBolgesel.size;
+  $("btfaStatus").textContent = n
+    ? `${n} istasyon bölgesel analize işaretli` + (n < 2 ? " — en az 2 gerekir" : "")
+    : "";
+  // aktarım açılır listesi yalnız işaretlilerden seçilebilsin
+  const sec = $("btfaTransfer"), onceki = sec.value;
+  sec.innerHTML = '<option value="">yok</option>'
+    + S.agiListe.filter(s => S.agiBolgesel.has(s.kod))
+        .map(s => `<option value="${s.kod}">${s.kod} — ${s.ad || ""}</option>`).join("");
+  sec.value = S.agiBolgesel.has(onceki) ? onceki : "";
+}
+
+function agiBolgeselDegis(kod, ac) {
+  if (ac) S.agiBolgesel.add(kod); else S.agiBolgesel.delete(kod);
+  agiIsaretle();
+}
+
+function agiSec(s) {
+  S.agiSecili = s;
+  agiIsaretle();
+  $("agiInfo").innerHTML =
+    `<b>${s.kod}</b> ${s.ad || ""} — ${s.kurum} · ${s.yil_sayisi} yıl `
+    + `(${s.ilk_yil}–${s.son_yil})`
+    + (s.yagis_alani ? ` · yağış alanı ${fmt(s.yagis_alani, 1)} km²` : "");
+  $("tfaSonuc").innerHTML = "";
+  setStatus("tfaStatus", "", "");
+}
+
+function agiListele(ist) {
+  S.agiListe = ist;
+  const icinde = ist.filter(s => s.icinde !== false);
+  const disinda = ist.filter(s => s.icinde === false);
+  // Yağış alanı bilinmeyen istasyon bölgesel analize giremez (indeks debi
+  // bağıntısı alana dayanıyor); kutusu kapalı gösterilir.
+  const sat = (s) => `<tr data-kod="${s.kod}" class="agi-sat">`
+    + `<td><input type="checkbox" class="agi-bol" data-kod="${s.kod}"`
+    + `${S.agiBolgesel.has(s.kod) ? " checked" : ""}`
+    + `${s.yagis_alani ? "" : " disabled title='yağış alanı bilinmiyor'"}></td>`
+    + `<td>${s.kod}</td><td>${s.ad || ""}</td><td>${s.kurum}</td>`
+    + `<td style="text-align:right">${s.yil_sayisi}</td>`
+    + `<td style="text-align:right">${s.ilk_yil}–${s.son_yil}</td>`
+    + `<td style="text-align:right">${s.yagis_alani ? fmt(s.yagis_alani, 1) : "—"}</td></tr>`;
+  const bas = "<tr><th title='bölgesel analize dahil et'>BTFA</th><th>Kod</th><th>Ad</th>"
+    + "<th>Kurum</th><th>Yıl</th><th>Aralık</th><th>A (km²)</th></tr>";
+  let h = '<div class="rain-tools"><button id="agiHepsi" class="small-btn">'
+    + "Tümünü BTFA'ya ekle</button>"
+    + '<button id="agiHicbiri" class="small-btn">Seçimi temizle</button></div>';
+  if (icinde.length) h += `<p class="small"><b>Havza içinde (${icinde.length})</b></p>`
+    + `<table class="tbl small">${bas}${icinde.map(sat).join("")}</table>`;
+  if (disinda.length) h += `<p class="small"><b>Çevrede (${disinda.length})</b></p>`
+    + `<table class="tbl small">${bas}${disinda.map(sat).join("")}</table>`;
+  if (!icinde.length && !disinda.length) h = '<p class="small">Bu alanda yeterli uzunlukta AGİ yok.</p>';
+  $("agiListe").innerHTML = h;
+
+  $("agiListe").querySelectorAll(".agi-bol").forEach(cb => {
+    cb.onclick = (e) => { e.stopPropagation(); agiBolgeselDegis(cb.dataset.kod, cb.checked); };
+  });
+  $("agiListe").querySelectorAll(".agi-sat").forEach(tr => {
+    tr.onclick = () => {
+      const s = ist.find(x => x.kod === tr.dataset.kod);
+      if (s) { agiSec(s); map.setView([s.enlem, s.boylam], Math.max(map.getZoom(), 11)); }
+    };
+  });
+  const hepsi = $("agiHepsi"), hicbiri = $("agiHicbiri");
+  if (hepsi) hepsi.onclick = () => {
+    ist.forEach(s => { if (s.yagis_alani) S.agiBolgesel.add(s.kod); });
+    agiListele(ist);
+  };
+  if (hicbiri) hicbiri.onclick = () => { S.agiBolgesel.clear(); agiListele(ist); };
+  agiIsaretle();
+}
+
+async function agiYukle() {
+  const enAz = +$("agiEnAzYil").value || 10;
+  const kurum = $("agiKurum").value;
+  setStatus("tfaStatus", "AGİ'ler getiriliyor…", "loading");
+  try {
+    let r;
+    if (S.havza) {
+      r = await api("/api/agi-havza", {
+        geometri: (S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza),
+        tampon_derece: +$("agiTampon").value || 0,
+        en_az_yil: enAz, kurum,
+      });
+    } else {
+      const b = map.getBounds();
+      const q = new URLSearchParams({
+        bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
+        en_az_yil: enAz, kurum,
+      });
+      r = await api("/api/agi?" + q.toString());
+    }
+    layers.agi.clearLayers();
+    r.istasyonlar.forEach(s => {
+      if (s.enlem == null || s.boylam == null) return;
+      const m = L.circleMarker([s.enlem, s.boylam], { radius: 5 });
+      m.agi = s;
+      m.bindTooltip(`${s.kod} — ${s.ad || ""} (${s.yil_sayisi} yıl)`, { sticky: true });
+      m.on("click", () => agiSec(s));
+      m.addTo(layers.agi);
+    });
+    layers.agi.addTo(map);
+    agiIsaretle();
+    agiListele(r.istasyonlar);
+    setStatus("tfaStatus", `${r.istasyonlar.length} istasyon bulundu — `
+      + "haritadan ya da listeden birini seçin.", "ok");
+  } catch (e) {
+    setStatus("tfaStatus", "AGİ'ler getirilemedi: " + e.message, "err");
+  }
+}
+
+async function agiKatmanAc() {
+  try {
+    const b = await api("/api/agi-bilgi");
+    if (!b.var) {
+      $("btnAgiHavza").disabled = true;
+      $("agiInfo").textContent =
+        "veri yok — tools/agi_veritabani_olustur.py ile üretin";
+      return;
+    }
+    if (!$("agiInfo").textContent) {
+      $("agiInfo").textContent = `${b.istasyon.toLocaleString("tr")} istasyon · `
+        + `${b.pik.toLocaleString("tr")} yıllık pik · ${b.ilk_yil}–${b.son_yil}`;
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+}
+
+$("btnAgiHavza").onclick = agiYukle;
+
+/* ---- NTFA sonuç tablosu (Excel SONUÇLAR sayfasının karşılığı) ---- */
+function tfaCiz(o) {
+  const T = o.tekerrur;
+  const bas = (h) => `<th style="text-align:right">${h}</th>`;
+  let h = `<h3 class="small">${o.istasyon}</h3>`;
+
+  h += '<p class="small"><b>Tekerrür debileri (m³/s)</b></p><table class="tbl small">'
+    + "<tr><th>Dağılım</th>" + T.map(t => bas(t)).join("") + "<th>Kabul</th></tr>";
+  o.debiler.forEach(d => {
+    h += `<tr${d.kabul_edilen ? ' style="font-weight:600"' : ""}><td>${d.dagilim}</td>`
+      + d.q.map(v => `<td style="text-align:right">${v == null ? "—" : fmt(v, 1)}</td>`).join("")
+      + `<td style="text-align:center">${d.kabul_edilen ? "****" : ""}</td></tr>`;
+  });
+  h += "</table>";
+
+  const p = o.parametreler;
+  h += '<p class="small"><b>İstatistik parametreler</b></p><table class="tbl small">'
+    + `<tr><td>Yıl sayısı</td><td style="text-align:right">${p.yil_sayisi}</td>`
+    + `<td>Lineer ortalama</td><td style="text-align:right">${fmt(p.lineer_ortalama, 3)}</td></tr>`
+    + `<tr><td>Lineer çarpıklık</td><td style="text-align:right">${fmt(p.lineer_carpiklik, 4)}</td>`
+    + `<td>Lineer std. sapma</td><td style="text-align:right">${fmt(p.lineer_standart_sapma, 3)}</td></tr>`
+    + `<tr><td>Logaritmik çarpıklık</td><td style="text-align:right">${fmt(p.logaritmik_carpiklik, 4)}</td>`
+    + `<td>Logaritmik ortalama</td><td style="text-align:right">${fmt(p.logaritmik_ortalama, 4)}</td></tr>`
+    + `<tr><td></td><td></td><td>Logaritmik std. sapma</td>`
+    + `<td style="text-align:right">${fmt(p.logaritmik_standart_sapma, 4)}</td></tr></table>`;
+
+  h += '<p class="small"><b>Simirnov-Kolmogorov testi</b></p><table class="tbl small">'
+    + "<tr><th>Dağılım</th>" + bas("Teorik Pi") + bas("Amprik Pi") + bas("Dmaks")
+    + bas("Gözlem") + o.ks_anlamlilik.map(a => bas(Math.round(a * 100) + "%")).join("") + "</tr>";
+  o.ks_testi.forEach(s => {
+    if (s.dmax == null) {
+      h += `<tr><td>${s.dagilim}</td><td colspan="9" class="small">—3 &gt; Cs &gt; 3, hesaplanmadı</td></tr>`;
+      return;
+    }
+    h += `<tr><td>${s.dagilim}</td>`
+      + `<td style="text-align:right">${fmt(s.teorik_pi, 4)}</td>`
+      + `<td style="text-align:right">${fmt(s.amprik_pi, 4)}</td>`
+      + `<td style="text-align:right">${fmt(s.dmax, 4)}</td>`
+      + `<td style="text-align:right">${fmt(s.gozlem, 2)}</td>`
+      + o.ks_anlamlilik.map(a =>
+          `<td style="text-align:center">${s.kabul[a] ? "Kabul" : "Red"}</td>`).join("")
+      + "</tr>";
+  });
+  h += "</table>";
+  h += `<p class="small"><b>NOT:</b> ${o.kabul_edilen_adi} dağılımı uygundur.</p>`;
+  $("tfaSonuc").innerHTML = h;
+}
+
+$("btnTfa").onclick = async () => {
+  if (!S.agiSecili) return;
+  setStatus("tfaStatus", "Frekans analizi yapılıyor…", "loading");
+  try {
+    const o = await api("/api/tfa", {
+      kod: S.agiSecili.kod,
+      ilk_yil: +$("tfaIlkYil").value || 0,
+      son_yil: +$("tfaSonYil").value || 0,
+      dusuk_guveni_at: $("tfaDusukAt").checked,
+    });
+    S.tfa = o;
+    tfaCiz(o);
+    setStatus("tfaStatus", `${o.parametreler.yil_sayisi} yıllık seri — `
+      + `kabul edilen dağılım: ${o.kabul_edilen_adi}.`, "ok");
+  } catch (e) {
+    setStatus("tfaStatus", "Analiz yapılamadı: " + e.message, "err");
+  }
+};
+
+/* ---- BTFA: bölgesel taşkın frekans analizi (indeks-debi) ---- */
+function btfaCiz(o) {
+  const T = o.tekerrur;
+  const sag = (v, d = 1) => `<td style="text-align:right">${v == null ? "—" : fmt(v, d)}</td>`;
+  let h = '<p class="small"><b>Bölgesel analizde kullanılan AGİ\'ler</b> '
+    + `(${o.kullanilan_sayisi} istasyon)</p><table class="tbl small">`
+    + "<tr><th>İstasyon</th><th>Ad</th><th>A (km²)</th><th>N</th><th>Dağılım</th>"
+    + T.map(t => `<th style="text-align:right">Q${t}</th>`).join("")
+    + '<th style="text-align:right">Q<sub>maks</sub></th></tr>';
+  o.istasyonlar.forEach(s => {
+    const disi = !s.kullanildi;
+    h += `<tr${disi ? ' style="opacity:.5"' : ""}><td>${s.kod}</td><td>${s.ad || ""}</td>`
+      + sag(s.alan, 1) + `<td style="text-align:right">${s.yil_sayisi ?? "—"}</td>`
+      + `<td>${disi ? (s.hata || "dışarıda") : (s.dagilim || "").toUpperCase()}</td>`
+      + (s.q || []).map(v => sag(v)).join("") + sag(s.gozlem_maks) + "</tr>";
+  });
+  h += "</table>";
+
+  const hm = o.homojenlik;
+  if (hm) {
+    h += `<p class="small"><b>Homojenlik testi</b> — ${hm.yontem}. `
+      + (hm.homojen
+          ? "Bölge <b>homojen</b>: tüm istasyonlar %95 bandının içinde."
+          : `<b>${hm.aykiri.length} istasyon banda sığmıyor</b> (${hm.aykiri.join(", ")}) — `
+            + "bunları çıkarıp yeniden çalıştırmayı deneyin.")
+      + '</p><table class="tbl small"><tr><th>İstasyon</th><th>N</th>'
+      + "<th>Q10/Q2</th><th>T eşdeğer</th><th>alt–üst sınır</th><th>Sonuç</th></tr>";
+    hm.istasyonlar.forEach(s => {
+      const durum = s.homojen === null ? "sınanmadı" : (s.homojen ? "homojen" : "aykırı");
+      h += `<tr${s.homojen === false ? ' style="color:#b71c1c;font-weight:600"' : ""}>`
+        + `<td>${s.kod}</td><td style="text-align:right">${s.yil_sayisi}</td>`
+        + `<td style="text-align:right">${fmt(s.oran_q10_q2, 3)}</td>`
+        + `<td style="text-align:right">${fmt(s.t_esdeger, 1)}</td>`
+        + `<td style="text-align:right">${s.t_alt == null ? "—"
+            : fmt(s.t_alt, 1) + " – " + fmt(s.t_ust, 1)}</td>`
+        + `<td>${durum}</td></tr>`;
+    });
+    h += "</table>";
+  }
+
+  h += '<p class="small"><b>Bölgesel büyüme eğrisi</b> (Q<sub>T</sub>/Q<sub>2</sub> ortalaması)'
+    + '</p><table class="tbl small"><tr><th>T (yıl)</th>'
+    + T.map(t => `<th style="text-align:right">${t}</th>`).join("") + "</tr><tr><td>oran</td>"
+    + o.buyume_egrisi.map(v => sag(v, 4)).join("") + "</tr></table>";
+
+  const b = o.bagintis, rs = b.regresyon_serbest, r1 = b.regresyon_a1;
+  h += '<p class="small"><b>İndeks debi bağıntısı</b> — kullanılan: '
+    + `Q2 = ${fmt(b.katsayi, 4)} · A<sup>${fmt(b.us, 4)}</sup> (${b.kaynak})`
+    + `<br>veriden: a=1 ile A<sup>${fmt(r1.us, 4)}</sup> (R²=${fmt(r1.r2, 3)}) · `
+    + `serbest ${fmt(rs.katsayi, 4)}·A<sup>${fmt(rs.us, 4)}</sup> (R²=${fmt(rs.r2, 3)}), `
+    + `n=${rs.n}</p>`;
+
+  const bt = o.btfa;
+  h += `<p class="small"><b>Havza taşkın debileri</b> — A = ${fmt(o.alan_km2, 2)} km², `
+    + `Q<sub>2</sub> = ${fmt(o.q2_indeks, 2)} m³/s</p><table class="tbl small">`
+    + "<tr><th>Yöntem</th>" + bt.tekerrur.map((t, i) =>
+        `<th style="text-align:right">${t}${i >= bt.ekstrapole_baslangic ? "*" : ""}</th>`).join("")
+    + "</tr><tr><td><b>BTFA</b></td>" + bt.q.map(v => sag(v)).join("") + "</tr>";
+  if (o.ntfa_transfer) {
+    const t2 = o.ntfa_transfer;
+    h += `<tr><td>NTFA aktarım<br><span class="small">${t2.kod}, `
+      + `(A/${fmt(t2.kaynak_alan, 1)})<sup>${fmt(t2.us, 3)}</sup></span></td>`
+      + t2.q.map(v => sag(v)).join("") + "</tr>";
+  }
+  h += "</table><p class='small'>* Q500 ve üzeri, Q10–Q100'den ekstrapole edilmiştir "
+    + "(k = 1.692 / 1.99 / 2.98) — Excel'deki (Q100−Q10)·1.692+Q10 ile aynı.</p>";
+  $("btfaSonuc").innerHTML = h;
+}
+
+$("btnBtfa").onclick = async () => {
+  const alan = +$("btfaAlan").value || +$("inpA").value;
+  if (!alan) return setStatus("btfaStatus",
+    "Havza alanı (km²) gerekli — 1. adımda havzayı çıkarın ya da elle yazın.", "err");
+  setStatus("btfaStatus", "Bölgesel analiz yapılıyor…", "loading");
+  try {
+    const o = await api("/api/btfa", {
+      kodlar: [...S.agiBolgesel],
+      alan_km2: alan,
+      us: $("btfaUs").value === "" ? null : +$("btfaUs").value,
+      katsayi: $("btfaKatsayi").value === "" ? null : +$("btfaKatsayi").value,
+      katsayi_serbest: $("btfaSerbest").checked,
+      transfer_kod: $("btfaTransfer").value,
+      transfer_ussu: +$("btfaTransferUs").value || (2 / 3),
+      ilk_yil: +$("tfaIlkYil").value || 0,
+      son_yil: +$("tfaSonYil").value || 0,
+      dusuk_guveni_at: $("tfaDusukAt").checked,
+    });
+    S.btfa = o;
+    btfaCiz(o);
+    const at = o.istasyonlar.length - o.kullanilan_sayisi;
+    setStatus("btfaStatus", `${o.kullanilan_sayisi} istasyon kullanıldı`
+      + (at ? `, ${at} tanesi dışarıda kaldı` : "")
+      + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s.`, "ok");
+  } catch (e) {
+    setStatus("btfaStatus", "Bölgesel analiz yapılamadı: " + e.message, "err");
+  }
+};
+
+/* ---- MMY: muhtemel maksimum yağış (Hershfield) ----
+   Sonuç, 6. adımdaki OET yağış satırına yazılınca QOET (muhtemel maksimum
+   feyezan) mevcut hesap zinciriyle üretilir.                              */
+(async function mmyBolgeYukle() {
+  try {
+    const r = await api("/api/mmy-bolgeler");
+    $("mmyBolge").innerHTML = r.bolgeler
+      .map(b => `<option value="${b.no}">${b.no}. ${b.ad}</option>`).join("");
+  } catch (e) { /* uç yoksa sessiz geç */ }
+})();
+
+$("btnMmy").onclick = async () => {
+  const p = ($("mmySeri").value || "").split(/[\s,;]+/)
+    .map(s => parseFloat(s.replace(",", "."))).filter(v => !isNaN(v) && v > 0);
+  if (p.length < 3) return setStatus("mmyStatus",
+    "En az 3 yıllık yağış değeri girin (her satıra bir değer).", "err");
+  setStatus("mmyStatus", "MMY hesaplanıyor…", "loading");
+  try {
+    const o = await api("/api/mmy", {
+      p, bolge_no: +$("mmyBolge").value,
+      m1_ort: +$("mmyM1o").value || 1, m2_ort: +$("mmyM2o").value || 1,
+      m1_s: +$("mmyM1s").value || 1, m2_s: +$("mmyM2s").value || 1,
+      gun_katsayisi: $("mmyGun").checked,
+      istasyon: $("mmyIstasyon").value.trim(),
+    });
+    S.mmy = o;
+    const sat = (ad, v, br = "") => `<tr><td>${ad}</td>`
+      + `<td style="text-align:right">${typeof v === "number" ? fmt(v, 4) : v}</td>`
+      + `<td class="small">${br}</td></tr>`;
+    $("mmySonuc").innerHTML = (o.istasyon ? `<h3 class="small">${o.istasyon}</h3>` : "")
+      + '<table class="tbl small">'
+      + sat("N", o.yil_sayisi, "yıl") + sat("P<sub>maks</sub>", o.pmax, "mm")
+      + sat("ΣP", o.toplam, "mm") + sat("ΣP (−P<sub>maks</sub>)", o.toplam_pmaxsiz, "mm")
+      + sat("P<sub>ort</sub>", o.ortalama, "mm")
+      + sat("P<sub>ort</sub> (−P<sub>maks</sub>)", o.ortalama_pmaxsiz, "mm")
+      + sat("oran P<sub>ort</sub>(−P<sub>maks</sub>)/P<sub>ort</sub>", o.ortalama_orani,
+            "→ M1<sub>ort</sub> abağı bu oran ve N ile okunur")
+      + sat("S", o.standart_sapma, "mm")
+      + sat("S (−P<sub>maks</sub>)", o.standart_sapma_pmaxsiz, "mm")
+      + sat("oran S(−P<sub>maks</sub>)/S", o.standart_sapma_orani,
+            "→ M1<sub>s</sub> abağı bu oran ve N ile okunur")
+      + sat("M1<sub>ort</sub> · M2<sub>ort</sub>", o.m1_ort * o.m2_ort, "girilen")
+      + sat("M1<sub>s</sub> · M2<sub>s</sub>", o.m1_s * o.m2_s, "girilen")
+      + sat("düzeltilmiş P<sub>ort</sub>", o.duzeltilmis_ortalama, "mm")
+      + sat("düzeltilmiş S", o.duzeltilmis_standart_sapma, "mm")
+      + sat("K<sub>m</sub>", o.km, `${o.bolge_no}. ${o.bolge_adi}`)
+      + (o.gun_katsayisi !== 1 ? sat("gün katsayısı", o.gun_katsayisi, "sabit saat → 24 saat") : "")
+      + `<tr><td><b>MMY</b></td><td style="text-align:right"><b>${fmt(o.mmy, 1)}</b></td>`
+      + "<td class='small'>mm</td></tr></table>"
+      + '<div class="rain-tools"><button id="btnMmyOet" class="small-btn">'
+      + "↧ Bu değeri 6. adımdaki OET yağışına yaz</button></div>";
+    $("btnMmyOet").onclick = () => {
+      const hedef = document.querySelector('[data-rain-oet], #inpP24OET');
+      if (hedef) { hedef.value = fmt(o.mmy, 1); setStatus("mmyStatus", "OET yağışı güncellendi.", "ok"); }
+      else {
+        navigator.clipboard?.writeText(fmt(o.mmy, 1));
+        setStatus("mmyStatus", `MMY = ${fmt(o.mmy, 1)} mm panoya kopyalandı — `
+          + "5. adımdaki yağış tablosunda OET satırına yapıştırın.", "ok");
+      }
+    };
+    setStatus("mmyStatus", `MMY = ${fmt(o.mmy, 1)} mm `
+      + `(N=${o.yil_sayisi}, Km=${fmt(o.km, 3)}).`, "ok");
+  } catch (e) {
+    setStatus("mmyStatus", "MMY hesaplanamadı: " + e.message, "err");
+  }
+};
 
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
@@ -860,6 +1277,7 @@ map.on("click", async (ev) => {
     markDone(1);
     renderAdayKanallar(r);
     updateComputeReady();
+    if (S.mode === "su") suHavzaGuncelle();   // su akışı 1. adımı havzayla başlıyor
   } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
 });
 
@@ -894,12 +1312,19 @@ $("btnCN").onclick = async () => {
 /* CORINE sınıf dökümü + aynı geçişten türetilen rasyonel akış katsayısı C.
    C, CN ile aynı CORINE kesitinden gelir; ayrıca veri indirilmez.        */
 function renderCnSonuc(r) {
-  let h = `<table class="tbl"><tr><th>Kod</th><th>Sınıf</th><th>Oran</th><th>CN</th><th>C aralığı</th></tr>`;
+  let h = `<table class="tbl"><tr><th></th><th>Kod</th><th>Sınıf</th><th>Oran</th>`
+    + `<th>CN</th><th>C</th><th>C aralığı</th></tr>`;
   r.dokum.forEach(d => {
-    const c = d.c_min == null ? "—"
-      : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}${d.c_tablo ? "" : " *"}`;
-    h += `<tr><td>${d.kod}</td><td>${d.ad}</td>`
-      + `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td><td>${c}</td></tr>`;
+    const kutu = d.c_renk
+      ? `<span style="display:inline-block;width:11px;height:11px;border:1px solid #b5b0a8;background:${d.c_renk}"></span>`
+      : "";
+    const cOrt = d.c_ort == null ? "—"
+      : `<b>${d.c_ort.toFixed(2)}</b>${d.c_tablo ? "" : " *"}`;
+    const aralik = d.c_min == null ? "—"
+      : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}`;
+    h += `<tr><td>${kutu}</td><td>${d.kod}</td><td>${d.ad}</td>`
+      + `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td>`
+      + `<td>${cOrt}</td><td>${aralik}</td></tr>`;
   });
   h += `</table>`;
 
@@ -911,11 +1336,12 @@ function renderCnSonuc(r) {
     h += `<div style="margin-top:6px;padding:6px;border:1px solid #d8d3cc;border-radius:4px">
       <b>Rasyonel yöntem akış katsayısı C</b> <span class="small">(CORINE'den alansal ağırlıklı)</span>
       <div style="margin:3px 0">alt <b>${c.C_min.toFixed(3)}</b> ·
-        orta <b>${c.C_orta.toFixed(3)}</b> · üst <b>${c.C_max.toFixed(3)}</b></div>
+        <span title="Tablodaki 'önerilen ortalama' değerlerin alansal ağırlıklı ortalaması — aralığın orta noktası değildir">önerilen
+        <b>${c.C_orta.toFixed(3)}</b></span> · üst <b>${c.C_max.toFixed(3)}</b></div>
       <label class="inline">Kullanılacak
         <select id="cSecim">
           <option value="C_min">alt — ${c.C_min.toFixed(3)}</option>
-          <option value="C_orta" selected>orta — ${c.C_orta.toFixed(3)}</option>
+          <option value="C_orta" selected>önerilen — ${c.C_orta.toFixed(3)}</option>
           <option value="C_max">üst — ${c.C_max.toFixed(3)}</option>
         </select></label>
       <button id="btnCToRational" class="small-btn">→ Rasyonel C100 alanına aktar</button>
@@ -1994,13 +2420,17 @@ multiLayers.poly.remove(); multiLayers.pts.remove(); // varsayılan gizli
 function setMode(mode) {
   S.mode = mode;
   const multi = mode === "multi", dil = mode === "dilekce", wiz = mode === "wizard";
+  const suM = mode === "su";
   $("modeWizard").classList.toggle("active", wiz);
   $("modeMulti").classList.toggle("active", multi);
   $("modeDilekce").classList.toggle("active", dil);
+  $("modeSu").classList.toggle("active", suM);
   $("steps").classList.toggle("hidden", !wiz);
   if (!wiz) document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
   $("multiMode").classList.toggle("hidden", !multi);
   $("dilekceMode").classList.toggle("hidden", !dil);
+  $("suMode").classList.toggle("hidden", !suM);
+  if (suM) suBaslat(); else layers.su.remove();
   $("rainDock").classList.add("hidden");
   if (multi) {
     // Mansap noktası varsayılan: tek havzadaki outlet (kullanıcı elle değiştirmediyse hep senkron)
@@ -2023,6 +2453,252 @@ function setMode(mode) {
 $("modeWizard").onclick = () => setMode("wizard");
 $("modeMulti").onclick = () => setMode("multi");
 $("modeDilekce").onclick = () => setMode("dilekce");
+$("modeSu").onclick = () => setMode("su");
+
+/* ---------------- SU POTANSİYELİ ----------------
+   Günlük akım serilerinden hacim odaklı değerlendirme. Taşkın tarafındaki
+   AGİ katmanından ayrı bir veri tabanı (2909 istasyon, 1934-2015).        */
+layers.su = L.layerGroup();
+S.suSecili = new Set();      // periyot/regresyona girecek istasyonlar
+S.suListe = [];
+
+function suIsaretle() {
+  layers.su.eachLayer(l => {
+    if (!l.su) return;
+    const sec = S.suSecili.has(l.su.kod);
+    const hedef = $("suHedef").value === l.su.kod;
+    l.setStyle({
+      radius: hedef ? 9 : (sec ? 7 : 5),
+      color: hedef ? "#000" : (sec ? "#00695c" : "#78909c"),
+      weight: hedef ? 3 : (sec ? 2.5 : 1.2),
+      fillColor: l.su.icinde ? "#26a69a" : "#90a4ae",
+      fillOpacity: 0.85,
+    });
+  });
+  $("btnSuPeriyot").disabled = S.suSecili.size < 1;
+  $("btnSuTamamla").disabled = !$("suHedef").value;
+}
+
+function suHedefDoldur() {
+  const sec = $("suHedef"), onceki = sec.value;
+  sec.innerHTML = '<option value="">— seçin —</option>'
+    + S.suListe.filter(s => S.suSecili.has(s.kod))
+        .map(s => `<option value="${s.kod}">${s.kod} — ${(s.ad || "").replace(/_/g, " ")}`
+                  + `${s.alan_km2 ? " (" + fmt(s.alan_km2, 0) + " km²)" : ""}</option>`).join("");
+  sec.value = S.suSecili.has(onceki) ? onceki : "";
+  suIsaretle();
+}
+
+function suHavzaGuncelle() {
+  const a = +$("inpA").value;
+  if (a && !$("suAlan").value) $("suAlan").value = a;
+  $("suHavzaInfo").innerHTML = S.havza
+    ? `Havza çıkarıldı — alan <b>${fmt(a, 2)} km²</b>`
+      + (S.outlet ? ` · outlet ${fmt(S.outlet.snap_lat ?? S.outlet.lat, 5)}, `
+                    + `${fmt(S.outlet.snap_lon ?? S.outlet.lon, 5)}` : "")
+    : "Havza yok — outlet seçip çıkarın (ya da alanı elle yazıp doğrudan 3. adıma geçin).";
+}
+
+async function suBaslat() {
+  layers.su.addTo(map);
+  suHavzaGuncelle();
+  try {
+    const b = await api("/api/su-bilgi");
+    if (!b.var) {
+      $("btnSuGetir").disabled = true;
+      $("suInfo").textContent = "veri yok — tools/su_veritabani_olustur.py ile üretin";
+    } else if (!$("suInfo").textContent) {
+      $("suInfo").textContent = `${b.istasyon.toLocaleString("tr")} istasyon · `
+        + `${b.gun.toLocaleString("tr")} günlük kayıt · ${b.ilk_tarih}…${b.son_tarih}`;
+    }
+  } catch (e) { /* uç yoksa sessiz geç */ }
+}
+
+/* 1) havza — taşkın modundaki çıkarımın aynısını kullanır */
+$("btnSuHavza").onclick = () => { $("btnPick").click(); };
+
+/* 3) civardaki AGİ'ler */
+$("btnSuGetir").onclick = async () => {
+  setStatus("suStatus", "AGİ'ler getiriliyor…", "loading");
+  try {
+    let r;
+    if (S.havza) {
+      r = await api("/api/su-havza", {
+        geometri: (S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza),
+        tampon_derece: +$("suTampon").value || 0,
+        en_az_yil: +$("suEnAzYil").value || 5,
+      });
+    } else {
+      const b = map.getBounds();
+      const q = new URLSearchParams({
+        bati: b.getWest(), guney: b.getSouth(), dogu: b.getEast(), kuzey: b.getNorth(),
+        en_az_yil: +$("suEnAzYil").value || 5,
+      });
+      r = await api("/api/su-istasyon?" + q.toString());
+    }
+    S.suListe = r.istasyonlar;
+    S.suSecili = new Set(r.istasyonlar.filter(s => s.alan_km2).map(s => s.kod));
+    layers.su.clearLayers();
+    r.istasyonlar.forEach(s => {
+      if (s.lat == null || s.lon == null) return;
+      const m = L.circleMarker([s.lat, s.lon], { radius: 5 });
+      m.su = s;
+      m.bindTooltip(`${s.kod} — ${(s.ad || "").replace(/_/g, " ")}`, { sticky: true });
+      m.on("click", () => {
+        if (S.suSecili.has(s.kod)) S.suSecili.delete(s.kod); else S.suSecili.add(s.kod);
+        suListele();
+      });
+      m.addTo(layers.su);
+    });
+    suListele();
+    const ic = r.istasyonlar.filter(s => s.icinde).length;
+    setStatus("suStatus", `${r.istasyonlar.length} istasyon`
+      + (S.havza ? ` (${ic} tanesi havza içinde)` : "")
+      + " — analize girecekleri işaretleyin.", "ok");
+  } catch (e) {
+    setStatus("suStatus", "AGİ'ler getirilemedi: " + e.message, "err");
+  }
+};
+
+function suListele() {
+  const sat = (s) => `<tr><td><input type="checkbox" class="su-cb" data-kod="${s.kod}"`
+    + `${S.suSecili.has(s.kod) ? " checked" : ""}`
+    + `${s.alan_km2 ? "" : " disabled title='yağış alanı yok — havzaya taşınamaz'"}></td>`
+    + `<td>${s.kod}</td><td>${(s.ad || "").replace(/_/g, " ")}</td>`
+    + `<td>${s.icinde ? "içinde" : "çevre"}</td>`
+    + `<td style="text-align:right">${(s.veri_gun / 365).toFixed(0)}</td>`
+    + `<td style="text-align:right">${s.alan_km2 ? fmt(s.alan_km2, 1) : "—"}</td>`
+    + `<td style="text-align:right">${s.q_ort != null ? fmt(s.q_ort, 2) : "—"}</td></tr>`;
+  $("suListe").innerHTML = S.suListe.length
+    ? '<table class="tbl small"><tr><th>✓</th><th>Kod</th><th>Ad</th><th>Konum</th>'
+      + "<th>Yıl</th><th>A (km²)</th><th>Q<sub>ort</sub></th></tr>"
+      + S.suListe.map(sat).join("") + "</table>"
+    : '<p class="small">Bu alanda yeterli uzunlukta istasyon yok.</p>';
+  $("suListe").querySelectorAll(".su-cb").forEach(cb => {
+    cb.onclick = () => {
+      if (cb.checked) S.suSecili.add(cb.dataset.kod); else S.suSecili.delete(cb.dataset.kod);
+      suHedefDoldur();
+    };
+  });
+  suHedefDoldur();
+}
+
+/* 4) ölçüm periyotları + korelasyon */
+$("btnSuPeriyot").onclick = async () => {
+  const ilk = +$("suIlkYil").value, son = +$("suSonYil").value;
+  if (!(ilk && son && son >= ilk)) return setStatus("suStatus",
+    "Geçerli bir yıl aralığı girin.", "err");
+  setStatus("suStatus", "Periyotlar çıkarılıyor…", "loading");
+  try {
+    const r = await api("/api/su-periyot",
+      { kodlar: [...S.suSecili], ilk_yil: ilk, son_yil: son });
+    S.suPeriyot = r;
+    const t = r.tablo;
+    const renk = { tam: "#2e7d32", eksik: "#f9a825", yok: "#e0e0e0" };
+    let h = '<p class="small"><b>Ölçüm periyotları</b> — '
+      + '<span style="color:#2e7d32">■</span> tam yıl · '
+      + '<span style="color:#f9a825">■</span> eksik (kısmi gözlem) · '
+      + '<span style="color:#bdbdbd">■</span> veri yok</p>'
+      + '<div style="overflow-x:auto"><table class="tbl small"><tr><th>İstasyon</th>'
+      + t.yillar.map(y => `<th style="writing-mode:vertical-rl;font-weight:400">${y}</th>`).join("")
+      + "<th>tam</th><th>eksik</th></tr>";
+    t.istasyonlar.forEach(s => {
+      h += `<tr><td title="${(s.ad || "").replace(/_/g, " ")}">${s.kod}</td>`
+        + s.yillar.map(y => `<td title="${y.yil}: ${y.durum}${y.q != null
+            ? " · " + fmt(y.q, 2) + " m³/s, " + y.gun + " gün" : ""}"`
+            + ` style="background:${renk[y.durum]};padding:0 3px"></td>`).join("")
+        + `<td style="text-align:right">${s.tam_yil}</td>`
+        + `<td style="text-align:right">${s.eksik_yil}</td></tr>`;
+    });
+    h += "</table></div>";
+
+    const ky = r.korelasyon.filter(k => k.r2 != null).sort((a, b) => b.r2 - a.r2);
+    if (ky.length) {
+      h += '<p class="small"><b>İstasyon çiftleri arasındaki ilişki</b> '
+        + "(yıllık ortalama akım regresyonu, en iyi 12)</p><table class='tbl small'>"
+        + "<tr><th>A</th><th>B</th><th>ortak yıl</th><th>r</th><th>r²</th></tr>"
+        + ky.slice(0, 12).map(k => `<tr><td>${k.a}</td><td>${k.b}</td>`
+            + `<td style="text-align:right">${k.ortak_yil}</td>`
+            + `<td style="text-align:right">${fmt(k.r, 3)}</td>`
+            + `<td style="text-align:right">${fmt(k.r2, 3)}</td></tr>`).join("")
+        + "</table>";
+    }
+    $("suPeriyot").innerHTML = h;
+    const eksikToplam = t.istasyonlar.reduce((a, s) => a + s.eksik_yil, 0);
+    setStatus("suStatus", `${t.istasyonlar.length} istasyon × ${t.yillar.length} yıl — `
+      + `toplam ${eksikToplam} eksik yıl. Temsil AGİ'sini seçip tamamlayın.`, "ok");
+  } catch (e) {
+    setStatus("suStatus", "Periyotlar çıkarılamadı: " + e.message, "err");
+  }
+};
+
+$("suHedef").onchange = suIsaretle;
+
+/* 5) eksikleri tamamla + havza çıkışına taşı */
+$("btnSuTamamla").onclick = async () => {
+  const hedef = $("suHedef").value;
+  if (!hedef) return;
+  const alan = +$("suAlan").value || +$("inpA").value;
+  setStatus("suStatus", "Regresyonla tamamlanıyor…", "loading");
+  try {
+    const o = await api("/api/su-tamamla", {
+      hedef, vericiler: [...S.suSecili],
+      ilk_yil: +$("suIlkYil").value, son_yil: +$("suSonYil").value,
+      en_az_r2: +$("suR2").value || 0.5,
+      havza_alani_km2: alan || null, us: +$("suUs").value || 1,
+    });
+    S.suTamam = o;
+    const i = o.istasyon;
+    let h = `<h3 class="small">${i.kod} — ${(i.ad || "").replace(/_/g, " ")}`
+      + `${i.alan_km2 ? " (" + fmt(i.alan_km2, 1) + " km²)" : ""}</h3>`;
+
+    const il = Object.entries(o.iliskiler).sort((a, b) => b[1].r2 - a[1].r2);
+    h += '<p class="small"><b>Kabul edilen ilişkiler</b> (eksik yıl doldurmada '
+      + "kullanılma sırası)</p>";
+    h += il.length
+      ? '<table class="tbl small"><tr><th>Verici</th><th>r²</th><th>ortak yıl</th>'
+        + "<th>bağıntı</th></tr>"
+        + il.map(([k, v]) => `<tr><td>${k}</td>`
+            + `<td style="text-align:right">${fmt(v.r2, 3)}</td>`
+            + `<td style="text-align:right">${v.ortak_yil}</td>`
+            + `<td>Q = ${fmt(v.kesim, 3)} + ${fmt(v.egim, 4)}·Q<sub>${k}</sub></td></tr>`).join("")
+        + "</table>"
+      : '<p class="small">r² eşiğini geçen ilişki yok — eşiği düşürün ya da başka '
+        + "istasyon işaretleyin.</p>";
+
+    h += `<p class="small"><b>Yıllık seri</b> — ${o.gozlem} gözlem, `
+      + `${o.dolduruldu} regresyonla dolduruldu`
+      + (o.bos ? `, <b>${o.bos} yıl boş kaldı</b>` : "") + "</p>"
+      + '<div style="overflow-x:auto"><table class="tbl small"><tr><th>Su yılı</th>'
+      + o.seri.map(s => `<th style="font-weight:400">${s.yil}</th>`).join("") + "</tr>"
+      + "<tr><td>Q (m³/s)</td>" + o.seri.map(s =>
+          `<td style="text-align:right;${s.kaynak === "gözlem" ? ""
+            : s.q == null ? "background:#ffcdd2" : "background:#fff9c4"}"`
+          + ` title="${s.kaynak === "gözlem" ? "gözlem"
+              : s.kaynak ? s.kaynak + " ile dolduruldu (r²=" + fmt(s.r2, 3) + ")"
+              : "veri yok"}">${s.q == null ? "—" : fmt(s.q, 2)}</td>`).join("")
+      + "</tr></table></div>";
+
+    if (o.outlet) {
+      const u = o.outlet;
+      h += `<p class="small"><b>Havza çıkışına taşınmış potansiyel</b> — `
+        + `(${fmt(u.havza_alani_km2, 1)} / ${fmt(u.kaynak_alan_km2, 1)})`
+        + `<sup>${fmt(u.us, 2)}</sup> = ${fmt(u.oran, 4)}</p><table class="tbl small">`
+        + `<tr><td>Ortalama akım Q<sub>ort</sub></td><td><b>${fmt(u.q_ort, 3)}</b> m³/s</td></tr>`
+        + `<tr><td>Yıllık hacim</td><td><b>${fmt(u.yillik_hacim_hm3, 2)}</b> hm³/yıl</td></tr>`
+        + `<tr><td>Özgül verim</td><td>${fmt(u.ozgul_verim_ls_km2, 2)} L/s/km²</td></tr>`
+        + `<tr><td>Yıllık verim</td><td>${fmt(u.yillik_verim_mm, 0)} mm</td></tr>`
+        + `<tr><td>Kullanılan yıl</td><td>${u.yil_sayisi}</td></tr></table>`;
+    }
+    $("suSonuc").innerHTML = h;
+    setStatus("suStatus", o.outlet
+      ? `Havza çıkışı: Q_ort = ${fmt(o.outlet.q_ort, 3)} m³/s · `
+        + `${fmt(o.outlet.yillik_hacim_hm3, 2)} hm³/yıl.`
+      : `${o.gozlem} gözlem + ${o.dolduruldu} dolduruldu (havza alanı girilmedi).`, "ok");
+  } catch (e) {
+    setStatus("suStatus", "Tamamlanamadı: " + e.message, "err");
+  }
+};
 
 /* ---------------- DİLEKÇE (MGM veri talebi) ---------------- */
 let dilStGrid = null, dilInited = false;

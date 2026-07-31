@@ -26,6 +26,8 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
+| `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
+| `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (6 adım)
 
@@ -79,6 +81,72 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      rapor sonunda “… ile hesaplanan taşkın yinelenme değerlerinin projelendirmede esas
      alınması uygun bulunmuştur” gerekçesi ve tasarım debileri tablosu bu yönteme göre
      yazılır; karşılaştırma tablosunda seçilen yöntem koyu gösterilir. `backend/core/report.py`.
+
+7. **Frekans** — *Noktasal Taşkın Frekans Analizi (NTFA)*. Sentetik yöntemlerden
+   bağımsız ikinci yol: **gözlenmiş** yıllık pik akımlara dayanır. Havza
+   çıkarıldıktan sonra “AGİ'leri haritaya getir” ile havza içindeki ve (tampon
+   kadar) çevresindeki Akım Gözlem İstasyonları haritaya ve listeye gelir;
+   biri seçilip analiz çalıştırılır. Altı dağılım (Normal, Log-Normal 2P/3P,
+   Pearson Tip-3, Log-Pearson Tip-3, Gumbel) moment yöntemiyle uydurulur,
+   T = 2…10 000 yıl debileri hesaplanır ve **Simirnov-Kolmogorov** testiyle
+   karşılaştırılır; D<sub>maks</sub>'ı en küçük olan dağılım kabul edilir.
+   Çıktı, DSİ frekans analizi Excel'inin (`ornek.xlsm`) `SONUÇLAR` sayfasıyla
+   aynı üç bloktur: tekerrür debileri, istatistik parametreler, K-S testi.
+   `backend/core/tfa.py`, golden test: `backend/tests/test_tfa_golden.py`.
+
+   Aynı adımın altında **BTFA (Bölgesel Taşkın Frekans Analizi)** vardır:
+   listeden birden çok AGİ işaretlenir, her biri için NTFA yapılır, boyutsuz
+   büyüme eğrileri (Q<sub>T</sub>/Q<sub>2</sub>) ortalanarak bölgesel eğri
+   kurulur ve havzanın indeks debisi alan–debi bağıntısından
+   (Q<sub>2</sub> = a·A<sup>b</sup>) bulunarak Q<sub>2</sub>…Q<sub>10000</sub>
+   üretilir. Havzada AGİ yoksa veya seri kısaysa noktasal analizden
+   güvenilirdir. Karşılaştırma için tek istasyondan alan oranıyla aktarım
+   (Q<sub>havza</sub> = Q<sub>AGİ</sub>·(A/A<sub>AGİ</sub>)<sup>2/3</sup>) da
+   ayrı satır olarak verilir. `backend/core/btfa.py`, golden test:
+   `backend/tests/test_btfa_golden.py` (Karamandere).
+
+   BTFA sonucunda **homojenlik testi** (Dalrymple, 1960) da verilir: her
+   istasyonun kendi Q<sub>10</sub>/Q<sub>2</sub> oranı bölgesel eğri üzerinde
+   hangi tekerrüre denk geliyor bulunur ve serinin kısalığından beklenen %95
+   bandıyla karşılaştırılır. Banda sığmayan istasyonlar kırmızı işaretlenir;
+   onları listeden çıkarıp analizi yenilemek bölgeyi homojenleştirir.
+
+   Aynı adımda **MMY (Muhtemel Maksimum Yağış)** hesabı vardır: bir meteoroloji
+   istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle
+   MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2. K<sub>m</sub>, 9
+   bölgeye ait zarf eğrilerinden düzeltilmiş ortalamaya göre okunur. Çıkan
+   derinlik 6. adımdaki **OET** yağışına yazılarak muhtemel maksimum feyezan
+   (Q<sub>OET</sub>) elde edilir. `backend/core/mmy.py`, golden test:
+   `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
+
+## Su Potansiyeli modu
+
+Üst kısımdaki **Su Potansiyeli** düğmesiyle geçilir; taşkın hesabından
+bağımsızdır. Burada pik değil **hacim** sorulur. Panel beş adımda ilerler:
+
+1. **Havza** — Outlet'e tıklanır; havza sınırı ve alanı taşkın modundaki 1.
+   adımın aynısıyla (DEM'den) çıkarılır. Orada zaten çıkarıldıysa otomatik
+   kullanılır; alan elle de yazılabilir.
+2. **Yıl aralığı** — Su yılı (1 Ekim – 30 Eylül) ilk/son yılı, istasyon
+   uzunluk eşiği ve havza dışını da kapsayacak tampon.
+3. **Civardaki AGİ'ler** — Havza poligonunun içindeki ve tampon kadar
+   çevresindeki günlük akım istasyonları haritaya ve listeye gelir; havza
+   içinde olanlar ayrıca işaretlenir. Analize girecekler onay kutusuyla seçilir
+   (yağış alanı bilinmeyenler seçilemez — havzaya taşınamazlar).
+4. **Ölçüm periyotları** — İstasyon × su yılı matrisi: yeşil = tam yıl,
+   sarı = eksik (kısmi gözlem), gri = veri yok. Altında istasyon çiftlerinin
+   yıllık ortalama akım regresyonları (r, r², ortak yıl) sıralanır.
+5. **Tamamlama ve taşıma** — Havzayı temsil edecek AGİ seçilir; eksik su
+   yılları, r² eşiğini geçen en iyi ilişkili istasyondan
+   `Q = kesim + eğim·Q_verici` ile doldurulur. Doldurulan yıllar sarı, hiçbir
+   istasyonda veri olmadığı için boş kalanlar kırmızı gösterilir — **uydurma
+   yapılmaz**. Tamamlanan seri son olarak alan oranıyla havza çıkışına taşınır
+   (`Q_havza = Q_AGİ·(A_havza/A_AGİ)^üs`, hacimde üs ≈ 1) ve Q<sub>ort</sub>,
+   yıllık hacim (hm³), özgül verim (L/s/km²) ve yıllık verim (mm) verilir.
+
+Tek istasyonun kendi başına potansiyeli (aylık dağılım, debi süreklilik eğrisi,
+güvenilir debiler Q50/Q75/Q90/Q95 ve bir talebin karşılanma güvenilirliği) için
+`POST /api/su` ucu ayrıca kullanılabilir. `backend/core/su.py`.
 
 ## Ara Havza (çok parçalı havza) modu
 
@@ -135,10 +203,26 @@ ve **kapak açıklığı programı** (grafik + tablo + CSV). `reservoir.route_co
 ## Raster altlıklar (1/25000 pafta vb.)
 
 Harita panelindeki **🗺 1/25000 altlık** aracı ile koordinatlı raster pafta yüklenir
-(GeoTIFF, MrSID `.sid` + world file `.sdw`). `.sid` dosyaları GDAL ile GeoTIFF'e
-çevrilir. Altlık EPSG:3857'ye yeniden projeksiyonlanarak XYZ karo servisi üzerinden
-haritada gösterilir (`/api/raster/{ad}/{z}/{x}/{y}.png`). `backend/core/raster.py`,
+(GeoTIFF, MrSID `.sid` + world file `.sdw`). Altlık EPSG:3857'ye yeniden
+projeksiyonlanarak XYZ karo servisi üzerinden haritada gösterilir
+(`/api/raster/{ad}/{z}/{x}/{y}.png`). `backend/core/raster.py`,
 `backend/tests/test_raster.py`.
+
+**MrSID (`.sid`) desteği ortama bağlıdır.** Sürücü tescillidir (Extensis DSDK ile
+derlenir) ve ne PyPI rasterio tekerleklerinde ne de Debian'ın `gdal-bin`
+paketinde bulunur:
+
+* **Yerelde (Windows):** OSGeo4W'den `gdal` + `gdal-mrsid` paketlerini kurun;
+  uygulama `C:\OSGeo4W\bin\gdal_translate.exe`'yi kendiliğinden bulup dosyayı
+  GeoTIFF'e çevirir. Başka yere kurulduysa `GDAL_TRANSLATE` ortam değişkenine
+  tam yolu yazın.
+* **Sunucuda (Docker):** kod çözücü **yoktur ve kurulamaz**. Dosyayı kendi
+  bilgisayarınızda bir kez GeoTIFF'e çevirip onu yükleyin —
+  `gdal_translate -of GTiff pafta.sid pafta.tif` ya da QGIS → Dışa Aktar →
+  Farklı Kaydet → GeoTIFF. GeoTIFF dönüşümsüz yüklenir.
+
+Arayüz `.sid` seçilir seçilmez (`/api/raster-converter`) ortama uygun uyarıyı
+gösterir; desteklenmiyorsa yükleme hiç başlatılmaz.
 
 ## KMZ dışa aktarımı
 
@@ -178,6 +262,26 @@ kot profili yeniden üretilir.
   bloklarla hesaplandığından tek tr kullanan bu uygulamada ~%0.2 sapar; Q2–Q100
   birebirdir. Q500/1000/10000 uygulama genelindeki gibi Q10–Q100'den ekstrapole
   edilir (Excel'in ayrı P500… girdileri yerine).
+* NTFA'da (adım 7) tersi geçerlidir: DSİ frekans şablonuyla **birebir** uyum
+  hedeflendiği için şablonun üç tuhaflığı korunmuştur — normal kuyruk
+  yaklaşımında √(2π) yerine √(44/7), polinomun 3. katsayısı 1.78147937
+  (literatürde 1.781477937) ve Normal dağılımın D<sub>maks</sub>'ına eklenen
+  sabit +0.01. Bunlar hangi dağılımın kabul edildiğini değiştirebildiği için
+  “düzeltmek” sonuçları Excel'den ayırırdı; `backend/core/tfa.py` içinde
+  `_CDF_B` ve `NORMAL_DMAX_DUZELTME` olarak işaretlidir.
+* BTFA'da alan–debi üssü **veriden hesaplanır**; örnek dosyadaki (Karamandere)
+  0.8968 üssü o dosyanın kendi 15 istasyonunun en küçük kareler uyumundan
+  çıkmıyor (serbest uyum 0.0827·A<sup>1.3146</sup>), elle girilmiş. Rapordaki
+  sayıyı birebir tutturmak gerekirse arayüzdeki **Üs** kutusuna yazın; boş
+  bırakılırsa seçili istasyonlardan hesaplanan bağıntı kullanılır. Her iki
+  bağıntı (a=1 ve a serbest) R² ile birlikte ekranda gösterilir.
+* MMY'de M1/M2 düzeltme katsayıları **girdi**dir (varsayılan 1.0). Kaynak
+  Excel'lerde bu değerler hücrede formül değil, makroyla/elle yazılmış
+  sayılardır; Hershfield abaklarının sayısal karşılığı dosyalarda yok. Uydurma
+  bir eğri koymak sonucu sessizce kaydırırdı, bu yüzden hesaplanan oranlar
+  (P<sub>ort</sub>(−P<sub>maks</sub>)/P<sub>ort</sub> ve S(−P<sub>maks</sub>)/S)
+  ile N ekranda gösterilir; kullanıcı abaktan okuyup girer. K<sub>m</sub> ise
+  Excel'den çıkarılan zarf eğrilerinden **birebir** okunur.
 
 ## Web'e deploy
 
@@ -207,5 +311,8 @@ python backend/tests/test_snyder_golden.py       :: Snyder birebir (parametreler
 python backend/tests/test_reservoir_golden.py    :: Rezervuar öteleme birebir (çıkış piki, su kotu, sönümleme)
 python backend/tests/test_kmz_export.py          :: KMZ yazıcı gidiş-dönüş (vektör.oku ile)
 python backend/tests/test_raster.py              :: Raster altlık XYZ karo servisi + CRS
+python backend/tests/test_tfa_golden.py          :: NTFA birebir (6 dağılım × T2–T10000 + K-S)
+python backend/tests/test_btfa_golden.py         :: BTFA birebir (Karamandere indeks-debi)
+python backend/tests/test_mmy_golden.py          :: MMY birebir (Hershfield, iki kaynak dosya)
 python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
 ```

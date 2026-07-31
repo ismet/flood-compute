@@ -36,19 +36,25 @@ def _c_agirlikli(rows):
     mühendis türetmenin ne kadarına güvenebileceğini görsün.
     """
     tab = tables.load("corine_c")["siniflar"]
-    alt = ust = 0.0
+    alt = ust = ort = 0.0
     kapsanan = turetilen = eslesmeyen = 0
     for r in rows:
         bilgi = tab.get(str(r["kod"]))
         h = r["hucre"]
         if bilgi is None:
             eslesmeyen += h
-            r["c_min"] = r["c_max"] = None
+            r["c_min"] = r["c_max"] = r["c_ort"] = None
             continue
+        # C_orta, aralığın orta noktası DEĞİL tablodaki "önerilen ortalama"dır
+        # (ör. 231: 0.15-0.35 aralığı ama önerilen 0.20). Kaynak tablo böyle
+        # verdiği için orta nokta hesaplanmaz, c_ort doğrudan ağırlıklanır.
+        c_ort = bilgi.get("c_ort", (bilgi["c_min"] + bilgi["c_max"]) / 2.0)
         alt += bilgi["c_min"] * h
         ust += bilgi["c_max"] * h
-        r["c_min"], r["c_max"] = bilgi["c_min"], bilgi["c_max"]
+        ort += c_ort * h
+        r["c_min"], r["c_max"], r["c_ort"] = bilgi["c_min"], bilgi["c_max"], c_ort
         r["c_tablo"] = bool(bilgi.get("tablo"))
+        r["c_renk"] = bilgi.get("renk")
         if bilgi.get("tablo"):
             kapsanan += h
         else:
@@ -59,7 +65,7 @@ def _c_agirlikli(rows):
     c_min, c_max = alt / toplam, ust / toplam
     return {
         "C_min": round(c_min, 3),
-        "C_orta": round((c_min + c_max) / 2.0, 3),
+        "C_orta": round(ort / toplam, 3),
         "C_max": round(c_max, 3),
         "tablo_orani": round(kapsanan / toplam, 4),
         "turetilmis_orani": round(turetilen / toplam, 4),
