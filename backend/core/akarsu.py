@@ -14,6 +14,7 @@ import os
 import sqlite3
 import struct
 import threading
+import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_YOLU = os.path.join(ROOT, "data", "akarsu", "akarsu.sqlite")
@@ -32,9 +33,83 @@ ONDALIK = 5                    # ~1 m; float32 zaten bundan fazlasını taşım�
 
 _yerel = threading.local()     # sqlite bağlantısı iş parçacığına özgü olmalı
 
+# --------------------------------------------------------------- geometri kodu
+# Ham float32 çiftleri 66 MB tutuyordu; dosya GitHub'ın 100 MB sınırını aşınca
+# katman deploy'a hiç gidemiyordu. Kollar küçük adımlarla ilerlediği için
+# ardışık noktaların FARKI küçük tam sayılar: zigzag varint + zlib bunu %36'ya
+# indiriyor (düz zlib ancak %71'de kalıyordu — koordinatlar rastgeleye yakın).
+# Çözünürlük 1e-5 derece (~1.1 m) ve zaten sunumda ONDALIK=5'e yuvarlanıyor,
+# yani görüntüde kayıp yok.
+OLCEK = 100000
+BICIM = "delta1"               # meta tablosunda yoksa: eski ham float32 biçim
+
+
+def _varint_yaz(v):
+    z = (v << 1) ^ (v >> 31)                   # zigzag: negatifler de kısa olsun
+    out = bytearray()
+    while True:
+        b = z & 0x7F
+        z >>= 7
+        if z:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)
+
+
+def _varint_oku(veri, i, adet):
+    out = []
+    for _ in range(adet):
+        z = k = 0
+        while True:
+            b = veri[i]
+            i += 1
+            z |= (b & 0x7F) << k
+            if not b & 0x80:
+                break
+            k += 7
+        out.append((z >> 1) ^ -(z & 1))
+    return out, i
+
+
+def kodla(lon, lat):
+    """lon/lat listelerini delta+varint+zlib paketine çevirir."""
+    xs = [int(round(v * OLCEK)) for v in lon]
+    ys = [int(round(v * OLCEK)) for v in lat]
+    dx = [xs[0]] + [xs[i] - xs[i - 1] for i in range(1, len(xs))]
+    dy = [ys[0]] + [ys[i] - ys[i - 1] for i in range(1, len(ys))]
+    gövde = b"".join(map(_varint_yaz, dx)) + b"".join(map(_varint_yaz, dy))
+    return zlib.compress(struct.pack("<I", len(xs)) + gövde, 9)
+
+
+def _coz_delta(paket):
+    veri = zlib.decompress(paket)
+    n = struct.unpack_from("<I", veri, 0)[0]
+    dx, i = _varint_oku(veri, 4, n)
+    dy, _ = _varint_oku(veri, i, n)
+    pts, x, y = [], 0, 0
+    for a, b in zip(dx, dy):
+        x += a
+        y += b
+        pts.append((x / OLCEK, y / OLCEK))
+    return pts
+
 
 def var_mi():
     return os.path.exists(DB_YOLU)
+
+
+def _bicim(db):
+    """Veri tabanı hangi geometri biçimini tutuyor (eski dosyalar da açılsın)."""
+    b = getattr(_yerel, "bicim", None)
+    if b is None:
+        try:
+            r = db.execute("SELECT deger FROM meta WHERE anahtar='geometri'").fetchone()
+            b = r[0] if r else "float32"
+        except sqlite3.OperationalError:
+            b = "float32"
+        _yerel.bicim = b
+    return b
 
 
 def _baglanti():
@@ -110,11 +185,14 @@ def _sadelestir(pts, tol):
     return [p for p, t in zip(pts, tut) if t]
 
 
-def _cizgi(paket, tol=0.0):
-    """Paketli float32 lon/lat çiftlerini GeoJSON koordinat listesine çevirir."""
-    n = len(paket) // 8            # her nokta 2 × float32 = 8 bayt
-    duz = struct.unpack(f"<{2 * n}f", paket)
-    pts = [(duz[2 * i], duz[2 * i + 1]) for i in range(n)]
+def _cizgi(paket, tol=0.0, bicim=BICIM):
+    """Geometri paketini GeoJSON koordinat listesine çevirir (iki biçim de)."""
+    if bicim == BICIM:
+        pts = _coz_delta(paket)
+    else:                          # eski dosyalar: ham float32 çiftleri
+        n = len(paket) // 8
+        duz = struct.unpack(f"<{2 * n}f", paket)
+        pts = [(duz[2 * i], duz[2 * i + 1]) for i in range(n)]
     if tol > 0:
         pts = _sadelestir(pts, tol)
     return [[round(x, ONDALIK), round(y, ONDALIK)] for x, y in pts]
@@ -154,9 +232,10 @@ def sorgula(bbox, olcek=100, sinir=VARSAYILAN_SINIR, sadelestir=True):
 
     kirpildi = len(sat) > sinir
     sat = sat[:sinir]
+    bicim = _bicim(db)
     ozellikler = []
     for kid, ad, tip, uzunluk, paket in sat:
-        koord = _cizgi(paket, tol)
+        koord = _cizgi(paket, tol, bicim)
         if len(koord) < 2:
             continue
         ozellikler.append({

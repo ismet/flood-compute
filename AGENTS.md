@@ -22,6 +22,7 @@ python backend/tests/test_tfa_golden.py               # NTFA golden (ornek.xlsm,
 python backend/tests/test_btfa_golden.py              # BTFA golden (Karamandere index-flood)
 python backend/tests/test_mmy_golden.py               # MMY golden (Hershfield PMP, 2 workbooks)
 python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
+python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
@@ -83,7 +84,11 @@ data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
 data/akarsu/          — akarsu.sqlite, DSİ river network at 1/100k–1/500k
-                        (~405k lines, 110 MB; gitignored, built by the tool above)
+                        (405k lines, 68 MB, committed). Geometry is delta+varint
+                        +zlib (see `akarsu.kodla`): raw float32 pairs made the
+                        file 105 MB, over GitHub's 100 MB limit, so the layer
+                        never reached the deployed instance. Old float32 files
+                        still decode — `meta.geometri` selects the format.
 data/agi/             — agi.sqlite, DSİ+EİE annual peak flows 1935–2020
                         (2732 stations / 36.5k station-years, 3.8 MB)
 data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
@@ -109,7 +114,9 @@ data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
 data/tables/*.json          — 14 Excel-extracted lookup tables (do not edit by hand)
 data/regions/YZD_ALANLAR.kmz — A/B/C flood region polygons
 data/stations/bir_cikti.kml  — default 2315-station set (auto-loaded)
-data/akarsu/akarsu.sqlite    — DSİ river network (~405k lines, 110 MB; gitignored)
+data/akarsu/akarsu.sqlite    — DSİ river network (405k lines, 68 MB, committed)
+data/agi/agi.sqlite          — DSİ+EİE annual peak flows (2732 stations, 3.8 MB)
+data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB)
 ```
 
 ## API endpoints (38 total)

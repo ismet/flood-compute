@@ -11,8 +11,10 @@ data/dem/cache/
 data/corine/cache/
 data/projects/
 data/raster/
-# tools/mdb_akarsu_cikar.py ile Kaynak_Akarsu.mdb'den üretilir (~110 MB)
-data/akarsu/
+# akarsu.sqlite artık depoda: geometri delta+varint+zlib ile 68 MB'a indi ve
+# GitHub'ın 100 MB sınırının altına girdi, böylece canlıda da katman geliyor.
+# Dönüştürmeden kalan yedek kopya girmesin:
+data/akarsu/*.eski
 
 # data/stations/DMİ.kmz is the canonical copy; root is a local fallback
 /DMİ.kmz
