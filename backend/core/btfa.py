@@ -172,20 +172,37 @@ def homojenlik(kullanilan, buyume, guven=1.96):
             kayit.update(t_alt=None, t_ust=None, homojen=None)
         sonuc.append(kayit)
     aykiri = [s["kod"] for s in sonuc if s["homojen"] is False]
+
+    # Grafik için zarf: kayıt uzunluğuna göre bandın alt/üst sınırı. Kısa
+    # serilerde band çok geniştir — aykırılığı asıl belirleyen budur, o yüzden
+    # noktalarla birlikte çizilmeden test okunaklı olmuyor.
+    nler = [s["yil_sayisi"] for s in sonuc if s["yil_sayisi"] > 1]
+    n0 = max(3, min(nler) - 2) if nler else 5
+    n1 = (max(nler) + 5) if nler else 60
+    zarf = []
+    for n in range(int(n0), int(n1) + 1):
+        se = kat / math.sqrt(n)
+        zarf.append({"n": n, "t_alt": _gumbel_t(y10 - guven * se),
+                     "t_ust": _gumbel_t(y10 + guven * se)})
+
     return {"tekerrur": HOMOJENLIK_T, "guven_katsayisi": guven,
             "istasyonlar": sonuc, "aykiri": aykiri,
-            "homojen": not aykiri,
+            "homojen": not aykiri, "zarf": zarf, "t_merkez": HOMOJENLIK_T,
             "yontem": "Dalrymple (1960) — Gumbel indirgenmiş değişken bandı"}
 
 
 def bolgesel(seriler, alan_km2, us=None, katsayi=None, katsayi_serbest=False,
-             disla=(), transfer_kod=None, transfer_ussu=VARSAYILAN_TRANSFER_USSU):
+             disla=(), transfer_kod=None, transfer_ussu=VARSAYILAN_TRANSFER_USSU,
+             aykiri_disla=False):
     """BTFA — bölgesel büyüme eğrisi + indeks debi ile havza taşkın debileri.
 
-    alan_km2 : proje havzasının yağış alanı
-    us       : alan-debi üssü b; None ise veriden hesaplanır
-    katsayi  : bağıntı katsayısı a; None ise (us verildiyse) 1 alınır
-    disla    : büyüme eğrisine katılmayacak istasyon kodları
+    alan_km2     : proje havzasının yağış alanı
+    us           : alan-debi üssü b; None ise veriden hesaplanır
+    katsayi      : bağıntı katsayısı a; None ise (us verildiyse) 1 alınır
+    disla        : büyüme eğrisine katılmayacak istasyon kodları
+    aykiri_disla : homojenlik testinden geçemeyen istasyonlar çıkarılıp analiz
+                   bir kez daha koşulur; sonuç `aykirisiz` altında döner ve
+                   iki durum karşılaştırılabilir.
     """
     if not alan_km2 or alan_km2 <= 0:
         raise ValueError("Havza alanı (km²) gerekli")
@@ -255,4 +272,19 @@ def bolgesel(seriler, alan_km2, us=None, katsayi=None, katsayi_serbest=False,
                 "tekerrur": list(TEKERRUR) + [t for t, _ in EKSTRAPOLASYON],
                 "q": qt + _ekstrapole(qt),
             }
+
+    # Aykırıları çıkarıp bir kez daha koş — hangi sayının ne kadar değiştiği
+    # görülmeden "aykırıyı at" kararı verilemiyor.
+    if aykiri_disla and sonuc["homojenlik"]["aykiri"]:
+        yeni_disla = set(disla) | set(sonuc["homojenlik"]["aykiri"])
+        if len(kullanilan) - len(sonuc["homojenlik"]["aykiri"]) >= 2:
+            sonuc["aykirisiz"] = bolgesel(
+                seriler, alan_km2, us=us, katsayi=katsayi,
+                katsayi_serbest=katsayi_serbest, disla=tuple(yeni_disla),
+                transfer_kod=transfer_kod, transfer_ussu=transfer_ussu,
+                aykiri_disla=False)
+            sonuc["aykirisiz"]["cikarilan"] = sorted(sonuc["homojenlik"]["aykiri"])
+        else:
+            sonuc["aykirisiz_hata"] = ("Aykırılar çıkarılınca 2'den az istasyon "
+                                       "kalıyor — karşılaştırma yapılamadı.")
     return sonuc

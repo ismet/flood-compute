@@ -201,7 +201,10 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
   reported, but `us`/`katsayi` let the caller pin the report's number.
   Homogeneity is Dalrymple (1960): each station's own Q10/Q2 is read back onto
   the regional curve as an equivalent T, compared against the Gumbel-reduced-
-  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`.
+  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`. The band is also
+  returned as an envelope over record length (`homojenlik.zarf`) for plotting.
+  `aykiri_disla=True` reruns the whole analysis without the failing stations and
+  attaches it as `aykirisiz`, so both sets of discharges can be compared.
 - **MMY** (`mmy.py`): Hershfield PMP,
   `MMY = Port·M1·M2 + Km·S·M1·M2`, Km read from a regional envelope
   (`data/tables/mmy_km.json`, 9 regions extracted from the source workbook's

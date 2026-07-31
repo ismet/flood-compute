@@ -108,8 +108,16 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    BTFA sonucunda **homojenlik testi** (Dalrymple, 1960) da verilir: her
    istasyonun kendi Q<sub>10</sub>/Q<sub>2</sub> oranı bölgesel eğri üzerinde
    hangi tekerrüre denk geliyor bulunur ve serinin kısalığından beklenen %95
-   bandıyla karşılaştırılır. Banda sığmayan istasyonlar kırmızı işaretlenir;
-   onları listeden çıkarıp analizi yenilemek bölgeyi homojenleştirir.
+   bandıyla karşılaştırılır. Sonuç **grafik olarak** da çizilir: yatayda kayıt
+   uzunluğu, düşeyde eşdeğer tekerrür (log), taralı alan %95 zarfı — kısa
+   serilerde bandın ne kadar genişlediği ancak böyle görülüyor. Banda sığmayan
+   istasyonlar kırmızı üçgenle gösterilir.
+
+   **"Aykırıları çıkarıp tekrarla"** kutusu işaretliyse analiz bir kez daha
+   koşulur ve iki durum yan yana verilir: her tekerrür için tüm istasyonlarla
+   ve aykırısız debiler, aralarındaki yüzde fark (%10'u aşan farklar kırmızı),
+   aykırısız büyüme eğrisi ve indeks debi bağıntısı. Aykırıyı atma kararı,
+   hangi sayının ne kadar değiştiği görülmeden verilmemeli.
 
    Aynı adımda **MMY (Muhtemel Maksimum Yağış)** hesabı vardır: bir meteoroloji
    istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle

@@ -874,6 +874,7 @@ class BtfaGirdi(BaseModel):
     disla: list[str] = []               # büyüme eğrisine katılmayacaklar
     transfer_kod: str = ""              # tek istasyondan alan oranıyla aktarım
     transfer_ussu: float = 2.0 / 3.0
+    aykiri_disla: bool = False          # homojen olmayanları çıkarıp tekrar koş
     ilk_yil: int = 0
     son_yil: int = 0
     dusuk_guveni_at: bool = False
@@ -901,7 +902,8 @@ def api_btfa(g: BtfaGirdi):
         return btfa.bolgesel(seriler, g.alan_km2, us=g.us, katsayi=g.katsayi,
                              katsayi_serbest=g.katsayi_serbest, disla=g.disla,
                              transfer_kod=g.transfer_kod or None,
-                             transfer_ussu=g.transfer_ussu)
+                             transfer_ussu=g.transfer_ussu,
+                             aykiri_disla=g.aykiri_disla)
     except Exception as e:
         return _err(e)
 

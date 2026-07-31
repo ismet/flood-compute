@@ -387,7 +387,11 @@
       <div class="rain-tools" style="margin-top:2px">
         <label class="inline" title="Karşılaştırma satırı: seçilen tek istasyonun noktasal sonucunu alan oranıyla havzaya taşır. Q_havza = Q_AGİ × (A_havza/A_AGİ)^üs">Aktarım AGİ'si<select id="btfaTransfer"><option value="">yok</option></select></label>
         <label class="inline">Aktarım üssü<input id="btfaTransferUs" type="number" step="0.001" value="0.667" style="width:80px"></label>
+        <label class="chk" title="Homojenlik testinden geçemeyen istasyonlar çıkarılıp analiz bir kez daha koşulur; iki durum yan yana karşılaştırılır."><input type="checkbox" id="btfaAykiriAt" checked> aykırıları çıkarıp tekrarla</label>
         <button id="btnBtfa" class="primary" disabled>Bölgesel analiz yap</button>
+      </div>
+      <div id="btfaHomojenGrafikKutu" class="hidden" style="height:280px;margin-top:6px">
+        <canvas id="btfaHomojenGrafik"></canvas>
       </div>
       <div id="btfaStatus" class="status"></div>
       <div id="btfaSonuc"></div>

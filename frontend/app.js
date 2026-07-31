@@ -703,6 +703,84 @@ $("btnTfa").onclick = async () => {
 };
 
 /* ---- BTFA: bölgesel taşkın frekans analizi (indeks-debi) ---- */
+let btfaHomChart = null;
+
+/* Dalrymple grafiği: yatayda kayıt uzunluğu, düşeyde eşdeğer tekerrür (log).
+   Zarf olmadan test okunmuyor — kısa serilerde band çok geniş olduğu için bir
+   istasyonun "sapması" tek başına bir şey söylemiyor.                        */
+function btfaHomojenCiz(hm) {
+  const kutu = $("btfaHomojenGrafikKutu");
+  if (!hm || !hm.zarf || !hm.zarf.length) { kutu.classList.add("hidden"); return; }
+  kutu.classList.remove("hidden");
+  if (btfaHomChart) btfaHomChart.destroy();
+  const nokta = (f) => hm.istasyonlar.filter(f)
+    .map(s => ({ x: s.yil_sayisi, y: s.t_esdeger, kod: s.kod }));
+  btfaHomChart = new Chart($("btfaHomojenGrafik"), {
+    type: "line",
+    data: {
+      datasets: [
+        { label: "üst sınır (%95)", data: hm.zarf.map(z => ({ x: z.n, y: z.t_ust })),
+          borderColor: "#1565c0", borderWidth: 1.5, borderDash: [6, 3],
+          pointRadius: 0, tension: 0.2 },
+        { label: "alt sınır (%95)", data: hm.zarf.map(z => ({ x: z.n, y: z.t_alt })),
+          borderColor: "#1565c0", borderWidth: 1.5, borderDash: [6, 3],
+          pointRadius: 0, tension: 0.2, fill: "-1",
+          backgroundColor: "rgba(21,101,192,.08)" },
+        { label: `T = ${hm.t_merkez} yıl`, data: hm.zarf.map(z => ({ x: z.n, y: hm.t_merkez })),
+          borderColor: "#9e9e9e", borderWidth: 1, pointRadius: 0 },
+        { label: "homojen", data: nokta(s => s.homojen === true), showLine: false,
+          pointBackgroundColor: "#2e7d32", pointBorderColor: "#2e7d32", pointRadius: 5 },
+        { label: "aykırı", data: nokta(s => s.homojen === false), showLine: false,
+          pointBackgroundColor: "#c62828", pointBorderColor: "#000",
+          pointBorderWidth: 1.5, pointRadius: 6, pointStyle: "triangle" },
+      ],
+    },
+    options: {
+      animation: false, maintainAspectRatio: false, parsing: false,
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 18, font: { size: 10 } } },
+        title: { display: true, text: "Homojenlik testi — Dalrymple zarfı" },
+        tooltip: { callbacks: { label: (c) => c.raw.kod
+          ? `${c.raw.kod}: N=${c.raw.x} yıl, T=${(+c.raw.y).toFixed(1)} yıl`
+          : `N=${c.raw.x}: T=${(+c.raw.y).toFixed(1)}` } },
+      },
+      scales: {
+        x: { type: "linear", title: { display: true, text: "Kayıt uzunluğu N (yıl)" } },
+        y: { type: "logarithmic", title: { display: true, text: "Eşdeğer tekerrür T (yıl)" } },
+      },
+    },
+  });
+}
+
+function btfaKarsilastir(o) {
+  const a = o.aykirisiz;
+  if (!a) return o.aykirisiz_hata
+    ? `<p class="small"><b>${o.aykirisiz_hata}</b></p>` : "";
+  const T = o.btfa.tekerrur;
+  const sag = (v) => `<td style="text-align:right">${v == null ? "—" : fmt(v, 1)}</td>`;
+  const fark = T.map((_, i) => {
+    const x = o.btfa.q[i], y = a.btfa.q[i];
+    return (x && y) ? (y - x) / x * 100 : null;
+  });
+  return `<p class="small"><b>Aykırılar çıkarılınca</b> — çıkarılan: `
+    + `${a.cikarilan.join(", ")} (${o.kullanilan_sayisi} → ${a.kullanilan_sayisi} istasyon). `
+    + (a.homojenlik.homojen
+        ? "Kalan bölge <b>homojen</b>."
+        : `Hâlâ aykırı var: ${a.homojenlik.aykiri.join(", ")}.`)
+    + '</p><table class="tbl small"><tr><th>Durum</th>'
+    + T.map(t => `<th style="text-align:right">${t}</th>`).join("") + "</tr>"
+    + "<tr><td>Tüm istasyonlar</td>" + o.btfa.q.map(sag).join("") + "</tr>"
+    + "<tr><td>Aykırısız</td>" + a.btfa.q.map(sag).join("") + "</tr>"
+    + '<tr><td>Fark</td>' + fark.map(v => `<td style="text-align:right;color:${
+        v == null ? "#666" : (Math.abs(v) > 10 ? "#c62828" : "#666")}">`
+        + `${v == null ? "—" : (v > 0 ? "+" : "") + fmt(v, 1) + "%"}</td>`).join("")
+    + "</tr></table>"
+    + `<p class="small">Aykırısız büyüme eğrisi: `
+    + a.buyume_egrisi.map(v => fmt(v, 3)).join(" · ")
+    + ` · indeks debi Q2 = ${fmt(a.q2_indeks, 2)} m³/s `
+    + `(${fmt(a.bagintis.katsayi, 4)}·A<sup>${fmt(a.bagintis.us, 4)}</sup>)</p>`;
+}
+
 function btfaCiz(o) {
   const T = o.tekerrur;
   const sag = (v, d = 1) => `<td style="text-align:right">${v == null ? "—" : fmt(v, d)}</td>`;
@@ -722,6 +800,7 @@ function btfaCiz(o) {
 
   const hm = o.homojenlik;
   if (hm) {
+    btfaHomojenCiz(hm);
     h += `<p class="small"><b>Homojenlik testi</b> — ${hm.yontem}. `
       + (hm.homojen
           ? "Bölge <b>homojen</b>: tüm istasyonlar %95 bandının içinde."
@@ -768,6 +847,7 @@ function btfaCiz(o) {
   }
   h += "</table><p class='small'>* Q500 ve üzeri, Q10–Q100'den ekstrapole edilmiştir "
     + "(k = 1.692 / 1.99 / 2.98) — Excel'deki (Q100−Q10)·1.692+Q10 ile aynı.</p>";
+  h += btfaKarsilastir(o);
   $("btfaSonuc").innerHTML = h;
 }
 
@@ -785,6 +865,7 @@ $("btnBtfa").onclick = async () => {
       katsayi_serbest: $("btfaSerbest").checked,
       transfer_kod: $("btfaTransfer").value,
       transfer_ussu: +$("btfaTransferUs").value || (2 / 3),
+      aykiri_disla: $("btfaAykiriAt").checked,
       ilk_yil: +$("tfaIlkYil").value || 0,
       son_yil: +$("tfaSonYil").value || 0,
       dusuk_guveni_at: $("tfaDusukAt").checked,
@@ -794,7 +875,11 @@ $("btnBtfa").onclick = async () => {
     const at = o.istasyonlar.length - o.kullanilan_sayisi;
     setStatus("btfaStatus", `${o.kullanilan_sayisi} istasyon kullanıldı`
       + (at ? `, ${at} tanesi dışarıda kaldı` : "")
-      + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s.`, "ok");
+      + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s`
+      + (o.aykirisiz
+          ? ` · aykırısız (${o.aykirisiz.kullanilan_sayisi} istasyon): `
+            + `${fmt(o.aykirisiz.btfa.q[5], 1)} m³/s`
+          : (o.homojenlik && o.homojenlik.homojen ? " · bölge homojen" : "")) + ".", "ok");
   } catch (e) {
     setStatus("btfaStatus", "Bölgesel analiz yapılamadı: " + e.message, "err");
   }
