@@ -1038,6 +1038,41 @@ $("btnYagisHavza").onclick = async () => {
   }
 };
 
+/* Haritaya tıklayınca değerleri oku. Diğer tıklama kipleri (outlet seçimi,
+   ara havza noktası, istasyon ekleme) önceliklidir — onlar açıkken sorgu
+   yapılmaz, yoksa kullanıcı outlet seçerken karşısına balon çıkardı.        */
+map.on("click", async (ev) => {
+  if (!$("yagisAc").checked || !yagisBilgi || !yagisBilgi.var) return;
+  if (picking || S.stPlace || (S.multi && S.multi.place)) return;
+  if (S.mode && S.mode !== "wizard") return;
+
+  const { lat, lng } = ev.latlng;
+  const balon = L.popup({ maxWidth: 280 })
+    .setLatLng(ev.latlng)
+    .setContent("okunuyor…")
+    .openOn(map);
+  try {
+    const q = new URLSearchParams({ lat, lon: lng });
+    const r = await api("/api/yagis-nokta?" + q.toString());
+    const secili = $("yagisKatman").value;
+    const sat = (k, ad, br = "mm/yıl") => r[k] == null ? ""
+      : `<tr${k === secili ? ' style="font-weight:700"' : ""}><td>${ad}</td>`
+        + `<td style="text-align:right;padding-left:10px">${fmt(r[k], 0)}</td>`
+        + `<td class="small" style="padding-left:4px">${br}</td></tr>`;
+    balon.setContent(
+      `<b>${fmt(lat, 4)}, ${fmt(lng, 4)}</b><table class="small">`
+      + sat("yagis", "Yağış P") + sat("pet", "PET") + sat("aet", "AET")
+      + sat("net", "Net yağış")
+      + (r.yagis && r.net != null
+          ? `<tr><td>akış katsayısı</td><td style="text-align:right;padding-left:10px">`
+            + `${fmt(r.net / r.yagis, 2)}</td><td></td></tr>` : "")
+      + "</table>"
+      + '<span class="small">CHELSA v2.1 · 1981–2010 · ~1 km piksel</span>');
+  } catch (e) {
+    balon.setContent(`<span class="small">Okunamadı: ${e.message}</span>`);
+  }
+});
+
 /* katman listesini kur; veri yoksa seçeneği kapat */
 (async function yagisDurum() {
   try {

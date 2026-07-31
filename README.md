@@ -262,6 +262,11 @@ gerçek buharlaşma (AET) Budyko çerçevesinde Fu (1981) bağıntısıyla kesti
 Sonuç kuraklık gradyanı boyunca doğru davranıyor: Rize'de akış katsayısı 0.67
 (enerji sınırlı), Konya'da 0.07 (su sınırlı — kapalı havza).
 
+Katman açıkken **haritaya tıklayınca** o noktanın P, PET, AET, net yağış ve
+akış katsayısı balonda okunur; seçili katmanın satırı koyu gösterilir. Outlet
+seçimi, ara havza noktası veya istasyon ekleme kipi açıkken sorgu yapılmaz —
+o kipler önceliklidir.
+
 **Havza ortalaması** düğmesi üç katmanın da **alansal ortalamasını** verir
 (medyan, aralık, sapma) ve bunlardan AET ile akış katsayısını türetir — dağlık
 havzada tek noktanın değeri yanıltıcıdır. `backend/core/yagis.py`.
