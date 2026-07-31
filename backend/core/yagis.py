@@ -21,37 +21,71 @@ import os
 import threading
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DOSYA = os.path.join(ROOT, "data", "yagis", "yagis_tr.tif")
+DIZIN = os.path.join(ROOT, "data", "yagis")
 
 KARO = 256
 ORIGIN = 20037508.342789244
 
-# Yağış için ardışık renk merdiveni (kurak sarı → yağışlı koyu mavi).
-# Sınırlar Türkiye dağılımına göre: 250 mm altı bozkır, 2000 mm üstü Doğu Karadeniz.
-BASAMAK = (
+# Yağış: kurak sarı → yağışlı koyu mavi. Sınırlar Türkiye dağılımına göre
+# (250 mm altı bozkır, 2000 mm üstü Doğu Karadeniz).
+BASAMAK_YAGIS = (
     (200,  (255, 245, 200)), (300,  (254, 224, 144)), (400,  (253, 190, 110)),
     (500,  (224, 243, 248)), (650,  (171, 217, 233)), (800,  (116, 173, 209)),
     (1000, (69, 117, 180)),  (1400, (49, 84, 160)),   (2000, (36, 60, 140)),
     (3000, (25, 40, 110)),   (10000, (15, 25, 80)),
 )
+# PET: buharlaşma isteği — düşükten yükseğe yeşil → kırmızı
+BASAMAK_PET = (
+    (700,  (229, 245, 224)), (850,  (199, 233, 192)), (950,  (161, 217, 155)),
+    (1050, (254, 237, 160)), (1150, (254, 217, 118)), (1250, (253, 174, 97)),
+    (1400, (244, 109, 67)),  (1600, (215, 48, 39)),   (10000, (165, 15, 21)),
+)
+# Net yağış (akışa geçen): kuru kahve → bol su koyu mavi
+BASAMAK_NET = (
+    (25,   (245, 235, 220)), (50,   (233, 215, 190)), (100,  (214, 230, 235)),
+    (150,  (180, 215, 230)), (250,  (140, 195, 222)), (400,  (95, 165, 210)),
+    (600,  (55, 130, 190)),  (900,  (30, 95, 165)),   (1500, (20, 65, 135)),
+    (10000, (12, 40, 100)),
+)
+
+KATMANLAR = {
+    "yagis": {"dosya": "yagis_tr.tif", "ad": "Yıllık toplam yağış",
+              "kisa": "P", "basamak": BASAMAK_YAGIS},
+    "pet":   {"dosya": "pet_tr.tif", "ad": "Potansiyel evapotranspirasyon",
+              "kisa": "PET", "basamak": BASAMAK_PET},
+    "net":   {"dosya": "net_tr.tif", "ad": "Net yağış (P − AET)",
+              "kisa": "net", "basamak": BASAMAK_NET},
+}
+VARSAYILAN = "yagis"
 
 _yerel = threading.local()
 
 
-def var_mi():
-    return os.path.exists(DOSYA)
+def _yol(katman):
+    if katman not in KATMANLAR:
+        raise ValueError(f"Bilinmeyen katman: {katman} "
+                         f"(seçenekler: {', '.join(KATMANLAR)})")
+    return os.path.join(DIZIN, KATMANLAR[katman]["dosya"])
 
 
-def _kaynak():
-    src = getattr(_yerel, "src", None)
+def var_mi(katman=VARSAYILAN):
+    return os.path.exists(_yol(katman))
+
+
+def _kaynak(katman=VARSAYILAN):
+    onbellek = getattr(_yerel, "src", None)
+    if onbellek is None:
+        onbellek = {}
+        _yerel.src = onbellek
+    src = onbellek.get(katman)
     if src is None:
-        if not var_mi():
+        if not var_mi(katman):
             raise RuntimeError(
-                "Yağış haritası yok. İndirmek için:\n"
+                f"'{katman}' katmanı yok. Üretmek için:\n"
                 "  python tools/yagis_haritasi_indir.py")
         import rasterio
-        src = rasterio.open(DOSYA)
-        _yerel.src = src
+        src = rasterio.open(_yol(katman))
+        onbellek[katman] = src
     return src
 
 
@@ -59,31 +93,36 @@ def _olcek(src):
     return (src.scales or (1.0,))[0] or 1.0
 
 
-def bilgi():
-    if not var_mi():
-        return {"var": False}
-    src = _kaynak()
+def _katman_bilgi(katman):
+    src = _kaynak(katman)
     b = src.bounds
+    k = KATMANLAR[katman]
     return {
-        "var": True,
-        "kaynak": src.tags().get("kaynak", "CHELSA v2.1 bio12 (1981-2010)"),
+        "anahtar": katman, "ad": k["ad"], "kisa": k["kisa"],
+        "kaynak": src.tags().get("kaynak", ""),
+        "buyukluk": src.tags().get("buyukluk", ""),
+        "yontem": src.tags().get("yontem", ""),
         "birim": src.tags().get("birim", "mm/yıl"),
+        "donem": src.tags().get("kaynak_donem", "1981-2010"),
         "lisans": src.tags().get("lisans", "CC0-1.0"),
         "atif": src.tags().get("atif", ""),
         "cozunurluk_derece": round(src.res[0], 6),
         "cozunurluk_m": round(src.res[0] * 111320),
         "boyut": [src.width, src.height],
         "sinir": [[b.bottom, b.left], [b.top, b.right]],     # Leaflet [[G,B],[K,D]]
-        "boyut_mb": round(os.path.getsize(DOSYA) / 1e6, 1),
-        "lejant": [{"deger": d, "renk": "#%02x%02x%02x" % r} for d, r in BASAMAK],
+        "boyut_mb": round(os.path.getsize(_yol(katman)) / 1e6, 1),
+        "lejant": [{"deger": d, "renk": "#%02x%02x%02x" % r}
+                   for d, r in k["basamak"]],
     }
 
 
-def _renk(mm):
-    for sinir, renk in BASAMAK:
-        if mm <= sinir:
-            return renk
-    return BASAMAK[-1][1]
+def bilgi():
+    """Kurulu katmanların tamamı (arayüz listeyi buradan kurar)."""
+    kurulu = [k for k in KATMANLAR if var_mi(k)]
+    if not kurulu:
+        return {"var": False, "katmanlar": []}
+    return {"var": True, "varsayilan": VARSAYILAN if VARSAYILAN in kurulu else kurulu[0],
+            "katmanlar": [_katman_bilgi(k) for k in kurulu]}
 
 
 def karo_sinirlari(z, x, y):
@@ -94,14 +133,15 @@ def karo_sinirlari(z, x, y):
     return xmin, ymax - boy, xmin + boy, ymax
 
 
-def karo(z, x, y, saydamlik=190):
+def karo(z, x, y, katman=VARSAYILAN, saydamlik=190):
     """XYZ karosu (PNG bayt) ya da kapsam dışıysa None."""
     import numpy as np
     from PIL import Image
     from rasterio.warp import reproject, Resampling
     from rasterio.transform import from_bounds as tr_from_bounds
 
-    src = _kaynak()
+    src = _kaynak(katman)
+    basamak = KATMANLAR[katman]["basamak"]
     xmin, ymin, xmax, ymax = karo_sinirlari(z, x, y)
     hedef_tr = tr_from_bounds(xmin, ymin, xmax, ymax, KARO, KARO)
     ham = np.zeros((KARO, KARO), dtype="uint16")
@@ -115,7 +155,7 @@ def karo(z, x, y, saydamlik=190):
     mm = ham.astype("float32") * _olcek(src)
     rgba = np.zeros((KARO, KARO, 4), dtype="uint8")
     onceki = 0
-    for sinir, renk in BASAMAK:
+    for sinir, renk in basamak:
         maske = (mm > onceki) & (mm <= sinir)
         rgba[maske] = (*renk, saydamlik)
         onceki = sinir
@@ -127,39 +167,57 @@ def karo(z, x, y, saydamlik=190):
 
 
 def nokta(lat, lon):
-    """Tek noktanın yıllık toplam yağışı (mm)."""
-    src = _kaynak()
-    b = src.bounds
-    if not (b.left <= lon <= b.right and b.bottom <= lat <= b.top):
-        raise ValueError("Nokta yağış haritasının kapsamı dışında")
-    v = next(src.sample([(lon, lat)], 1))[0]
-    return {"lat": lat, "lon": lon,
-            "yagis_mm": (float(v) * _olcek(src)) if v else None}
+    """Tek noktada kurulu tüm katmanların değeri (mm/yıl)."""
+    out = {"lat": lat, "lon": lon}
+    for k in KATMANLAR:
+        if not var_mi(k):
+            continue
+        src = _kaynak(k)
+        b = src.bounds
+        if not (b.left <= lon <= b.right and b.bottom <= lat <= b.top):
+            raise ValueError("Nokta haritanın kapsamı dışında")
+        v = next(src.sample([(lon, lat)], 1))[0]
+        out[k] = (float(v) * _olcek(src)) if v else None
+    if out.get("yagis") and out.get("net") is not None:
+        out["aet"] = out["yagis"] - out["net"]
+    return out
 
 
-def havza_ortalamasi(geometri):
-    """Havza poligonu içindeki piksellerin ortalama yıllık yağışı.
-
-    Alansal ortalama yağış, hidrolojik hesabın asıl girdisidir; tek noktanın
-    değeri dağlık havzada yanıltıcı olur.
-    """
+def _ozet(src, geometri):
     import numpy as np
     from rasterio.mask import mask
 
-    src = _kaynak()
-    try:
-        kesit, _ = mask(src, [geometri], crop=True, filled=True, nodata=0)
-    except ValueError as e:
-        raise ValueError(f"Havza yağış haritasının kapsamı dışında olabilir: {e}")
+    kesit, _ = mask(src, [geometri], crop=True, filled=True, nodata=0)
     a = kesit[0].astype("float32") * _olcek(src)
     g = a[a > 0]
     if not g.size:
-        raise ValueError("Havza içinde yağış pikseli bulunamadı")
-    return {
-        "piksel": int(g.size),
-        "ortalama_mm": float(g.mean()),
-        "en_az_mm": float(g.min()),
-        "en_cok_mm": float(g.max()),
-        "medyan_mm": float(np.median(g)),
-        "std_mm": float(g.std()),
-    }
+        return None
+    return {"piksel": int(g.size), "ortalama_mm": float(g.mean()),
+            "en_az_mm": float(g.min()), "en_cok_mm": float(g.max()),
+            "medyan_mm": float(np.median(g)), "std_mm": float(g.std())}
+
+
+def havza_ortalamasi(geometri):
+    """Havza üzerindeki alansal ortalamalar — kurulu tüm katmanlar için.
+
+    Alansal ortalama, hidrolojik hesabın asıl girdisidir; tek noktanın değeri
+    dağlık havzada yanıltıcı olur. Yağış ve net yağış birlikte verildiğinde
+    AET ile akış katsayısı da türetilir.
+    """
+    out = {}
+    for k in KATMANLAR:
+        if not var_mi(k):
+            continue
+        try:
+            o = _ozet(_kaynak(k), geometri)
+        except ValueError as e:
+            raise ValueError(f"Havza haritanın kapsamı dışında olabilir: {e}")
+        if o:
+            out[k] = o
+    if not out:
+        raise ValueError("Havza içinde piksel bulunamadı")
+    p = out.get("yagis", {}).get("ortalama_mm")
+    n = out.get("net", {}).get("ortalama_mm")
+    if p and n is not None:
+        out["turetilmis"] = {"aet_mm": p - n, "akis_katsayisi": n / p}
+    return out

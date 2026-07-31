@@ -1053,15 +1053,15 @@ def api_yagis_bilgi():
         return _err(e)
 
 
-@app.get("/api/yagis/{z}/{x}/{y}.png")
-def api_yagis_karo(z: int, x: int, y: int):
-    """Yağış katmanı XYZ karo servisi (renk merdivenli, saydam)."""
+@app.get("/api/yagis/{katman}/{z}/{x}/{y}.png")
+def api_yagis_karo(katman: str, z: int, x: int, y: int):
+    """Yağış/PET/net yağış XYZ karo servisi (renk merdivenli, saydam)."""
     from fastapi.responses import Response
     from backend.core import yagis
     try:
         if not (0 <= z <= 22):
             raise ValueError("geçersiz zoom")
-        png = yagis.karo(z, x, y)
+        png = yagis.karo(z, x, y, katman)
     except Exception as e:
         return _err(e)
     if png is None:
@@ -1072,7 +1072,7 @@ def api_yagis_karo(z: int, x: int, y: int):
 
 @app.get("/api/yagis-nokta")
 def api_yagis_nokta(lat: float, lon: float):
-    """Tıklanan noktanın yıllık toplam yağışı (mm)."""
+    """Tıklanan noktada yağış / PET / net yağış (mm/yıl)."""
     from backend.core import yagis
     try:
         return yagis.nokta(lat, lon)

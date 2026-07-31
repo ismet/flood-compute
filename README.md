@@ -27,7 +27,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
-| `data/yagis/` | `yagis_tr.tif` — **yıllık toplam yağış** haritası (CHELSA v2.1 bio12, 1981–2010 normali, ~1 km piksel, 2.3 MB). Haritada tematik katman olarak gösterilir; nokta ve havza alansal ortalaması sorgulanır. Yeniden indirmek: `python tools/yagis_haritasi_indir.py`. |
+| `data/yagis/` | `yagis_tr.tif` (yağış), `pet_tr.tif` (potansiyel evapotranspirasyon), `net_tr.tif` (net yağış = P − AET) — CHELSA v2.1, 1981–2010 normali, ~1 km piksel, toplam 6.6 MB. Haritada tematik katman; nokta ve havza alansal ortalaması sorgulanır. Yeniden üretmek: `python tools/yagis_haritasi_indir.py`. |
 | `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (6 adım)
@@ -233,10 +233,17 @@ paketinde bulunur:
 Arayüz `.sid` seçilir seçilmez (`/api/raster-converter`) ortama uygun uyarıyı
 gösterir; desteklenmiyorsa yükleme hiç başlatılmaz.
 
-## Yıllık yağış katmanı
+## İklim katmanları (yağış · PET · net yağış)
 
-Harita panelindeki **🌧 Yıllık yağış haritası** kutusuyla açılır. Kaynak
-**CHELSA v2.1** (bio12, 1981–2010 normali, 30 arc-sec ≈ 1 km piksel, CC0).
+Harita panelindeki **🌧 İklim katmanı** kutusuyla açılır, açılır listeden üç
+katman seçilir. Hepsi aynı kaynak, dönem ve ızgaradan gelir: **CHELSA v2.1**,
+1981–2010 normali, 30 arc-sec ≈ 1 km piksel, CC0.
+
+| katman | nedir | Türkiye ort. |
+|---|---|---|
+| **P** | yıllık toplam yağış (bio12) | 740 mm |
+| **PET** | potansiyel evapotranspirasyon, Penman-Monteith | 1138 mm |
+| **net** | P − AET, ≈ yıllık ortalama akış yüksekliği | 170 mm |
 
 Neden CHELSA: 1005 MGM istasyonuna karşı yapılan karşılaştırmada Türkiye'de
 yıllık yağışta en yüksek uyumu veren ızgara veri seti — Lin uyum katsayısı
@@ -245,10 +252,30 @@ yıllık yağışta en yüksek uyumu veren ızgara veri seti — Lin uyum katsay
 ilişkisini ters çevirecek kadar sapıyor (CCC 0.081); CHELSA orografik etkiyi
 hesaba katıyor.
 
-Katman renk merdiveniyle çizilir ve lejant panelde gösterilir. **Havza
-ortalaması** düğmesi, çıkarılmış havzanın üzerine düşen piksellerin **alansal
-ortalamasını** verir (medyan, aralık ve standart sapmayla birlikte) — dağlık
+**Net yağış neden P − PET değil:** Türkiye'de PET (1138 mm) yağıştan (740 mm)
+büyüktür; P − PET neredeyse her yerde negatif çıkar ve bu *iklimsel su
+açığıdır*, akış değildir — buharlaşabilecek su düşenden çok olamaz. Bu yüzden
+gerçek buharlaşma (AET) Budyko çerçevesinde Fu (1981) bağıntısıyla kestirilir:
+
+> AET/P = 1 + PET/P − [1 + (PET/P)^ω]^(1/ω), ω = 2.6 (Zhang vd. 2004)
+
+Sonuç kuraklık gradyanı boyunca doğru davranıyor: Rize'de akış katsayısı 0.67
+(enerji sınırlı), Konya'da 0.07 (su sınırlı — kapalı havza).
+
+**Havza ortalaması** düğmesi üç katmanın da **alansal ortalamasını** verir
+(medyan, aralık, sapma) ve bunlardan AET ile akış katsayısını türetir — dağlık
 havzada tek noktanın değeri yanıltıcıdır. `backend/core/yagis.py`.
+
+⚠ **Ölçek uyarısı:** CHELSA'nın Türkiye ortalaması 740 mm, MGM'nin uzun dönem
+istasyon ortalaması ise 574 mm. Fark, istasyonların ovalarda yoğunlaşıp yüksek
+kesimleri örneklememesinden de kaynaklanabilir (o durumda 740 daha doğru bir
+alansal ortalamadır), CHELSA'nın ıslak sapmasından da. Aynı şekilde ω = 2.6
+ile ülke akışı 133 km³ çıkıyor; yaygın olarak anılan ~186 km³'e ω ≈ 2.0
+karşılık geliyor. Literatür değerini korudum — ω'yı ulusal toplamı tutturmak
+için değiştirmek, yağıştaki olası sapmayı AET içinde gizlemek olurdu.
+Kesin iş için havza ortalamasını yakındaki bir AGİ'nin **özgül verimiyle**
+(Su Potansiyeli sekmesi) karşılaştırın; gerekirse
+`python tools/yagis_haritasi_indir.py` içindeki `FU_OMEGA` değiştirilebilir.
 
 ## KMZ dışa aktarımı
 

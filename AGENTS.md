@@ -73,8 +73,12 @@ backend/core/         — Computation engine (no framework dependency)
   kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
   akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
-  yagis.py              — Annual precipitation layer (CHELSA v2.1, ~1 km): colour-
-                          ramped XYZ tiles, point query, basin areal mean
+  yagis.py              — Climate layers (CHELSA v2.1, ~1 km): precipitation, PET
+                          and net precipitation (P−AET, Budyko-Fu ω=2.6 ≈ runoff
+                          depth). Colour-ramped XYZ tiles, point query, basin
+                          areal means. Net is NOT P−PET: PET exceeds P over most
+                          of Turkey, so that difference is a climatic deficit,
+                          not runoff.
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
@@ -137,10 +141,10 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `GET /api/raster-layers` | List raster basemaps |
 | `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
 | `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
-| `GET /api/yagis-bilgi` | Precipitation layer metadata + colour-ramp legend |
-| `GET /api/yagis/{z}/{x}/{y}.png` | Precipitation XYZ tiles (204 when out of coverage) |
-| `GET /api/yagis-nokta` | Annual precipitation at a point (mm) |
-| `POST /api/yagis-havza` | Areal mean annual precipitation over a basin polygon |
+| `GET /api/yagis-bilgi` | Installed climate layers + colour-ramp legends |
+| `GET /api/yagis/{katman}/{z}/{x}/{y}.png` | XYZ tiles per layer (`yagis`/`pet`/`net`; 204 out of coverage) |
+| `GET /api/yagis-nokta` | P, PET, AET and net precipitation at a point (mm/yr) |
+| `POST /api/yagis-havza` | Areal means over a basin + derived AET and runoff coefficient |
 | `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
 | `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
 | `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |

@@ -956,81 +956,103 @@ $("btnMmy").onclick = async () => {
    Altlık değil tematik harita: renk merdiveniyle çizilir. Asıl işe yarayan
    büyüklük havzanın ALANSAL ortalaması — dağlık havzada tek nokta yanıltır. */
 let yagisBilgi = null;
-layers.yagis = L.tileLayer("/api/yagis/{z}/{x}/{y}.png", {
-  opacity: 0.75, maxZoom: 18, crossOrigin: true,
-  attribution: "Yağış: CHELSA v2.1",
-});
+layers.yagis = null;
 
-function yagisLejantCiz(b) {
-  if (!b || !b.lejant) return;
+const yagisKatmanBilgi = (k) =>
+  (yagisBilgi && yagisBilgi.katmanlar || []).find(x => x.anahtar === k);
+
+function yagisLejantCiz(k) {
+  const b = yagisKatmanBilgi(k);
+  if (!b) { $("yagisLejant").innerHTML = ""; return; }
   let onceki = 0;
-  $("yagisLejant").innerHTML = "<b>mm/yıl</b> "
+  const koyu = k === "pet" ? 1150 : (k === "net" ? 250 : 500);
+  $("yagisLejant").innerHTML = `<b>${b.kisa} (mm/yıl)</b> `
     + b.lejant.map(l => {
         const et = l.deger >= 10000 ? `${onceki}+` : `${onceki}–${l.deger}`;
         onceki = l.deger;
         return `<span style="display:inline-block;padding:0 4px;margin:1px;`
-          + `background:${l.renk};color:${l.deger > 500 ? "#fff" : "#000"};`
+          + `background:${l.renk};color:${l.deger > koyu ? "#fff" : "#000"};`
           + `border-radius:2px">${et}</span>`;
       }).join("");
 }
 
-$("yagisAc").onchange = async () => {
+function yagisKatmanUygula() {
+  const k = $("yagisKatman").value;
+  if (layers.yagis) layers.yagis.remove();
+  layers.yagis = L.tileLayer(`/api/yagis/${k}/{z}/{x}/{y}.png`, {
+    opacity: (+$("yagisOpak").value || 75) / 100, maxZoom: 18, crossOrigin: true,
+    attribution: "İklim: CHELSA v2.1",
+  });
+  if ($("yagisAc").checked) layers.yagis.addTo(map);
+  yagisLejantCiz(k);
+  const b = yagisKatmanBilgi(k);
+  if (b) {
+    $("yagisInfo").innerHTML = `<b>${b.ad}</b> — ${b.kaynak} · ${b.donem} · `
+      + `~${b.cozunurluk_m} m piksel · ${b.lisans}`
+      + (b.yontem ? ` · ${b.yontem}` : "");
+  }
+}
+
+$("yagisAc").onchange = () => {
   if (!$("yagisAc").checked) {
-    layers.yagis.remove();
+    if (layers.yagis) layers.yagis.remove();
     $("yagisLejant").innerHTML = "";
     return;
   }
-  try {
-    yagisBilgi = yagisBilgi || await api("/api/yagis-bilgi");
-    if (!yagisBilgi.var) {
-      $("yagisAc").checked = false;
-      $("yagisAc").disabled = true;
-      $("yagisInfo").textContent =
-        "veri yok — tools/yagis_haritasi_indir.py ile indirin";
-      return;
-    }
-    layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100).addTo(map);
-    yagisLejantCiz(yagisBilgi);
-    $("yagisInfo").innerHTML = `${yagisBilgi.kaynak} · ~${yagisBilgi.cozunurluk_m} m `
-      + `piksel · ${yagisBilgi.lisans}`;
-  } catch (e) {
-    $("yagisAc").checked = false;
-    $("yagisInfo").textContent = "Yağış katmanı açılamadı: " + e.message;
-  }
+  yagisKatmanUygula();
 };
-$("yagisOpak").oninput = () =>
-  layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
+$("yagisKatman").onchange = yagisKatmanUygula;
+$("yagisOpak").oninput = () => {
+  if (layers.yagis) layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
+};
 
 $("btnYagisHavza").onclick = async () => {
   if (!S.havza) {
     $("yagisInfo").textContent = "Önce havzayı çıkarın.";
     return;
   }
-  $("yagisInfo").textContent = "Havza ortalaması hesaplanıyor…";
+  $("yagisInfo").textContent = "Havza ortalamaları hesaplanıyor…";
   try {
     const g = S.havza.features ? S.havza.features[0].geometry
                                : (S.havza.geometry || S.havza);
     const r = await api("/api/yagis-havza", { geometri: g });
     S.yagisHavza = r;
-    $("yagisInfo").innerHTML = `Havza alansal ortalama yağış: `
-      + `<b>${fmt(r.ortalama_mm, 0)} mm/yıl</b> `
-      + `(medyan ${fmt(r.medyan_mm, 0)}, aralık ${fmt(r.en_az_mm, 0)}–`
-      + `${fmt(r.en_cok_mm, 0)}, ±${fmt(r.std_mm, 0)} · ${r.piksel} piksel)`;
+    const sat = (k, ad) => r[k]
+      ? `<tr><td>${ad}</td><td style="text-align:right"><b>${fmt(r[k].ortalama_mm, 0)}</b></td>`
+        + `<td style="text-align:right">${fmt(r[k].medyan_mm, 0)}</td>`
+        + `<td style="text-align:right">${fmt(r[k].en_az_mm, 0)}–${fmt(r[k].en_cok_mm, 0)}</td>`
+        + `<td style="text-align:right">±${fmt(r[k].std_mm, 0)}</td></tr>` : "";
+    const t = r.turetilmis;
+    $("yagisInfo").innerHTML =
+      '<table class="tbl small"><tr><th>Havza alansal ortalaması</th>'
+      + "<th>mm/yıl</th><th>medyan</th><th>aralık</th><th>sapma</th></tr>"
+      + sat("yagis", "Yağış P") + sat("pet", "PET") + sat("net", "Net yağış (P−AET)")
+      + "</table>"
+      + (t ? `<p class="small">Gerçek buharlaşma AET ≈ <b>${fmt(t.aet_mm, 0)}</b> mm/yıl · `
+             + `akış katsayısı <b>${fmt(t.akis_katsayisi, 3)}</b>. `
+             + "Net yağış uzun dönem ortalama akış yüksekliğidir; "
+             + "yakındaki bir AGİ'nin özgül verimiyle (Su Potansiyeli sekmesi) "
+             + "karşılaştırarak doğrulayın.</p>" : "");
   } catch (e) {
     $("yagisInfo").textContent = "Hesaplanamadı: " + e.message;
   }
 };
 
-/* veri kurulu değilse seçeneği kapat */
+/* katman listesini kur; veri yoksa seçeneği kapat */
 (async function yagisDurum() {
   try {
     yagisBilgi = await api("/api/yagis-bilgi");
     if (!yagisBilgi.var) {
       $("yagisAc").disabled = true;
+      $("yagisKatman").disabled = true;
       $("btnYagisHavza").disabled = true;
       $("yagisInfo").textContent =
-        "veri yok — tools/yagis_haritasi_indir.py ile indirin";
+        "veri yok — tools/yagis_haritasi_indir.py ile üretin";
+      return;
     }
+    $("yagisKatman").innerHTML = yagisBilgi.katmanlar
+      .map(k => `<option value="${k.anahtar}">${k.ad}</option>`).join("");
+    $("yagisKatman").value = yagisBilgi.varsayilan;
   } catch (e) { /* uç yoksa sessiz geç */ }
 })();
 
