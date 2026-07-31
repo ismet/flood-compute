@@ -34,6 +34,10 @@ data/DMİ_yedek.kmz
 # Excel açıkken bıraktığı kilit dosyaları
 ~$*
 
+# Aylık CHELSA yığını (288 MB) — kalibrasyonun hız önbelleği, türetilmiş veri.
+# tools/su_butcesi.py yoksa kaynaktan yeniden indirir.
+data/yagis/_onbellek_aylik.npz
+
 # Yerel çalışma verisi — depoya girmemeli (GitHub 100 MB üstü dosyayı reddeder).
 # Data.db ~1.6 GB, Havzalar.rar ~1.8 GB, Havzalar/ ~6 GB.
 /Data.db

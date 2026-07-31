@@ -24,6 +24,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HEDEF = os.path.join(ROOT, "data", "yagis", "awc_tr.tif")
+KADEME = os.path.join(ROOT, "data", "yagis", "awc_kademe_tr.tif")
 ORNEK = os.path.join(ROOT, "data", "yagis", "yagis_tr.tif")   # ızgara buna uydurulur
 
 TABAN = "https://files.isric.org/soilgrids/latest/data_aggregated/1000m"
@@ -82,7 +83,7 @@ def uret(bbox=TURKIYE, hedef=HEDEF, ornek=ORNEK):
         profil = s.profile.copy()
     print(f"hedef ızgara: {profil['width']}×{profil['height']} (yağış katmanıyla aynı)")
 
-    awc = None
+    awc, kademeler = None, []
     for etiket, kalinlik in DERINLIK:
         print(f"  {etiket} cm okunuyor…")
         d = {o: _oku(o, etiket, profil) for o in OZELLIK}
@@ -95,6 +96,7 @@ def uret(bbox=TURKIYE, hedef=HEDEF, ornek=ORNEK):
         t33, t1500 = _saxton_rawls(kum, kil, om)
         katman = np.maximum(t33 - t1500, 0) * kalinlik * (1 - iri)
         awc = katman if awc is None else awc + katman
+        kademeler.append(awc.copy())          # o derinliğe kadarki BİRİKİMLİ AWC
         with np.errstate(invalid="ignore"):
             print(f"     katman AWC ortalama {np.nanmean(katman):.1f} mm")
 
@@ -112,10 +114,30 @@ def uret(bbox=TURKIYE, hedef=HEDEF, ornek=ORNEK):
                       yontem="Saxton & Rawls (2006) pedotransfer",
                       lisans="CC-BY 4.0")
 
+    # Derinlik kademeleri ayrı bir çok bantlı dosyaya: bütçedeki "etkin
+    # derinlik" ayarlanabilir olsun. 1 m kök bölgesi tarım toprağı için
+    # doğrudur; dik ve kayalık dağ havzasında hidrolojik olarak etkin derinlik
+    # bundan sığdır ve bunu ölçüme karşı kalibre etmeden bilemeyiz.
+    pk = dict(p)
+    pk.update(count=len(kademeler))
+    with rasterio.open(KADEME, "w", **pk) as h:
+        for i, a in enumerate(kademeler, 1):
+            h.write(np.where(np.isfinite(a), np.clip(a, 0, 500) * 10, 0)
+                    .astype("uint16"), i)
+            h.set_band_description(i, f"0-{DERINLIK[i-1][0].split('-')[1]} cm")
+        h.scales = tuple(0.1 for _ in kademeler)
+        h.update_tags(kaynak="ISRIC SoilGrids v2.0 (1 km)", birim="mm",
+                      buyukluk="birikimli AWC, derinlik kademeleri",
+                      lisans="CC-BY 4.0")
+
     g = awc[gecerli]
     print(f"\nAWC {g.min():.0f} – {g.max():.0f} mm, ortalama {g.mean():.0f} mm "
           f"({int(gecerli.sum()):,} piksel)")
     print(f"-> {hedef}  ({os.path.getsize(hedef)/1e6:.1f} MB)")
+    print("kademeli AWC (ortalama):  " + "  ".join(
+        f"0-{DERINLIK[i][0].split('-')[1]}cm:{a[gecerli].mean():.0f}"
+        for i, a in enumerate(kademeler)))
+    print(f"-> {KADEME}  ({os.path.getsize(KADEME)/1e6:.1f} MB)")
 
 
 if __name__ == "__main__":
