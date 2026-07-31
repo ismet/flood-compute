@@ -44,3 +44,10 @@ data/yagis/_onbellek_aylik.npz
 /Havzalar/
 *.rar
 *.7z
+
+# MGM istasyon Excel arşivi (1290 dosya, 105 MB) — yerel kaynak veri.
+# Kullanılan özet data/stations/ ve data/tables/ içindedir.
+# Klasör adı düz I ile yazılmış (DMI), noktalı İ ile değil — ikisi de yazılıyor
+# ki elle oluşturulan kopya da tutulsun.
+/DMI-tümü/
+/DMİ-tümü/

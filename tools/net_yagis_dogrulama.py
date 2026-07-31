@@ -31,39 +31,44 @@ kurulmuş bir regülasyon seride ne gidiş ne sıçrama bırakır. Buradaki
 "doğal" nitelemesi bu yüzden "kayıt boyunca rejimi değişmemiş" demektir,
 "hiç dokunulmamış" değil.
 
-BULGU (2026-07-31, 22 istasyon × 29 su yılı):
+BULGU (2026-07-31, 49 havza × ~29 su yılı):
 
-    bölge          n   gözlem   model   yanlılık
-    Karadeniz      7    387 mm  228 mm    -41%
-    Akdeniz        2    367     243       -34%
-    Ege/Marmara    7    151     138        -9%   (509 hariç -20%)
-    İç Anadolu     5    215      83       -61%
-    Doğu           1    115      71       -39%
-    TÜMÜ          22    259     161       -38%
-    r=0.809   NSE=0.254   RMSE=139 mm
+Ham Thornthwaite-Mather bütçesi akışı %35 EKSİK veriyordu — deseni doğru
+(r=0.81) ama büyüklüğü yanlış (NSE=0.42). Tek bir çarpanla (1.51) NSE
+0.62'ye çıkıyordu, AMA ÇARPAN YAMAMAK YANLIŞ OLURDU: örneklem büyütülünce
+en ıslak Karadeniz havzalarında modelin ZATEN FAZLA verdiği görüldü —
+2218 İyidere gözlem 1046'ya karşı model 1207. Çarpan uygulansa 1560'a
+çıkıp doğru olan havzalar bozulacaktı.
 
-Katman AKIŞIN DESENİNİ doğru veriyor (r=0.81) ama BÜYÜKLÜĞÜNÜ tutmuyor:
-22 havzanın 20'sinde eksik, medyan model/gözlem oranı 0.59. Hata rastgele
-değil düzenli — tek bir çarpan (1.51) NSE'yi 0.25'ten 0.62'ye çıkarıyor.
+Yerine üç yapısal parametre kalibre edildi (tools/net_kalibrasyon.py):
+etkin derinlik 0-100 cm, pet_carpan 0.80, hizli_pay 0.70. Sonuç, sulama
+havzaları dışlanmış 41 havzada:
 
-AMA ÇARPAN YAMAMAK YANLIŞ OLURDU. Kenetleme onarılıp örneklem büyütülünce
-(bkz. _havza_bul) tablo değişti: en ıslak ve en yüksek Karadeniz havzalarında
-model zaten FAZLA veriyor — 2218 İyidere/Şimşirli gözlem 1046, model 1207;
-2330 Çamlıkaya 790'a karşı 884. Alçak kıyı havzalarında ise yarısını
-kaybediyor — 2245 Terme 980'e karşı 341. Yanlılık düzgün bir çarpan değil;
-1.51 uygulansa İyidere 1560 mm'ye çıkıp o havzalar bozulurdu.
+    küme                          n      r      NSE   yanlılık
+    ham katman                   41      -    +0.42      -35%
+    kalibre katman               41   0.86    +0.72       +1%
+    çapraz doğrulama (5 kat)     41      -    +0.58
+    kalibre, sulama dahil        49   0.76    +0.50      +14%
 
-Üç aday sebep, ucuzdan pahalıya:
-  1. Thornthwaite-Mather TÜM girdiyi önce toprak deposundan geçirir; hızlı
-     akış (infiltrasyon/doygunluk fazlası) yolu yoktur. Gerçek havzada
-     şiddetli yağışın bir kısmı toprak kuruyken bile doğrudan akar.
-  2. AWC 0-100 cm için hesaplanıyor; dik ve kayalık dağ havzasında hidrolojik
-     olarak etkin derinlik bundan sığdır, kaya yüzlekleri de sayılmıyor.
-  3. CHELSA pet_penman referans bitki (çim) PET'idir; ormanlık/kayalık havzada
-     atmosfer isteğini olduğundan büyük gösterir.
+    bölge (kalibre, temiz)        n      r      NSE   yanlılık
+    Akdeniz                       6   0.97    +0.82      +12%
+    İç Anadolu                    8   0.89    +0.74      -10%
+    Karadeniz                    15   0.84    +0.59       -6%
+    Ege/Marmara                   9   0.43    +0.01      +18%
+    Doğu (Aras)                   3   0.98        -      +44%
 
-1-3 kalibre edilmelidir; çarpan deseni değil yalnız hacmi düzeltir ve fiziği
-gizler — bkz. tools/net_kalibrasyon.py.
+KALAN ZAYIFLIKLAR — kapatılmadılar, biliniyorlar:
+  - Ege/Marmara, sulama havzaları çıkarıldıktan SONRA da tutmuyor; Susurluk
+    ve Meriç-Ergene'de sistematik +70% fazla. Sonuç güzelleşene kadar
+    istasyon atmak kalibrasyonu anlamsızlaştıracağı için dokunulmadı.
+  - Doğu'da n=3 ve üç gözlem birbirine çok yakın; NSE'nin paydası neredeyse
+    sıfır olduğu için o sayı yorumlanamaz, gerçek bilgi %44 yanlılıktır.
+    Kar egemen havzalar — derece-gün katsayısı (2.5 mm/°C/gün) kalibre
+    EDİLMEDİ, sabit duruyor.
+  - Türkiye sınırında akış katsayısı 0.379 (DSİ su bütçesinde 186/501 =
+    0.371). Hacim yine de 219 km³ çıkıyor, DSİ'nin 186'sına karşı; fark
+    tümüyle YAĞIŞTAN geliyor (CHELSA 740 mm, MGM/DSİ 574 mm), akış
+    üretiminden değil.
 
 Kullanım:
     python tools/net_yagis_dogrulama.py [--en-az-yil 20] [--sinir 40]
@@ -320,6 +325,35 @@ def _skor(sonuc):
 OLCUT_DOSYA = os.path.join(ROOT, "data", "yagis", "dogrulama_havzalar.json")
 
 
+def yeniden_oku():
+    """Kayıtlı havzaları KATMANIN ŞU ANKİ HALİNE karşı yeniden ölçer.
+
+    Havza çıkarımı istasyon başına dakikalar sürüyor; katman her yeniden
+    üretildiğinde bunu tekrarlamanın anlamı yok — poligonlar ve gözlenen
+    akışlar değişmiyor, yalnız model değeri değişiyor.
+
+    Bu, kalibrasyonun bellekteki bütçesini değil YAZILMIŞ RASTERİ okur:
+    ölçek, nodata ve yazma adımı da böylece sınanmış olur.
+    """
+    import json
+    from backend.core import yagis
+
+    with open(OLCUT_DOSYA, encoding="utf-8") as f:
+        havzalar = json.load(f)
+    out = []
+    for s in havzalar:
+        o = yagis.havza_ortalamasi(s["geojson"])
+        s["p_model"] = o["yagis"]["ortalama_mm"]
+        s["net_model"] = o["net"]["ortalama_mm"]
+        s["pet_model"] = o["pet"]["ortalama_mm"]
+        s["c_gozlem"] = s["r_gozlem"] / s["p_model"]
+        s["c_model"] = s["net_model"] / s["p_model"]
+        out.append(s)
+    print(f"{len(out)} havza kayıtlı poligonlardan yeniden ölçüldü "
+          f"(katman: data/yagis/net_tr.tif)")
+    return out
+
+
 def kaydet(sonuc):
     """Havza poligonu + gözlenen akış — kalibrasyon bunu yeniden çıkarmasın.
 
@@ -341,8 +375,14 @@ if __name__ == "__main__":
                     help="1981-2010 içinde gerekli TAM su yılı sayısı")
     ap.add_argument("--bolge-basi", type=int, default=8)
     ap.add_argument("--sinir", type=int, default=40)
+    ap.add_argument("--yeniden-oku", action="store_true",
+                    help="havzaları yeniden çıkarma; kayıtlı poligonları "
+                         "katmanın şu anki haline karşı ölç")
     a = ap.parse_args()
-    s = calis(a.en_az_yil, a.sinir, a.bolge_basi)
-    rapor(s)
-    if s:
-        kaydet(s)
+    if a.yeniden_oku:
+        rapor(yeniden_oku())
+    else:
+        s = calis(a.en_az_yil, a.sinir, a.bolge_basi)
+        rapor(s)
+        if s:
+            kaydet(s)

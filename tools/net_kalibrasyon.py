@@ -41,17 +41,36 @@ OLCUT = os.path.join(ROOT, "data", "yagis", "dogrulama_havzalar.json")
 
 DERINLIKLER = (1, 2, 3, 4, 5)                              # awc_kademe bantları
 DERINLIK_AD = {1: "0-5", 2: "0-15", 3: "0-30", 4: "0-60", 5: "0-100"}
-PET_ARALIK = [round(0.65 + 0.05 * i, 2) for i in range(10)]     # 0.65 … 1.10
-HIZLI_ARALIK = [round(0.00 + 0.05 * i, 2) for i in range(13)]   # 0.00 … 0.60
+PET_ARALIK = [round(0.50 + 0.05 * i, 2) for i in range(13)]     # 0.50 … 1.10
+HIZLI_ARALIK = [round(0.00 + 0.05 * i, 2) for i in range(21)]   # 0.00 … 1.00
 KAT = 5
 
+# DSİ havza 5 (Gediz), 6 (Küçük Menderes), 7 (Büyük Menderes): Türkiye'nin en
+# yoğun sulama yapılan havzaları. Buradaki AGİ'ler ALIMDAN SONRAKİ akışı ölçer;
+# katman ise alımdan önceki doğal akışı hesaplar — aynı büyüklük değiller.
+# Gözlenen akış katsayıları bunu ele veriyor: 601 Küçük Menderes'te 0.08,
+# 733'te 0.16, ikisi de 1100 mm yağış altında. Doğal bir havzada bu mümkün
+# değil. Sulama 1981'den önce başladığı için seride ne gidiş ne sıçrama var,
+# istatistiksel eleme göremiyor.
+#
+# Dışlama NEDENE göre, hatanın İŞARETİNE göre değil: kural bu havzaların
+# tamamını çıkarır, +195% veren 701'i de -30% veren 524'ü de. İşarete bakarak
+# elemek sonucu kendim seçmek olurdu.
+ALIM_HAVZALARI = (5, 6, 7)
 
-def olcut_yukle():
+
+def olcut_yukle(dislanan=ALIM_HAVZALARI):
     if not os.path.exists(OLCUT):
         sys.exit(f"Ölçüt kümesi yok: {OLCUT}\n"
                  "  önce: python tools/net_yagis_dogrulama.py")
     with open(OLCUT, encoding="utf-8") as f:
-        return json.load(f)
+        hepsi = json.load(f)
+    if not dislanan:
+        return hepsi
+    tutulan = [h for h in hepsi if h["havza"] not in dislanan]
+    print(f"{len(hepsi) - len(tutulan)} istasyon sulama havzası olarak dışlandı "
+          f"(DSİ havza {', '.join(str(d) for d in dislanan)})")
+    return tutulan
 
 
 def piksel_kumeleri(havzalar, profil):
@@ -93,10 +112,10 @@ def _havza_ortalamalari(akis_ay, hangi, n):
     return np.array([yil[hangi == i].mean() for i in range(n)])
 
 
-def calis(uygula):
+def calis(uygula, dislanan=ALIM_HAVZALARI):
     import numpy as np
 
-    havzalar = olcut_yukle()
+    havzalar = olcut_yukle(dislanan)
     P, PET, T, gecerli, profil = sb.aylik_yigin()
     r, c, hangi, havzalar = piksel_kumeleri(havzalar, profil)
     n = len(havzalar)
@@ -227,5 +246,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--uygula", action="store_true",
                     help="en iyi parametreleri tools/su_butcesi.py'ye yaz")
+    ap.add_argument("--tum-havzalar", action="store_true",
+                    help="sulama havzalarını da dahil et (karşılaştırma için)")
     a = ap.parse_args()
-    calis(a.uygula)
+    calis(a.uygula, () if a.tum_havzalar else ALIM_HAVZALARI)

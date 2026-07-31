@@ -25,8 +25,11 @@ python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/aka
 python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
-python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc_tr.tif (run FIRST)
+python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
 python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
+python tools/net_yagis_dogrulama.py                   # validate net layer vs AGİ gauges (slow: DEM delineation)
+python tools/net_yagis_dogrulama.py --yeniden-oku     # re-score saved basins against the current layer (fast)
+python tools/net_kalibrasyon.py [--uygula]            # fit budget params to gauges; --uygula writes su_butcesi.py
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
 docker build -t taskin-hesap .                        # build Docker image
@@ -80,9 +83,15 @@ backend/core/         — Computation engine (no framework dependency)
                           P−PET: PET exceeds P over most of Turkey, so that
                           difference is a climatic deficit, not runoff. Net comes
                           from a MONTHLY Thornthwaite-Mather balance with a
-                          degree-day snow model (see tools/yagis_haritasi_indir.py)
-                          — annual totals hide Turkey's wet-winter/dry-summer
-                          contrast and undercount runoff by ~10%.
+                          degree-day snow model (tools/su_butcesi.py — shared by
+                          the map generator AND the calibrator, deliberately:
+                          two copies could drift and then the calibrated model
+                          would not be the shipped one). Annual totals hide
+                          Turkey's wet-winter/dry-summer contrast.
+                          CALIBRATED against 41 natural stream gauges: raw
+                          NSE +0.42 / -35% bias, calibrated +0.72 / +1%,
+                          5-fold cross-validated +0.58. Weak in Ege/Marmara
+                          (NSE 0.01) and +44% in the Aras basin — known, open.
                           nodata is 65535, NOT 0: zero runoff is a legitimate
                           value over closed basins (Konya: P=389, AET=389, net=0).
                           Any masking here must compare against src.nodata.

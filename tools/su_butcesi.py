@@ -48,9 +48,9 @@ AY_GUN = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
 # Kalibrasyon sonucu (bkz. tools/net_kalibrasyon.py). Varsayılanlar ham
 # Thornthwaite-Mather değil, ÖLÇÜME OTURTULMUŞ değerlerdir.
-PET_CARPAN = 1.0
-HIZLI_PAY = 0.0
-ETKIN_DERINLIK = 5           # awc_kademe_tr.tif bant no (5 = 0-100 cm)
+PET_CARPAN = 0.80
+HIZLI_PAY = 0.70
+ETKIN_DERINLIK = 5           # awc_kademe_tr.tif bant no
 
 
 def _pencere_oku(url, bbox):
@@ -86,8 +86,12 @@ def aylik_yigin(bbox=TURKIYE, onbellek=ONBELLEK, yeniden=False):
 
     if onbellek and os.path.exists(onbellek) and not yeniden:
         z = np.load(onbellek, allow_pickle=False)
+        # from_gdal, Affine değil: to_gdal() (c,a,b,f,d,e) sırasında yazar,
+        # Affine() ise (a,b,c,d,e,f) bekler. Karıştırmak ızgarayı sessizce
+        # kaydırır — havzalar hiçbir piksele denk gelmez, harita da yanlış
+        # coğrafyaya yazılırdı.
         profil = dict(height=int(z["h"]), width=int(z["w"]),
-                      transform=Affine(*z["tr"]),
+                      transform=Affine.from_gdal(*z["tr"]),
                       crs=rasterio.crs.CRS.from_string(str(z["crs"])),
                       count=1, dtype="float32", driver="GTiff")
         return z["P"], z["PET"], z["T"], z["gecerli"], profil

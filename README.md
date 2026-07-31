@@ -267,14 +267,55 @@ etkisi sönsün diye 12 ay üç kez döndürülür.
 **AWC toprak verisinden gelir.** Kullanılabilir su tutma kapasitesi sonucun
 baskın parametresidir (50 mm ile 200 mm arasında ülke akışı 180'den 98 km³'e
 iner), bu yüzden sabit varsayılmaz: ISRIC **SoilGrids v2.0**'dan (1 km, CC-BY)
-kum, kil, organik karbon ve iri taneli malzeme okunup 0–100 cm için Saxton &
-Rawls (2006) pedotransfer fonksiyonlarıyla türetilir —
-`python tools/awc_soilgrids.py`. Türkiye'de **58–172 mm, ortalama 115 mm**.
+kum, kil, organik karbon ve iri taneli malzeme okunup Saxton & Rawls (2006)
+pedotransfer fonksiyonlarıyla türetilir — `python tools/awc_soilgrids.py`.
+Derinlik kademeli yazılır (0-5 … 0-100 cm için 7, 19, 37, 71, 116 mm), çünkü
+hidrolojik olarak etkin derinlik kalibre edilen bir parametredir.
 
-Sonuç kuraklık gradyanı boyunca doğru davranıyor: Rize'de akış katsayısı 0.64
-(AET, PET'e dayanır — enerji sınırlı), Konya'da **net = 0** ve havza akış
-katsayısı 0.005 — kapalı havzada düşen suyun tamamı buharlaşır. Akışın %87'si
-kış+ilkbaharda, Nisan'da zirve (kar erimesi), Temmuz–Ağustos'ta ~1.5 mm.
+### Katman ölçüme oturtulmuştur
+
+Ham Thornthwaite-Mather bütçesi akışı **%35 eksik** veriyordu. Üç yapısal
+parametre — etkin toprak derinliği, PET çarpanı (CHELSA'nın referans-çim
+PET'ini gerçek örtüye ölçekler) ve doygunluk fazlası hızlı akış payı —
+1981-2010 arasında en az 20 tam su yılı ölçmüş **41 doğal AGİ** havzasına
+oturtuldu: `tools/net_kalibrasyon.py`, doğrulama `tools/net_yagis_dogrulama.py`.
+Sonuç `etkin derinlik 0-100 cm, pet_carpan 0.80, hizli_pay 0.70`.
+
+Doğallık, rezervuar envanteri olmadığı için serinin kendisinden elenir:
+Mann-Kendall (gidiş), Pettitt (sıçrama) ve DEM havzasının DSİ'nin bildirdiği
+alanla %20 içinde uyuşması. DSİ havza 5/6/7 (Gediz, Küçük ve Büyük Menderes)
+tümüyle dışlanır — sulama alımı kayıttan önce başladığı için istatistiksel
+eleme göremiyor; oradaki AGİ'ler alımdan *sonraki* akışı ölçüyor, katman ise
+alımdan *önceki* doğal akışı hesaplıyor.
+
+| | n | r | NSE | yanlılık |
+|---|--:|--:|--:|--:|
+| ham katman | 41 | — | +0.42 | −35% |
+| **kalibre katman** | 41 | **0.86** | **+0.72** | **+1%** |
+| çapraz doğrulama (5 kat) | 41 | — | +0.58 | |
+
+Skor 5 katlı çapraz doğrulamayla da verilir: parametre, skorun ölçüldüğü
+istasyonları görmez. Aynı istasyonlara uydurup sonra onlarla "doğruladık"
+demek hiçbir şey kanıtlamaz; iki sayı arasındaki fark kazancın ne kadarının
+gerçek olduğunu söyler.
+
+**Kalan zayıflıklar — kapatılmadılar:** Akdeniz (r 0.97, NSE 0.82), İç Anadolu
+(0.89 / 0.74) ve Karadeniz (0.84 / 0.59) tutuyor. **Ege/Marmara, sulama
+havzaları çıkarıldıktan sonra da tutmuyor** (r 0.43, NSE 0.01; Susurluk ve
+Meriç'te ~+70% fazla). Aras havzasında %44 fazla veriyor — kar egemen
+havzalar, derece-gün katsayısı (2.5 mm/°C/gün) kalibre *edilmedi*. Sonuç
+güzelleşene kadar istasyon elemek kalibrasyonu anlamsızlaştıracağı için
+bunlara dokunulmadı.
+
+**Ülke ölçeğinde:** Türkiye sınırı içinde P 740 mm (579 km³), net 280 mm
+(219 km³), akış katsayısı **0.379** — DSİ'nin kendi su bütçesindeki
+186/501 = 0.371 ile neredeyse birebir. Hacmin DSİ'nin 186 km³'ünden yüksek
+çıkması akış üretiminden değil **yağıştan** geliyor: CHELSA Türkiye'ye 740 mm
+veriyor, MGM/DSİ 574 mm. Bu, katmanın değil kaynak veri setinin farkıdır.
+
+Sonuç kuraklık gradyanı boyunca doğru davranıyor: Konya'da **net = 0** —
+kapalı havzada düşen suyun tamamı buharlaşır. Akışın büyük kısmı
+kış+ilkbaharda, Nisan'da zirve (kar erimesi), Ağustos'ta ~2 mm.
 
 Katman açıkken **haritaya tıklayınca** o noktanın P, PET, AET, net yağış ve
 akış katsayısı balonda okunur; seçili katmanın satırı koyu gösterilir. Outlet
