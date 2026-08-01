@@ -25,6 +25,13 @@ python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/aka
 python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
+python tools/mgm_veritabani_olustur.py                # one-off: DMI-tümü/*.xls -> data/mgm/mgm.sqlite
+python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
+python tools/zemin_grubu_uret.py                      # one-off: SoilGrids -> data/zemin/hsg_tr.tif (soil group)
+python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
+python tools/net_yagis_dogrulama.py                   # validate net layer vs AGİ gauges (slow: DEM delineation)
+python tools/net_yagis_dogrulama.py --yeniden-oku     # re-score saved basins against the current layer (fast)
+python tools/net_kalibrasyon.py [--uygula]            # fit budget params to gauges; --uygula writes su_butcesi.py
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
 docker build -t taskin-hesap .                        # build Docker image
@@ -62,6 +69,20 @@ backend/core/         — Computation engine (no framework dependency)
   corine_online.py    — EEA CLC2018 WMS downloader
   thiessen.py         — Voronoi/Thiessen weights from KMZ
   snowmelt.py         — Degree-day snowmelt (KAR1)
+  zemin.py            — Hydrologic soil group (A/B/C/D) from the basin's soil.
+                          THE most consequential input in the whole computation:
+                          on the Karakurt basin, B vs C moves Q100 from 296 to
+                          771 m3/s, A vs D by a factor of ten. It used to be a
+                          hardcoded dropdown default of B with no justification
+                          — and B fits 1.6% of Turkey (92.3% is C). Now derived
+                          from SoilGrids texture via Saxton & Rawls Ksat and the
+                          NRCS NEH-630 Table 7-1 bands, governed by the LEAST
+                          transmissive layer in the profile. Returns its own
+                          reasoning (per-group area shares, Ksat band) so the
+                          choice is visible and overridable.
+                          Does NOT know depth to bedrock, so it is a LOWER
+                          bound; in steep basins the true group may be one step
+                          less permeable.
   yzd_region.py       — YZD region (A/B/C) from basin polygon
   report.py           — Word (.docx) flood report
   dilekce.py          — MGM petition (.docx/.pdf)
@@ -72,12 +93,69 @@ backend/core/         — Computation engine (no framework dependency)
   kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
   raster.py             — Georeferenced raster basemaps → XYZ tile service
   akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
+  yagis.py              — Climate layers (CHELSA v2.1, ~1 km): precipitation, PET
+                          and net precipitation (≈ runoff depth). Colour-ramped
+                          XYZ tiles, point query, basin areal means. Net is NOT
+                          P−PET: PET exceeds P over most of Turkey, so that
+                          difference is a climatic deficit, not runoff. Net comes
+                          from a MONTHLY Thornthwaite-Mather balance with a
+                          degree-day snow model (tools/su_butcesi.py — shared by
+                          the map generator AND the calibrator, deliberately:
+                          two copies could drift and then the calibrated model
+                          would not be the shipped one). Annual totals hide
+                          Turkey's wet-winter/dry-summer contrast.
+                          CALIBRATED against 41 natural stream gauges: raw
+                          NSE +0.42 / -35% bias, calibrated +0.72 / +1%,
+                          5-fold cross-validated +0.58. Weak in Ege/Marmara
+                          (NSE 0.01) and +44% in the Aras basin — known, open.
+                          nodata is 65535, NOT 0: zero runoff is a legitimate
+                          value over closed basins (Konya: P=389, AET=389, net=0).
+                          Any masking here must compare against src.nodata.
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
+                          plus the Grubbs-Beck outlier test (Bulletin 17B),
+                          always reported, never auto-applied. aykiri_disla=True
+                          reruns without the outliers and returns it alongside
+                          under `aykirisiz`; the primary result is untouched.
+                          17B keeps high outliers unless proven erroneous —
+                          dropping them biases the design flood LOW, which is
+                          the unsafe direction. Removing outliers does not even
+                          reliably lower the answer: on D24A029 censoring one
+                          low outlier RAISES Q100 from 1301 to 1481.
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
   su.py                 — Water potential: basin → nearby gauges → record gaps →
                           regression gap-filling → area-ratio transfer to the outlet
-  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
+  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query).
+                          SCREENS OUT CORRUPT PEAKS BY DEFAULT (seri_denetimli).
+                          The yearbook PDFs were extracted with a leading digit
+                          glued onto some values in the 1979-1986 volumes:
+                          D24A029 reads 9500 m3/s for 1981 where every other
+                          year is 68-1033, and that one value pushed Q100 from
+                          1301 to 7314. 118 such records exist. Two independent
+                          tests, either sufficient: the Creager C=100 world
+                          envelope (skipped when area is the 1.0 placeholder —
+                          there the AREA is wrong, and those rows are canals and
+                          springs anyway), and outlier-flagged AND above 5x the
+                          station's second largest. Neither alone works: 53 of
+                          130 flagged records are physically plausible, and real
+                          record floods reach 3-4x. Excluded rows are RETURNED,
+                          not dropped silently — /api/tfa reports elenen_kayitlar.
+  mgm.py                — MGM weather-station database (1290 stations, every
+                          observation sheet). Supplies P2…P100 for step 5 by
+                          running tfa.py on each station's annual maximum daily
+                          rainfall — same six distributions, same K-S choice,
+                          rainfall in mm instead of discharge.
+                          data/tables/mgm_plv_2020.json IS NO LONGER A P24
+                          SOURCE; /api/mgm-stations deliberately strips its P24
+                          field and serves only pluviograph (PLV) ratios. Two
+                          parallel rainfall sources made it unknowable which one
+                          a project actually used.
+                          The step-4 Thiessen set IS this database, so step-5
+                          matching is by `kod` — identity, not search. Coordinate
+                          matching survives only for uploaded KMZs and
+                          hand-placed points; there it prefers a ≥25-year record
+                          inside the radius over a nearer short one (Lüleburgaz
+                          has a 10-year gauge at 5.7 km, a 74-year one at 6.3).
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
                         CORINE class → rational C range matrix)
@@ -113,7 +191,13 @@ data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
 ```
 data/tables/*.json          — 14 Excel-extracted lookup tables (do not edit by hand)
 data/regions/YZD_ALANLAR.kmz — A/B/C flood region polygons
-data/stations/bir_cikti.kml  — default 2315-station set (auto-loaded)
+data/stations/bir_cikti.kml  — legacy 2315-station network, NO LONGER auto-loaded.
+                               It carries no station number, so it cannot be
+                               joined to the measurement DB by identity and its
+                               cells borrowed rainfall from a neighbour. Kept on
+                               disk; still uploadable through /api/stations.
+data/mgm/mgm.sqlite          — MGM observation sheets, 1290 stations (13 MB).
+                               1184 of them (≥10 yr) ARE the step-4 Thiessen set.
 data/akarsu/akarsu.sqlite    — DSİ river network (405k lines, 68 MB, committed)
 data/agi/agi.sqlite          — DSİ+EİE annual peak flows (2732 stations, 3.8 MB)
 data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB)
@@ -134,6 +218,15 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `GET /api/raster-layers` | List raster basemaps |
 | `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
 | `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
+| `GET /api/yagis-bilgi` | Installed climate layers + colour-ramp legends |
+| `GET /api/yagis/{katman}/{z}/{x}/{y}.png` | XYZ tiles per layer (`yagis`/`pet`/`net`; 204 out of coverage) |
+| `GET /api/yagis-nokta` | P, PET, AET and net precipitation at a point (mm/yr) |
+| `POST /api/yagis-havza` | Areal means over a basin + derived AET and runoff coefficient |
+| `GET /api/mgm-bilgi` | Whether the MGM weather database is installed; how many stations are long enough for frequency analysis |
+| `GET /api/mgm` | MGM stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`) |
+| `GET /api/mgm-seri` | A station's annual-maximum series, or any observation type (`tur`) |
+| `POST /api/mgm-frekans` | Rainfall frequency analysis for one station → P2…P100 (`P24`) |
+| `POST /api/mgm-eslestir` | Match Thiessen stations to MGM stations and compute their P2…P100 |
 | `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
 | `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
 | `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |
@@ -160,8 +253,9 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `POST /api/dilekce` | Generate MGM petition (.docx/.pdf) |
 | `POST /api/yil-ara` | Return period from Q/Q10/Q100 (analytical inverse) |
 | `POST /api/rainfall/parse` | Parse pasted rainfall table |
+| `POST /api/zemin-grubu` | Hydrologic soil group (A/B/C/D) for a basin, with its reasoning |
 | `POST /api/yzd-region` | YZD region (A/B/C) from basin |
-| `GET /api/stations/default` | Default station KMZ |
+| `GET /api/stations/default` | Default Thiessen set: MGM stations with ≥`en_az_yil` of rainfall record |
 | `GET /api/mgm-stations` | MGM 2020 PLV (236 stations) |
 | `GET /api/dplv` | DPLV station list |
 | `GET /api/geocode` | OSM Nominatim (Turkey) |
@@ -201,7 +295,10 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
   reported, but `us`/`katsayi` let the caller pin the report's number.
   Homogeneity is Dalrymple (1960): each station's own Q10/Q2 is read back onto
   the regional curve as an equivalent T, compared against the Gumbel-reduced-
-  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`.
+  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`. The band is also
+  returned as an envelope over record length (`homojenlik.zarf`) for plotting.
+  `aykiri_disla=True` reruns the whole analysis without the failing stations and
+  attaches it as `aykirisiz`, so both sets of discharges can be compared.
 - **MMY** (`mmy.py`): Hershfield PMP,
   `MMY = Port·M1·M2 + Km·S·M1·M2`, Km read from a regional envelope
   (`data/tables/mmy_km.json`, 9 regions extracted from the source workbook's

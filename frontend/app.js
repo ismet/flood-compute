@@ -636,10 +636,69 @@ async function agiKatmanAc() {
 $("btnAgiHavza").onclick = agiYukle;
 
 /* ---- NTFA sonuç tablosu (Excel SONUÇLAR sayfasının karşılığı) ---- */
+/* Grubbs-Beck aykırı testi + aykırısız karşılaştırma.
+   Aykırılar OTOMATİK ATILMAZ. Bulletin 17B, yüksek aykırıyı hatalı olduğu
+   kanıtlanmadıkça seride tutmayı söyler: o değer üst kuyruk hakkındaki en
+   bilgilendirici gözlemdir ve atılması tasarım debisini emniyetsiz tarafa
+   çeker. Burada iki sonuç yan yana konur, karar mühendisindir. */
+function tfaAykiriBlok(o) {
+  const a = o.aykiri;
+  if (!a) return "";
+  if (!a.uygulanabilir)
+    return `<p class="small">Aykırı değer testi (Grubbs-Beck) uygulanamadı: ${a.neden}</p>`;
+  const y = a.yuksek || [], d = a.dusuk || [];
+  let h = `<p class="small"><b>Aykırı değer testi (Grubbs-Beck, Bulletin 17B)</b> — `
+    + `n=${a.n}, K<sub>n</sub>=${fmt(a.kn, 3)}, `
+    + `üst sınır ${fmt(a.ust_sinir, 1)} · alt sınır ${fmt(a.alt_sinir, 1)} m³/s</p>`;
+  if (!y.length && !d.length)
+    return h + `<p class="small">Aykırı değer yok — seri sınırlar içinde.</p>`;
+  h += `<p class="small">`
+    + (y.length ? `<b>Yüksek aykırı:</b> ${y.map(v => fmt(v, 1)).join(", ")} m³/s. ` : "")
+    + (d.length ? `<b>Düşük aykırı:</b> ${d.map(v => fmt(v, 1)).join(", ")} m³/s. ` : "")
+    + `</p>`;
+  if (y.length) h += `<div class="warn small">⚠ ${a.uyari}</div>`;
+
+  const ay = o.aykirisiz;
+  if (o.aykirisiz_hata) return h + `<p class="small">${o.aykirisiz_hata}</p>`;
+  if (!ay) return h + `<p class="small">Aykırısız sonucu görmek için `
+    + `"aykırıları çıkarıp karşılaştır" kutusunu işaretleyin.</p>`;
+
+  const T = o.tekerrur, bas = (t) => `<th style="text-align:right">${t}</th>`;
+  const sag = (v) => `<td style="text-align:right">${fmt(v, 1)}</td>`;
+  h += `<p class="small"><b>Aykırılı ↔ aykırısız karşılaştırma (kabul edilen dağılım)</b></p>`
+    + `<table class="tbl small"><tr><th>Durum</th><th>n</th><th>Dağılım</th>`
+    + T.map(bas).join("") + `</tr>`
+    + `<tr><td>aykırılı</td><td>${o.parametreler.yil_sayisi}</td>`
+    + `<td>${o.kabul_edilen_adi}</td>` + (o.kabul_edilen_q || []).map(sag).join("") + `</tr>`
+    + `<tr><td>aykırısız</td><td>${ay.parametreler.yil_sayisi}</td>`
+    + `<td>${ay.kabul_edilen_adi}</td>` + (ay.kabul_edilen_q || []).map(sag).join("") + `</tr>`
+    + `<tr class="sel"><td colspan="3"><b>fark</b></td>`
+    + T.map((t, i) => {
+        const a1 = (o.kabul_edilen_q || [])[i], a2 = (ay.kabul_edilen_q || [])[i];
+        if (a1 == null || a2 == null || !a1) return `<td></td>`;
+        const p = (a2 / a1 - 1) * 100;
+        return `<td style="text-align:right">${p >= 0 ? "+" : ""}${p.toFixed(1)}%</td>`;
+      }).join("") + `</tr></table>`;
+  return h;
+}
+
 function tfaCiz(o) {
   const T = o.tekerrur;
   const bas = (h) => `<th style="text-align:right">${h}</th>`;
   let h = `<h3 class="small">${o.istasyon}</h3>`;
+
+  // Elenen kayıtlar sonucun EN BAŞINDA gösterilir. Sessizce elemek, sessizce
+  // dahil etmek kadar kötü olurdu: D24A029'un bozuk 1981 kaydı Q100'ü 1301
+  // yerine 7314 m³/s yapıyordu ve bunu kimse görmüyordu.
+  const el = o.elenen_kayitlar || [];
+  if (el.length) {
+    h += `<div class="warn small"><b>⚠ ${el.length} kayıt analiz dışı bırakıldı</b>`
+      + ` — fiziksel olarak olanaksız bulundu (eski yıllıkların çıkarımında bozulmuş):<ul>`
+      + el.map(k => `<li><b>${k.yil}: ${fmt(k.q, 1)} m³/s</b> — ${k.sebep}</li>`).join("")
+      + `</ul>Analize dahil etmek isterseniz "olanaksız kayıtları at" kutusunu kaldırın;`
+      + ` sonuç büyük olasılıkla aşırı yüksek çıkar.</div>`;
+  }
+  h += tfaAykiriBlok(o);
 
   h += '<p class="small"><b>Tekerrür debileri (m³/s)</b></p><table class="tbl small">'
     + "<tr><th>Dağılım</th>" + T.map(t => bas(t)).join("") + "<th>Kabul</th></tr>";
@@ -692,6 +751,8 @@ $("btnTfa").onclick = async () => {
       ilk_yil: +$("tfaIlkYil").value || 0,
       son_yil: +$("tfaSonYil").value || 0,
       dusuk_guveni_at: $("tfaDusukAt").checked,
+      olanaksizi_at: $("tfaOlanaksizAt") ? $("tfaOlanaksizAt").checked : true,
+      aykiri_disla: $("tfaAykiriAt") ? $("tfaAykiriAt").checked : false,
     });
     S.tfa = o;
     tfaCiz(o);
@@ -703,6 +764,84 @@ $("btnTfa").onclick = async () => {
 };
 
 /* ---- BTFA: bölgesel taşkın frekans analizi (indeks-debi) ---- */
+let btfaHomChart = null;
+
+/* Dalrymple grafiği: yatayda kayıt uzunluğu, düşeyde eşdeğer tekerrür (log).
+   Zarf olmadan test okunmuyor — kısa serilerde band çok geniş olduğu için bir
+   istasyonun "sapması" tek başına bir şey söylemiyor.                        */
+function btfaHomojenCiz(hm) {
+  const kutu = $("btfaHomojenGrafikKutu");
+  if (!hm || !hm.zarf || !hm.zarf.length) { kutu.classList.add("hidden"); return; }
+  kutu.classList.remove("hidden");
+  if (btfaHomChart) btfaHomChart.destroy();
+  const nokta = (f) => hm.istasyonlar.filter(f)
+    .map(s => ({ x: s.yil_sayisi, y: s.t_esdeger, kod: s.kod }));
+  btfaHomChart = new Chart($("btfaHomojenGrafik"), {
+    type: "line",
+    data: {
+      datasets: [
+        { label: "üst sınır (%95)", data: hm.zarf.map(z => ({ x: z.n, y: z.t_ust })),
+          borderColor: "#1565c0", borderWidth: 1.5, borderDash: [6, 3],
+          pointRadius: 0, tension: 0.2 },
+        { label: "alt sınır (%95)", data: hm.zarf.map(z => ({ x: z.n, y: z.t_alt })),
+          borderColor: "#1565c0", borderWidth: 1.5, borderDash: [6, 3],
+          pointRadius: 0, tension: 0.2, fill: "-1",
+          backgroundColor: "rgba(21,101,192,.08)" },
+        { label: `T = ${hm.t_merkez} yıl`, data: hm.zarf.map(z => ({ x: z.n, y: hm.t_merkez })),
+          borderColor: "#9e9e9e", borderWidth: 1, pointRadius: 0 },
+        { label: "homojen", data: nokta(s => s.homojen === true), showLine: false,
+          pointBackgroundColor: "#2e7d32", pointBorderColor: "#2e7d32", pointRadius: 5 },
+        { label: "aykırı", data: nokta(s => s.homojen === false), showLine: false,
+          pointBackgroundColor: "#c62828", pointBorderColor: "#000",
+          pointBorderWidth: 1.5, pointRadius: 6, pointStyle: "triangle" },
+      ],
+    },
+    options: {
+      animation: false, maintainAspectRatio: false, parsing: false,
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 18, font: { size: 10 } } },
+        title: { display: true, text: "Homojenlik testi — Dalrymple zarfı" },
+        tooltip: { callbacks: { label: (c) => c.raw.kod
+          ? `${c.raw.kod}: N=${c.raw.x} yıl, T=${(+c.raw.y).toFixed(1)} yıl`
+          : `N=${c.raw.x}: T=${(+c.raw.y).toFixed(1)}` } },
+      },
+      scales: {
+        x: { type: "linear", title: { display: true, text: "Kayıt uzunluğu N (yıl)" } },
+        y: { type: "logarithmic", title: { display: true, text: "Eşdeğer tekerrür T (yıl)" } },
+      },
+    },
+  });
+}
+
+function btfaKarsilastir(o) {
+  const a = o.aykirisiz;
+  if (!a) return o.aykirisiz_hata
+    ? `<p class="small"><b>${o.aykirisiz_hata}</b></p>` : "";
+  const T = o.btfa.tekerrur;
+  const sag = (v) => `<td style="text-align:right">${v == null ? "—" : fmt(v, 1)}</td>`;
+  const fark = T.map((_, i) => {
+    const x = o.btfa.q[i], y = a.btfa.q[i];
+    return (x && y) ? (y - x) / x * 100 : null;
+  });
+  return `<p class="small"><b>Aykırılar çıkarılınca</b> — çıkarılan: `
+    + `${a.cikarilan.join(", ")} (${o.kullanilan_sayisi} → ${a.kullanilan_sayisi} istasyon). `
+    + (a.homojenlik.homojen
+        ? "Kalan bölge <b>homojen</b>."
+        : `Hâlâ aykırı var: ${a.homojenlik.aykiri.join(", ")}.`)
+    + '</p><table class="tbl small"><tr><th>Durum</th>'
+    + T.map(t => `<th style="text-align:right">${t}</th>`).join("") + "</tr>"
+    + "<tr><td>Tüm istasyonlar</td>" + o.btfa.q.map(sag).join("") + "</tr>"
+    + "<tr><td>Aykırısız</td>" + a.btfa.q.map(sag).join("") + "</tr>"
+    + '<tr><td>Fark</td>' + fark.map(v => `<td style="text-align:right;color:${
+        v == null ? "#666" : (Math.abs(v) > 10 ? "#c62828" : "#666")}">`
+        + `${v == null ? "—" : (v > 0 ? "+" : "") + fmt(v, 1) + "%"}</td>`).join("")
+    + "</tr></table>"
+    + `<p class="small">Aykırısız büyüme eğrisi: `
+    + a.buyume_egrisi.map(v => fmt(v, 3)).join(" · ")
+    + ` · indeks debi Q2 = ${fmt(a.q2_indeks, 2)} m³/s `
+    + `(${fmt(a.bagintis.katsayi, 4)}·A<sup>${fmt(a.bagintis.us, 4)}</sup>)</p>`;
+}
+
 function btfaCiz(o) {
   const T = o.tekerrur;
   const sag = (v, d = 1) => `<td style="text-align:right">${v == null ? "—" : fmt(v, d)}</td>`;
@@ -722,6 +861,7 @@ function btfaCiz(o) {
 
   const hm = o.homojenlik;
   if (hm) {
+    btfaHomojenCiz(hm);
     h += `<p class="small"><b>Homojenlik testi</b> — ${hm.yontem}. `
       + (hm.homojen
           ? "Bölge <b>homojen</b>: tüm istasyonlar %95 bandının içinde."
@@ -768,6 +908,7 @@ function btfaCiz(o) {
   }
   h += "</table><p class='small'>* Q500 ve üzeri, Q10–Q100'den ekstrapole edilmiştir "
     + "(k = 1.692 / 1.99 / 2.98) — Excel'deki (Q100−Q10)·1.692+Q10 ile aynı.</p>";
+  h += btfaKarsilastir(o);
   $("btfaSonuc").innerHTML = h;
 }
 
@@ -785,6 +926,7 @@ $("btnBtfa").onclick = async () => {
       katsayi_serbest: $("btfaSerbest").checked,
       transfer_kod: $("btfaTransfer").value,
       transfer_ussu: +$("btfaTransferUs").value || (2 / 3),
+      aykiri_disla: $("btfaAykiriAt").checked,
       ilk_yil: +$("tfaIlkYil").value || 0,
       son_yil: +$("tfaSonYil").value || 0,
       dusuk_guveni_at: $("tfaDusukAt").checked,
@@ -794,7 +936,11 @@ $("btnBtfa").onclick = async () => {
     const at = o.istasyonlar.length - o.kullanilan_sayisi;
     setStatus("btfaStatus", `${o.kullanilan_sayisi} istasyon kullanıldı`
       + (at ? `, ${at} tanesi dışarıda kaldı` : "")
-      + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s.`, "ok");
+      + ` — Q100 = ${fmt(o.btfa.q[5], 1)} m³/s`
+      + (o.aykirisiz
+          ? ` · aykırısız (${o.aykirisiz.kullanilan_sayisi} istasyon): `
+            + `${fmt(o.aykirisiz.btfa.q[5], 1)} m³/s`
+          : (o.homojenlik && o.homojenlik.homojen ? " · bölge homojen" : "")) + ".", "ok");
   } catch (e) {
     setStatus("btfaStatus", "Bölgesel analiz yapılamadı: " + e.message, "err");
   }
@@ -867,6 +1013,145 @@ $("btnMmy").onclick = async () => {
   }
 };
 
+/* ---- yıllık toplam yağış katmanı (CHELSA v2.1, ~1 km) ----
+   Altlık değil tematik harita: renk merdiveniyle çizilir. Asıl işe yarayan
+   büyüklük havzanın ALANSAL ortalaması — dağlık havzada tek nokta yanıltır. */
+let yagisBilgi = null;
+layers.yagis = null;
+
+const yagisKatmanBilgi = (k) =>
+  (yagisBilgi && yagisBilgi.katmanlar || []).find(x => x.anahtar === k);
+
+function yagisLejantCiz(k) {
+  const b = yagisKatmanBilgi(k);
+  if (!b) { $("yagisLejant").innerHTML = ""; return; }
+  let onceki = 0;
+  const koyu = k === "pet" ? 1150 : (k === "net" ? 250 : 500);
+  $("yagisLejant").innerHTML = `<b>${b.kisa} (mm/yıl)</b> `
+    + b.lejant.map(l => {
+        const et = l.deger >= 10000 ? `${onceki}+` : `${onceki}–${l.deger}`;
+        onceki = l.deger;
+        return `<span style="display:inline-block;padding:0 4px;margin:1px;`
+          + `background:${l.renk};color:${l.deger > koyu ? "#fff" : "#000"};`
+          + `border-radius:2px">${et}</span>`;
+      }).join("");
+}
+
+function yagisKatmanUygula() {
+  const k = $("yagisKatman").value;
+  if (layers.yagis) layers.yagis.remove();
+  layers.yagis = L.tileLayer(`/api/yagis/${k}/{z}/{x}/{y}.png`, {
+    opacity: (+$("yagisOpak").value || 75) / 100, maxZoom: 18, crossOrigin: true,
+    attribution: "İklim: CHELSA v2.1",
+  });
+  if ($("yagisAc").checked) layers.yagis.addTo(map);
+  yagisLejantCiz(k);
+  const b = yagisKatmanBilgi(k);
+  if (b) {
+    $("yagisInfo").innerHTML = `<b>${b.ad}</b> — ${b.kaynak} · ${b.donem} · `
+      + `~${b.cozunurluk_m} m piksel · ${b.lisans}`
+      + (b.yontem ? ` · ${b.yontem}` : "");
+  }
+}
+
+$("yagisAc").onchange = () => {
+  if (!$("yagisAc").checked) {
+    if (layers.yagis) layers.yagis.remove();
+    $("yagisLejant").innerHTML = "";
+    return;
+  }
+  yagisKatmanUygula();
+};
+$("yagisKatman").onchange = yagisKatmanUygula;
+$("yagisOpak").oninput = () => {
+  if (layers.yagis) layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
+};
+
+$("btnYagisHavza").onclick = async () => {
+  if (!S.havza) {
+    $("yagisInfo").textContent = "Önce havzayı çıkarın.";
+    return;
+  }
+  $("yagisInfo").textContent = "Havza ortalamaları hesaplanıyor…";
+  try {
+    const g = S.havza.features ? S.havza.features[0].geometry
+                               : (S.havza.geometry || S.havza);
+    const r = await api("/api/yagis-havza", { geometri: g });
+    S.yagisHavza = r;
+    const sat = (k, ad) => r[k]
+      ? `<tr><td>${ad}</td><td style="text-align:right"><b>${fmt(r[k].ortalama_mm, 0)}</b></td>`
+        + `<td style="text-align:right">${fmt(r[k].medyan_mm, 0)}</td>`
+        + `<td style="text-align:right">${fmt(r[k].en_az_mm, 0)}–${fmt(r[k].en_cok_mm, 0)}</td>`
+        + `<td style="text-align:right">±${fmt(r[k].std_mm, 0)}</td></tr>` : "";
+    const t = r.turetilmis;
+    $("yagisInfo").innerHTML =
+      '<table class="tbl small"><tr><th>Havza alansal ortalaması</th>'
+      + "<th>mm/yıl</th><th>medyan</th><th>aralık</th><th>sapma</th></tr>"
+      + sat("yagis", "Yağış P") + sat("pet", "PET") + sat("net", "Net yağış (P−AET)")
+      + "</table>"
+      + (t ? `<p class="small">Gerçek buharlaşma AET ≈ <b>${fmt(t.aet_mm, 0)}</b> mm/yıl · `
+             + `akış katsayısı <b>${fmt(t.akis_katsayisi, 3)}</b>. `
+             + "Net yağış uzun dönem ortalama akış yüksekliğidir; "
+             + "yakındaki bir AGİ'nin özgül verimiyle (Su Potansiyeli sekmesi) "
+             + "karşılaştırarak doğrulayın.</p>" : "");
+  } catch (e) {
+    $("yagisInfo").textContent = "Hesaplanamadı: " + e.message;
+  }
+};
+
+/* Haritaya tıklayınca değerleri oku. Diğer tıklama kipleri (outlet seçimi,
+   ara havza noktası, istasyon ekleme) önceliklidir — onlar açıkken sorgu
+   yapılmaz, yoksa kullanıcı outlet seçerken karşısına balon çıkardı.        */
+map.on("click", async (ev) => {
+  if (!$("yagisAc").checked || !yagisBilgi || !yagisBilgi.var) return;
+  if (picking || S.stPlace || (S.multi && S.multi.place)) return;
+  if (S.mode && S.mode !== "wizard") return;
+
+  const { lat, lng } = ev.latlng;
+  const balon = L.popup({ maxWidth: 280 })
+    .setLatLng(ev.latlng)
+    .setContent("okunuyor…")
+    .openOn(map);
+  try {
+    const q = new URLSearchParams({ lat, lon: lng });
+    const r = await api("/api/yagis-nokta?" + q.toString());
+    const secili = $("yagisKatman").value;
+    const sat = (k, ad, br = "mm/yıl") => r[k] == null ? ""
+      : `<tr${k === secili ? ' style="font-weight:700"' : ""}><td>${ad}</td>`
+        + `<td style="text-align:right;padding-left:10px">${fmt(r[k], 0)}</td>`
+        + `<td class="small" style="padding-left:4px">${br}</td></tr>`;
+    balon.setContent(
+      `<b>${fmt(lat, 4)}, ${fmt(lng, 4)}</b><table class="small">`
+      + sat("yagis", "Yağış P") + sat("pet", "PET") + sat("aet", "AET")
+      + sat("net", "Net yağış")
+      + (r.yagis && r.net != null
+          ? `<tr><td>akış katsayısı</td><td style="text-align:right;padding-left:10px">`
+            + `${fmt(r.net / r.yagis, 2)}</td><td></td></tr>` : "")
+      + "</table>"
+      + '<span class="small">CHELSA v2.1 · 1981–2010 · ~1 km piksel</span>');
+  } catch (e) {
+    balon.setContent(`<span class="small">Okunamadı: ${e.message}</span>`);
+  }
+});
+
+/* katman listesini kur; veri yoksa seçeneği kapat */
+(async function yagisDurum() {
+  try {
+    yagisBilgi = await api("/api/yagis-bilgi");
+    if (!yagisBilgi.var) {
+      $("yagisAc").disabled = true;
+      $("yagisKatman").disabled = true;
+      $("btnYagisHavza").disabled = true;
+      $("yagisInfo").textContent =
+        "veri yok — tools/yagis_haritasi_indir.py ile üretin";
+      return;
+    }
+    $("yagisKatman").innerHTML = yagisBilgi.katmanlar
+      .map(k => `<option value="${k.anahtar}">${k.ad}</option>`).join("");
+    $("yagisKatman").value = yagisBilgi.varsayilan;
+  } catch (e) { /* uç yoksa sessiz geç */ }
+})();
+
 /* ---- dışarıdan çizilmiş havza/dere içe aktarma ----
    Sınır kullanıcıdan gelir; alan poligondan (jeodezik), L/Lc/kotlar ve
    (dere verilmediyse) dere ağı DEM'den üretilir.                          */
@@ -891,6 +1176,7 @@ $("basinFile").onchange = () => { if (!$("riverFile").files[0]) importBasinFiles
 // delineate / import sonucunu arayüze uygular (ikisi de aynı biçimde döner)
 function applyBasinResult(r, baslik) {
   S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
+  S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
   // dere/kanal da durumda tutulur: proje kaydında saklansın ve yüklenince geri gelsin
   S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
   $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
@@ -910,6 +1196,7 @@ function applyBasinResult(r, baslik) {
     yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem}) — otomatik seçildi`;
     $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})`;
   }
+  zeminGrubunuBelirle();   // zemin grubunu da havzadan seç (sessiz varsayılan yok)
   const ia = r.ice_aktarim;
   const detay = ia ? `\n${ia.poligon_sayisi} poligon, ${ia.cizgi_sayisi} çizgi okundu` +
     ` | dere ağı: ${r.dere_kaynagi === "ice_aktarim" ? "dosyadan" : "DEM'den türetildi"}` +
@@ -1243,6 +1530,7 @@ map.on("click", async (ev) => {
       snap_m: +$("inpSnap").value || 500, dem_source: $("inpDem").value,
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
+  S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
     S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
     updateSnyderW();
@@ -1263,6 +1551,7 @@ map.on("click", async (ev) => {
       const ovTxt = ov ? " | örtüşme: " + Object.entries(ov).map(([k, v]) => `${k}=${(v * 100).toFixed(0)}%`).join(" ") : "";
       $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})${ovTxt}`;
     }
+    zeminGrubunuBelirle();   // zemin grubunu da havzadan seç (sessiz varsayılan yok)
     // teşhis: çözünürlük + kenetleme mesafesi (havza beklenenden küçükse ipucu)
     let dgn = "";
     if (r.cozunurluk_m) dgn += `\nDEM çözünürlüğü: ${r.cozunurluk_m} m`;
@@ -1503,12 +1792,14 @@ map.on("click", (ev) => {
 });
 
 async function useDefaultStations() {
-  setStatus("thStatus", "Varsayılan istasyonlar yükleniyor…", "loading");
+  setStatus("thStatus", "MGM istasyonları yükleniyor…", "loading");
   try {
     const r = await api("/api/stations/default");
     if (!r.istasyonlar.length)
-      return setStatus("thStatus", "Varsayılan KMZ bulunamadı (data/stations/)", "err");
-    await loadStationSet(r.istasyonlar, r.dosya);
+      return setStatus("thStatus",
+        "İstasyon kümesi boş (python tools/mgm_veritabani_olustur.py)", "err");
+    await loadStationSet(r.istasyonlar,
+      `MGM ölçüm ağı — ${r.istasyonlar.length} istasyon (≥${r.en_az_yil} yıl yağış ölçümü)`);
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
 $("btnDefaultSt").onclick = useDefaultStations;
@@ -1557,7 +1848,45 @@ async function loadDplv() {
 }
 loadDplv();
 
-/* ---- MGM PLV 2020 istasyon veritabanı ---- */
+/* ---- Hidrolojik zemin grubunu havzanın toprağından seç ----
+   Bu parametre taşkın hesabının sonucunu en çok değiştiren girdidir: Karakurt
+   havzasında B ile C arasında Q100 296'dan 771 m³/s'ye çıkıyor. Eskiden açılır
+   listede gerekçesiz bir varsayılan (B) seçili geliyordu ve kullanıcı
+   dokunmazsa sonucu sessizce o belirliyordu — oysa B, Türkiye'nin %1.6'sına
+   uyuyor. Artık YZD bölgesiyle aynı kalıp: otomatik belirlenir, GEREKÇESİ
+   yazılır, kullanıcı değiştirebilir. */
+async function zeminGrubunuBelirle() {
+  const el = $("zeminInfo");
+  if (!S.havza) return;
+  try {
+    const r = await api("/api/zemin-grubu", { havza_geojson: S.havza });
+    if (!r.var) {
+      el.innerHTML = `<span class="warn">⚠ Zemin grubu katmanı kurulu değil — grup topraktan
+        belirlenemedi, listede <b>${$("inpSoil").value}</b> duruyor (varsayılan). Elle kontrol edin.
+        (<code>python tools/zemin_grubu_uret.py</code>)</span>`;
+      return;
+    }
+    S.zemin = r;
+    $("inpSoil").value = r.grup;
+    const d = Object.entries(r.dagilim).filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k}=%${v}`).join(" · ");
+    el.innerHTML = `🌍 Otomatik: <b>${r.grup}</b> (havzanın %${r.pay_yuzde}'si) — ${d}`
+      + `<br><span class="small">${r.yontem}; Ksat ${r.ksat_araligi_mm_sa} mm/sa`
+      + (r.kararsiz ? ` · <span class="warn">⚠ baskın grup zayıf, havza karışık — elle kontrol edin</span>` : "")
+      + `<br>⚠ ${r.uyari}</span>`;
+  } catch (e) {
+    // Sessizce varsayılana düşmek, bu parametrede kabul edilemez: hangi grubun
+    // kullanıldığı ve topraktan mı geldiği her hâlde yazılmalı.
+    el.innerHTML = `<span class="warn">⚠ Zemin grubu belirlenemedi (${e.message}) —
+      listede <b>${$("inpSoil").value}</b> duruyor (varsayılan, ölçümden gelmiyor). Elle kontrol edin.</span>`;
+  }
+}
+
+/* ---- MGM PLV 2020 tablosu — YALNIZ plüviyograf (PLV) oranları için ----
+   P2–P100 artık buradan gelmiyor; ölçüm veritabanından frekans analiziyle
+   hesaplanıyor (loadMgmDb / mgmOtomatikEslestir). Uç, bu tablonun P24
+   sütunlarını hiç göndermiyor: iki ayrı yağış kaynağını paralel tutmak
+   hangisinin kullanıldığını belirsiz bırakıyordu. */
 const mgmNorm = (s) => (s || "").toLocaleUpperCase("tr").replace(/[^A-ZÇĞİÖŞÜ0-9]/g, "");
 async function loadMgm() {
   try {
@@ -1575,6 +1904,35 @@ async function loadMgm() {
   } catch (e) { S.mgm = []; }
 }
 loadMgm();
+
+/* ---- MGM ölçüm veritabanı — P2–P100'ün kaynağı ----
+   1290 istasyonun yıllık en büyük günlük yağışı. P24 değerleri NTFA ile aynı
+   hesaptan (altı dağılım + Smirnov-Kolmogorov) geçirilerek üretilir. */
+async function loadMgmDb() {
+  try {
+    S.mgmDb = await api("/api/mgm-bilgi");
+  } catch (e) { S.mgmDb = { var: false }; }
+}
+loadMgmDb();
+
+// Havza çevresindeki istasyonları elle seçim listesine doldurur.
+async function mgmDbListesi() {
+  if (S.mgmDbYakin || !S.havza) return S.mgmDbYakin || [];
+  const c = S.havza.coordinates || [];
+  const pts = (S.havza.type === "MultiPolygon" ? c.flat(2) : c.flat(1));
+  const lats = pts.map(p => p[1]), lons = pts.map(p => p[0]);
+  const t = 1.0;   // ~110 km — havza dışındaki yakın istasyonlar da seçilebilsin
+  try {
+    const d = await api(`/api/mgm?bati=${Math.min(...lons) - t}&guney=${Math.min(...lats) - t}` +
+      `&dogu=${Math.max(...lons) + t}&kuzey=${Math.max(...lats) + t}&en_az_yil=10`);
+    S.mgmDbYakin = d.istasyonlar || [];
+  } catch (e) { S.mgmDbYakin = []; }
+  let dl = document.getElementById("mgmDbList");
+  if (!dl) { dl = document.createElement("datalist"); dl.id = "mgmDbList"; document.body.appendChild(dl); }
+  dl.innerHTML = S.mgmDbYakin.map(s =>
+    `<option value="${s.ad} (${s.kod})">${s.il} · ${s.yil_sayisi} yıl</option>`).join("");
+  return S.mgmDbYakin;
+}
 
 /* ---- Snyder Ct-Cp abağı (log-log, çift yönlü otomatik) ---- */
 let ctcpGuard = false;
@@ -1978,12 +2336,30 @@ function mgmFind(name) {
   return best;
 }
 
-function fillRainRowFromMgm(r, st) {
+// P2–P100'ü ölçümden hesaplanmış frekans sonucundan doldurur.
+// (Eski sürüm mgm_plv_2020.json'daki hazır P24 tablosunu okuyordu; o tablo
+//  artık yalnız plüviyograf oranları için duruyor.)
+function fillRainRowFromP24(r, P24) {
   ["2", "5", "10", "25", "50", "100"].forEach((k, c) => {
     const cell = document.querySelector(`.rain-cell[data-r="${r}"][data-c="${c}"]`);
-    if (cell && st.P24[k] != null) cell.value = st.P24[k];
+    if (cell && P24 && P24[k] != null) cell.value = P24[k];
   });
   readRainGrid();
+}
+
+// Bir Thiessen satırını verilen MGM istasyonuna bağlar ve P24'ü hesaplatır.
+async function mgmSatirBagla(t, r, kod) {
+  const f = await api("/api/mgm-frekans", { kod });
+  t._mgmKod = kod;
+  // "AD (KOD)" biçimi otomatik eşleştirmeyle aynı: satır yeniden seçildiğinde
+  // ayrıştırıcı kodu buradan okuyor, ad tek başına belirsiz olabiliyor.
+  t._mgmAd = `${(f.istasyon_bilgi || {}).ad || kod} (${kod})`;
+  t._mgmBilgi = { yil_sayisi: f.parametreler.yil_sayisi,
+                  dagilim: f.kabul_edilen_adi, yontem: "elle" };
+  S.rainMeta = S.rainMeta || {};
+  S.rainMeta[t.name] = t._mgmBilgi;
+  fillRainRowFromP24(r, f.P24);
+  return f;
 }
 
 function renderDplvGrid() {
@@ -2032,26 +2408,38 @@ function renderRainTable() {
     return;
   }
   if (!S.rainValues) S.rainValues = {};
-  let h = `<div class="rain-tools"><button id="btnMgmAuto" class="small-btn">🗂 MGM'den otomatik eşleştir</button>
-    <span class="small">veya her satırda MGM istasyonu seçerek P2–P100'ü doldurun (OEY elle girilir)</span>
+  if (!S.rainMeta) S.rainMeta = {};
+  mgmDbListesi();      // elle seçim listesini havza çevresinden hazırla
+  let h = `<div class="rain-tools"><button id="btnMgmAuto" class="small-btn">📊 Ölçümden hesapla (MGM eşleştir)</button>
+    <span class="small">P2–P100, MGM istasyonunun yıllık en büyük günlük yağışlarından
+      frekans analiziyle hesaplanır (NTFA ile aynı hesap). OEY elle girilir.</span>
     <label class="inline" title="Haritadaki Thiessen alanları, seçilen tekerrürün yağışına göre mavi tonlarıyla boyanır (az yağış açık, çok yağış koyu).">Alan boyaması
       <select id="rainColorCol">` +
     RAIN_COLS.map((c, i) => `<option value="${i}"${i === (S.rainColorCol ?? 5) ? " selected" : ""}>${c === "OEY" ? "OEY" : "P" + c}</option>`).join("") +
     `</select></label></div>
     <div id="rainLegend" class="rain-legend"></div>
-    <table class="tbl rain st"><tr><th colspan="9">Yinelenmeli Yağışlar (24 Saatlik)</th></tr>
-    <tr><th>İstasyon (w)</th><th>MGM istasyonu</th>` + RAIN_COLS.map(c => `<th>${c}</th>`).join("") + `</tr>`;
+    <table class="tbl rain st"><tr><th colspan="10">Yinelenmeli Yağışlar (24 Saatlik)</th></tr>
+    <tr><th>İstasyon (w)</th><th>MGM istasyonu</th><th title="Frekans analizinin kaç yıllık seriye dayandığı ve kabul edilen dağılım">kaynak</th>`
+    + RAIN_COLS.map(c => `<th>${c}</th>`).join("") + `</tr>`;
   w.forEach((t, r) => {
     const vals = S.rainValues[t.name] || [];
+    const m = S.rainMeta[t.name];
+    // Hangi P24'ün nereden geldiği satırda görünür: kaç yıllık ölçüm, hangi
+    // dağılım, eşleşme koordinatla mı adla mı kuruldu. Eşleşme sessiz olursa
+    // 30 km ötedeki bir istasyonun yağışı fark edilmeden havzaya girer.
+    const kaynak = m ? `<span class="small" title="${m.dagilim || ""}${m.mesafe_km != null ? " · " + m.mesafe_km + " km" : ""}">`
+      + `${m.yil_sayisi} yıl · ${(m.dagilim || "").split(" ")[0]}`
+      + (m.yontem === "ad" ? " ⚠ad" : "") + `</span>` : `<span class="small">—</span>`;
     h += `<tr><td>${t.name} (${(t.agirlik * 100).toFixed(0)}%)</td>
-      <td><input class="mgm-pick" list="mgmList" data-r="${r}" placeholder="MGM ara…" value="${t._mgm || ""}"></td>`;
+      <td><input class="mgm-pick" list="mgmDbList" data-r="${r}" placeholder="MGM ara…" value="${t._mgmAd || ""}"></td>
+      <td>${kaynak}</td>`;
     for (let c = 0; c < 7; c++) {
       const v = vals[c] ?? "";
       h += `<td><input class="rain-cell" data-r="${r}" data-c="${c}" value="${v}"></td>`;
     }
     h += `</tr>`;
   });
-  h += `<tr class="sel"><td colspan="2"><b>Ağırlıklı</b></td>` +
+  h += `<tr class="sel"><td colspan="3"><b>Ağırlıklı</b></td>` +
     RAIN_COLS.map((c, i) => `<td id="rw${i}"></td>`).join("") + `</tr></table>`;
   div.innerHTML = h;
   div.querySelectorAll(".rain-cell").forEach(inp => {
@@ -2061,22 +2449,69 @@ function renderRainTable() {
   const sel = $("rainColorCol");
   if (sel) sel.onchange = () => { S.rainColorCol = +sel.value; recolorThiessen(); };
   recolorThiessen();
-  div.querySelectorAll(".mgm-pick").forEach(inp => inp.addEventListener("change", () => {
-    const st = mgmFind(inp.value);
+  div.querySelectorAll(".mgm-pick").forEach(inp => inp.addEventListener("change", async () => {
     const r = +inp.dataset.r;
-    if (st) { w[r]._mgm = st.ad; inp.value = st.ad; fillRainRowFromMgm(r, st); }
+    const kod = (inp.value.match(/\(([^)]+)\)\s*$/) || [])[1];
+    const st = kod ? (S.mgmDbYakin || []).find(s => s.kod === kod)
+      : (S.mgmDbYakin || []).find(s => mgmNorm(s.ad) === mgmNorm(inp.value));
+    if (!st) { setStatus("rainStatus", `"${inp.value}" listede yok — havza çevresindeki istasyonlardan seçin`, "err"); return; }
+    try {
+      await mgmSatirBagla(w[r], r, st.kod);
+      renderRainTable();
+      setStatus("rainStatus", `${st.ad}: ${st.yil_sayisi} yıllık ölçümden hesaplandı`, "ok");
+    } catch (e) { setStatus("rainStatus", e.message, "err"); }
   }));
-  $("btnMgmAuto").onclick = () => {
-    let n = 0;
-    w.forEach((t, r) => {
-      const st = mgmFind(t.name);
-      if (st) { t._mgm = st.ad; fillRainRowFromMgm(r, st); n++; }
+  $("btnMgmAuto").onclick = mgmOtomatikEslestir;
+  recalcRain();
+}
+
+/* Thiessen istasyonlarını MGM ölçüm veritabanına bağlar ve P2–P100'ü
+   ölçümden hesaplatır. Eşleştirme önce koordinatla denenir: KMZ'deki ad
+   serbest metindir ("ÇORLU DMİ"), koordinat ise ölçülmüş büyüklüktür ve
+   Türkiye'de aynı adı taşıyan onlarca yer vardır. */
+async function mgmOtomatikEslestir() {
+  const w = activeStations();
+  if (!w.length) return;
+  setStatus("rainStatus", "MGM istasyonları eşleştiriliyor ve frekans analizi yapılıyor…", "");
+  try {
+    const d = await api("/api/mgm-eslestir", {
+      // kod varsa istasyon zaten MGM veri tabanından geliyor (Adım 4'ün
+      // varsayılan kümesi) — arama değil kimlik eşleşmesi. Koordinat/ad
+      // araması yalnız yüklenen KMZ ve elle konan noktalar için gerekir.
+      istasyonlar: w.map(t => ({ ad: t.name, lat: t.lat, lon: t.lon, kod: t.kod })),
+      en_az_yil: 10, en_cok_km: 25, hesapla: true,
+    });
+    S.rainMeta = S.rainMeta || {};
+    let n = 0, uzak = 0, adla = 0, hatali = [];
+    d.eslesme.forEach((k, r) => {
+      if (!k.eslesen || !k.frekans || !k.frekans.P24) {
+        if (k.eslesen) hatali.push(k.ad);
+        return;
+      }
+      w[r]._mgmKod = k.eslesen.kod;
+      w[r]._mgmAd = `${k.eslesen.ad} (${k.eslesen.kod})`;
+      S.rainMeta[w[r].name] = {
+        yil_sayisi: k.frekans.yil_sayisi, dagilim: k.frekans.dagilim,
+        yontem: k.yontem, mesafe_km: k.mesafe_km,
+      };
+      S.rainValues[w[r].name] = ["2", "5", "10", "25", "50", "100"]
+        .map(t => k.frekans.P24[t]).concat([S.rainValues[w[r].name]?.[6] ?? ""]);
+      n++;
+      if (k.yontem === "ad") adla++;
+      if (k.mesafe_km != null && k.mesafe_km > 10) uzak++;
     });
     renderRainTable();
-    setStatus("rainStatus", n ? `${n}/${w.length} istasyon MGM'den dolduruldu (kontrol edin; OEY elle)` :
-      "Ad eşleşmesi bulunamadı — satırlardan elle MGM istasyonu seçin", n ? "ok" : "err");
-  };
-  recalcRain();
+    const notlar = [];
+    if (adla) notlar.push(`${adla} tanesi yalnız ADLA eşleşti (koordinat tutmadı) — denetleyin`);
+    if (uzak) notlar.push(`${uzak} tanesi 10 km'den uzak`);
+    if (hatali.length) notlar.push(`${hatali.length} istasyonun serisi frekans için kısa`);
+    setStatus("rainStatus", n
+      ? `${n}/${w.length} istasyon ölçümden hesaplandı. OEY elle girilir.` +
+        (notlar.length ? " — " + notlar.join("; ") : "")
+      : "Eşleşme bulunamadı — satırlardan elle MGM istasyonu seçin", n ? "ok" : "err");
+  } catch (e) {
+    setStatus("rainStatus", e.message, "err");
+  }
 }
 
 function onRainPaste(e) {
@@ -3717,8 +4152,13 @@ function clearSingleBasin() {
   S.outlet = null; S.havza = null; S.dere = null; S.kanal = null;
   S.kotlar = Array(11).fill("");
   S.thiessen = []; S.istasyonlar = []; S.yzdBolge = null;
+  S.zemin = null;
+  if ($("zeminInfo")) $("zeminInfo").innerHTML = "";
   S.stBase = null; S.stExclude = new Set(); S.stExtra = []; S.stPlace = false;
   S.rainValues = {}; S.P24w = null; S.OETw = null; S.yagis = [];
+  // MGM eşleşmeleri ve yakın istasyon listesi havzaya bağlıdır; yeni havzada
+  // eskisinin listesiyle eşleştirmek yanlış istasyonu getirir.
+  S.rainMeta = {}; S.mgmDbYakin = null;
   S.sonuc = null; S.girdi = null; S.dplvList = null;
   S.resPoints = null; S.resSonuc = null;
   if (S.resMarker) { S.resMarker.remove(); S.resMarker = null; }

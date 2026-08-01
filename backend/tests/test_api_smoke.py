@@ -110,6 +110,39 @@ else:
         print(f"BTFA OK: {bt['kullanilan_sayisi']} istasyon, "
               f"Q2 = {bt['q2_indeks']:.1f}, Q100 = {bt['btfa']['q'][5]:.1f} m³/s")
 
+# --- yıllık yağış katmanı (kurulu değilse atlanır)
+yb = c.get("/api/yagis-bilgi").json()
+if not yb.get("var"):
+    print("Yağış katmanı atlandı: veri yok "
+          "(tools/yagis_haritasi_indir.py ile indirilir)")
+else:
+    # bilinen normallere yakın mı — katman yanlış yere oturursa burada patlar
+    for lat, lon, ad, alt, ust in ((41.02, 40.52, "Rize", 1800, 2800),
+                                   (37.87, 32.49, "Konya", 250, 500),
+                                   (39.92, 32.85, "Ankara", 300, 550)):
+        n = c.get("/api/yagis-nokta", params={"lat": lat, "lon": lon}).json()
+        assert alt <= n["yagis"] <= ust, f"{ad}: {n['yagis']} mm beklenen {alt}-{ust} dışında"
+        # su bütçesi tutarlı olmalı: 0 <= net <= P ve PET pozitif
+        if n.get("net") is not None:
+            assert 0 <= n["net"] <= n["yagis"] + 1, f"{ad}: net={n['net']} > P={n['yagis']}"
+        if n.get("pet") is not None:
+            assert 300 < n["pet"] < 2500, f"{ad}: PET={n['pet']} mantıksız"
+    for k in [x["anahtar"] for x in yb["katmanlar"]]:
+        t = c.get(f"/api/yagis/{k}/8/148/97.png")
+        assert t.status_code in (200, 204), f"{k} karosu {t.status_code}"
+        if t.status_code == 200:
+            assert t.content[:8] == b"\x89PNG\r\n\x1a\n", f"{k} karosu PNG değil"
+    geo = {"type": "Polygon", "coordinates": [[[29.9, 40.5], [30.4, 40.5],
+                                               [30.4, 40.9], [29.9, 40.9], [29.9, 40.5]]]}
+    hv = c.post("/api/yagis-havza", json={"geometri": geo}).json()
+    assert hv["yagis"]["piksel"] > 100, hv.get("hata")
+    assert 200 < hv["yagis"]["ortalama_mm"] < 3000
+    if "turetilmis" in hv:
+        assert 0 < hv["turetilmis"]["akis_katsayisi"] < 1
+    print(f"İklim katmanları OK: {len(yb['katmanlar'])} katman, "
+          f"örnek havza P={hv['yagis']['ortalama_mm']:.0f}"
+          + (f", net={hv['net']['ortalama_mm']:.0f} mm/yıl" if "net" in hv else ""))
+
 # --- su potansiyeli (kurulu değilse atlanır)
 sb = c.get("/api/su-bilgi").json()
 if not sb.get("var"):
@@ -149,4 +182,128 @@ else:
           f"{tm['gozlem']} gözlem + {tm['dolduruldu']} dolduruldu, "
           f"havza çıkışı {tm['outlet']['q_ort']:.3f} m³/s")
 
+# --- MGM meteoroloji veri tabanı + yağış frekans analizi
+b = c.get("/api/mgm-bilgi").json()
+if not b.get("var"):
+    print("MGM atlandı: veri tabanı yok "
+          "(python tools/mgm_veritabani_olustur.py)")
+else:
+    r = c.get("/api/mgm", params={"bati": 27.0, "guney": 40.5, "dogu": 28.5,
+                                  "kuzey": 41.5, "en_az_yil": 20}).json()
+    assert r["istasyonlar"], "pencerede MGM istasyonu bulunamadı"
+    kod = r["istasyonlar"][0]["kod"]
+    f = c.post("/api/mgm-frekans", json={"kod": kod}).json()
+    assert f["birim"] == "mm" and f["kabul_edilen"], f.get("hata")
+    p = f["P24"]
+    assert set(p) == {"2", "5", "10", "25", "50", "100"}
+    # tekerrür arttıkça yağış artmalı — dağılım uydurması bozuksa burada patlar
+    art = [p[k] for k in ("2", "5", "10", "25", "50", "100")]
+    assert art == sorted(art), f"P24 tekerrürle artmıyor: {p}"
+
+    # Thiessen satırlarından eşleştirme: koordinat önce, kısa seri yeğlenmez
+    es = c.post("/api/mgm-eslestir", json={"istasyonlar": [
+        {"ad": "Çorlu", "lat": 41.1667, "lon": 27.7833},
+        {"ad": "LÜLEBURGAZ", "lat": None, "lon": None},
+    ]}).json()["eslesme"]
+    assert es[0]["yontem"] == "koordinat" and es[0]["eslesen"]["ad"] == "ÇORLU"
+    assert es[1]["yontem"] == "ad", "koordinatsız satır adla eşleşmeliydi"
+    assert es[0]["frekans"]["P24"]["100"] > es[0]["frekans"]["P24"]["2"]
+    assert es[0]["frekans"]["yil_sayisi"] >= 25
+
+    # Eski MGM 2020 tablosu ARTIK P24 VERMEMELİ — P2…P100'ün tek kaynağı ölçüm
+    # veritabanıdır; hazır tekerrür tablosu yalnız plüviyograf oranları için
+    # duruyor. İki kaynak paralel dururken hangisinin kullanıldığı belirsizdi.
+    eski = c.get("/api/mgm-stations").json()["istasyonlar"]
+    assert eski and "plv" in eski[0], "PLV oranları kayboldu"
+    assert "P24" not in eski[0], "eski tablo hâlâ P24 döndürüyor"
+
+    # Adım 4'ün varsayılan kümesi YALNIZ ölçüm veri tabanıdır. Her istasyonun
+    # kendi yağış serisi olmalı — kümede ölçümsüz istasyon bulunması, bir
+    # Thiessen hücresinin başka istasyonun yağışını taşıması demektir.
+    d = c.get("/api/stations/default").json()
+    sts = d["istasyonlar"]
+    assert d["kaynak"] == "mgm", f"varsayılan küme MGM dışı: {d.get('kaynak')}"
+    assert len(sts) > 1000, f"küme küçük: {len(sts)}"
+    assert all(s.get("kod") for s in sts), "kümede kodsuz (ölçümsüz) istasyon var"
+    assert all(s["yil_sayisi"] >= d["en_az_yil"] for s in sts)
+    assert all(s.get("lat") is not None and s.get("lon") is not None for s in sts)
+
+    # Varsayılan kümeden gelen istasyon Adım 5'te KİMLİKLE eşleşmeli
+    kodlu = next(s for s in sts if s["yil_sayisi"] >= 25)
+    e2 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
+        {"ad": kodlu["name"], "lat": kodlu["lat"], "lon": kodlu["lon"],
+         "kod": kodlu["kod"]}]}).json()["eslesme"]
+    assert e2[0]["yontem"] == "kod" and e2[0]["mesafe_km"] == 0.0
+    # Elle yüklenen KMZ / haritaya konan nokta (kodsuz) koordinatla bağlanır
+    e3 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
+        {"ad": "Elle konan nokta", "lat": 41.05, "lon": 27.80,
+         "kod": None}]}).json()["eslesme"]
+    assert e3[0]["yontem"] in ("koordinat", "koordinat-kısa"), e3[0]["yontem"]
+
+    print(f"Thiessen kümesi OK: {len(sts)} istasyon, hepsi ≥{d['en_az_yil']} yıl "
+          f"kendi ölçümüyle")
+    print(f"MGM/yağış frekansı OK: {b['istasyon']} istasyon, "
+          f"{b['frekansa_uygun']} frekansa uygun, {kod} → "
+          f"P2={p['2']} P100={p['100']} mm ({f['kabul_edilen_adi']}, "
+          f"{f['parametreler']['yil_sayisi']} yıl)")
+
+# --- Hidrolojik zemin grubu havzadan belirlenmeli, varsayılana düşmemeli.
+# Bu parametre Q100'ü kat kat değiştiriyor; sessiz bir varsayılan, sonucu
+# kimsenin sormadığı bir seçimin belirlemesi demekti.
+z = c.post("/api/zemin-grubu", json={"havza_geojson": {
+    "type": "Polygon", "coordinates": [[[41.4, 39.8], [42.2, 39.8],
+                                        [42.2, 40.3], [41.4, 40.3], [41.4, 39.8]]]}}).json()
+if not z.get("var"):
+    print("Zemin grubu atlandı: katman yok (python tools/zemin_grubu_uret.py)")
+else:
+    assert z["grup"] in ("A", "B", "C", "D"), z
+    assert abs(sum(z["dagilim"].values()) - 100.0) < 0.5, z["dagilim"]
+    assert z["dagilim"][z["grup"]] == z["pay_yuzde"]
+    assert z["piksel"] > 0 and z["uyari"], "gerekçe/uyarı boş dönmemeli"
+    print(f"Zemin grubu OK: {z['grup']} (%{z['pay_yuzde']}), "
+          f"{z['piksel']} piksel, Ksat {z['ksat_araligi_mm_sa']} mm/sa")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")
+
+# --- Bozuk pik kayıtları NTFA'ya girmemeli.
+# D24A029'un 1981 kaydı 9500 m³/s yazıyor (diğer 29 yıl 68-1033 arası) ve
+# Q100'ü 1301'den 7314 m³/s'ye çıkarıyordu. Aynı yıl mansaptaki daha büyük
+# havzalı istasyon 389 m³/s ölçmüş — su yok olmaz, değer yanlıştır.
+if b.get("var"):
+    t1 = c.post("/api/tfa", json={"kod": "D24A029"}).json()
+    t0 = c.post("/api/tfa", json={"kod": "D24A029", "olanaksizi_at": False}).json()
+    if "hata" not in t1:
+        el = t1.get("elenen_kayitlar") or []
+        assert el and el[0]["yil"] == 1981, f"bozuk 1981 kaydı elenmedi: {el}"
+        assert el[0]["sebep"], "eleme sebebi boş dönmemeli"
+        q1 = t1["kabul_edilen_q"][t1["tekerrur"].index(100)]
+        q0 = t0["kabul_edilen_q"][t0["tekerrur"].index(100)]
+        assert q1 < q0 / 3, f"eleme Q100'ü düşürmedi: {q0:.0f} -> {q1:.0f}"
+        print(f"Bozuk kayıt elemesi OK: D24A029 Q100 {q0:.0f} -> {q1:.0f} m³/s "
+              f"({len(el)} kayıt elendi)")
+
+# --- Grubbs-Beck aykırı testi (Bulletin 17B) + aykırısız karşılaştırma
+if b.get("var"):
+    ay = c.post("/api/tfa", json={"kod": "D24A029", "aykiri_disla": True}).json()
+    if "hata" not in ay:
+        a = ay["aykiri"]
+        assert a["uygulanabilir"] and a["n"] >= 10
+        assert a["alt_sinir"] < a["ust_sinir"], a
+        # sınırlar dışındaki her değer listelenmiş olmalı
+        icerik = set(a["yuksek"]) | set(a["dusuk"])
+        for k in ay["veri"]:
+            v = k["x"]
+            if v > a["ust_sinir"] or 0 < v < a["alt_sinir"]:
+                assert v in icerik, f"{v} sınır dışında ama aykırı listesinde yok"
+            else:
+                assert v not in icerik, f"{v} sınır içinde ama aykırı sayılmış"
+        # aykırısız koşu ya sonuç ya gerekçe döndürmeli, sessiz kalmamalı
+        assert ("aykirisiz" in ay) or ("aykirisiz_hata" in ay)
+        if "aykirisiz" in ay:
+            assert ay["aykirisiz"]["parametreler"]["yil_sayisi"] < a["n"]
+            # asıl sonuç DEĞİŞMEMELİ — aykırı atmak varsayılan davranış değil
+            assert ay["parametreler"]["yil_sayisi"] == a["n"]
+        print(f"Aykırı testi OK: Kn={a['kn']}, yüksek={len(a['yuksek'])}, "
+              f"düşük={len(a['dusuk'])}, aykırısız="
+              + (f"{ay['aykirisiz']['parametreler']['yil_sayisi']} yıl"
+                 if "aykirisiz" in ay else "yetersiz seri"))

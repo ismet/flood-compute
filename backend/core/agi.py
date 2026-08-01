@@ -121,8 +121,63 @@ def poligon(geometri, tampon_derece=0.0, en_az_yil=10, kurum=None):
     return ist
 
 
-def seri(kod, ilk_yil=None, son_yil=None, dusuk_guveni_at=False):
-    """Bir istasyonun yıllık maksimum akım serisi (yıla göre sıralı)."""
+ALAN_YER_TUTUCU = 1.0       # OCR okuyamayınca 1.0 yazılmış; gerçek alan değil
+ORAN_ESIK = 5.0             # işaretli kayıt, 2. en büyüğün bu katıysa bozuktur
+
+
+def creager_zarfi(alan_km2, C=100.0):
+    """Creager zarfı (m³/s) — C=100 dünya rekor mertebesi.
+
+    Bunu aşan bir pik, yeryüzünde hiç görülmemiş bir olay demektir; hidrolojik
+    bir uç değil, dizgi hatasıdır.
+    """
+    return 1.303 * C * (0.386 * alan_km2) ** (0.936 * alan_km2 ** -0.048)
+
+
+def _eleme_sebebi(q, alan, guven, ikinci_en_buyuk):
+    """Kayıt fiziksel/istatistiksel olarak olanaksızsa sebebini döndürür.
+
+    İKİ BAĞIMSIZ ÖLÇÜT, ikisi de tek başına yeterli:
+
+    1. CREAGER ZARFI — alanı bilinen istasyonda dünya rekor zarfını aşmak.
+       Alanın kendisi 1.0 ise (OCR yer tutucusu) bu test uygulanmaz: orada
+       yanlış olan debi değil alandır, ayrıca o kayıtların çoğu kanal/kaynak/
+       baraj çıkışı, yani doğal havza bile değil.
+
+    2. İŞARET + ORAN — çıkarım hattının 'yıllar arası aykırı' diye işaretlediği
+       bir kayıt, istasyonun ikinci en büyüğünün 5 katından fazlaysa. Tek
+       başına işaret yetmez (130 işaretli kaydın 53'ü fiziksel olarak makul,
+       gerçek rekor taşkın olabilir); tek başına oran da yetmez (gerçek rekor
+       taşkın 3-4 kat olabiliyor). Kesişimleri temiz ayırıyor: veritabanında
+       oran 9'un üstündeki her kayıt aynı zamanda işaretli ve hepsi 9xxx/7xxx
+       imzasını taşıyor, 3-5 arası olanlar ise işaretsiz ve gerçek görünüyor.
+    """
+    if alan and alan > 0 and abs(alan - ALAN_YER_TUTUCU) > 1e-9:
+        zarf = creager_zarfi(alan)
+        if q > zarf:
+            return (f"Creager dünya rekor zarfı aşıldı "
+                    f"({q:.0f} > {zarf:.0f} m³/s, alan {alan:.0f} km²)")
+    if (guven and "düşük" in guven and ikinci_en_buyuk
+            and q > ORAN_ESIK * ikinci_en_buyuk):
+        return (f"aykırı işaretli ve istasyonun ikinci en büyüğünün "
+                f"{q/ikinci_en_buyuk:.0f} katı ({ikinci_en_buyuk:.0f} m³/s)")
+    return None
+
+
+def seri_denetimli(kod, ilk_yil=None, son_yil=None, dusuk_guveni_at=False,
+                   olanaksizi_at=True):
+    """-> (kalan_kayitlar, elenen_kayitlar)
+
+    Eleme VARSAYILAN OLARAK AÇIK. Sebebi somut: D24A029'un 1981 kaydı 9500 m³/s
+    yazıyor (diğer 29 yıl 68-1033 arası) ve bu tek değer Q100'ü 1301'den
+    7314 m³/s'ye çıkarıyordu. Aynı yıl mansaptaki daha büyük havzalı istasyon
+    389 m³/s ölçmüş — su yok olmaz, değer yanlıştır. Veritabanında 118 böyle
+    kayıt var ve elenmezlerse sessizce tasarım debisi üretiyorlar.
+
+    Elenenler ATILMAZ, DÖNDÜRÜLÜR: hangi kaydın neden çıkarıldığı kullanıcıya
+    gösterilmeli, aksi halde bir sessiz varsayılanı başkasıyla değiştirmiş
+    oluruz.
+    """
     db = _baglanti()
     sql = "SELECT yil, q, tarih, guven, kaynak FROM pik WHERE kod = ?"
     par = [kod]
@@ -134,10 +189,31 @@ def seri(kod, ilk_yil=None, son_yil=None, dusuk_guveni_at=False):
         par.append(int(son_yil))
     if dusuk_guveni_at:
         sql += " AND guven NOT LIKE 'düşük%'"
-    sql += " ORDER BY yil"
-    return [{"yil": r["yil"], "q": r["q"], "tarih": r["tarih"],
-             "guven": r["guven"], "kaynak": r["kaynak"]}
-            for r in db.execute(sql, par)]
+    ham = [{"yil": r["yil"], "q": r["q"], "tarih": r["tarih"],
+            "guven": r["guven"], "kaynak": r["kaynak"]}
+           for r in db.execute(sql + " ORDER BY yil", par)]
+    if not olanaksizi_at or not ham:
+        return ham, []
+
+    try:
+        alan = istasyon(kod)["yagis_alani"]
+    except ValueError:
+        alan = None
+    sirali = sorted((k["q"] for k in ham if k["q"]), reverse=True)
+    kalan, elenen = [], []
+    for k in ham:
+        digerleri = [v for v in sirali if v != k["q"]]
+        ikinci = max(digerleri) if digerleri else None
+        sebep = _eleme_sebebi(k["q"], alan, k["guven"], ikinci)
+        (elenen if sebep else kalan).append(dict(k, sebep=sebep) if sebep else k)
+    return kalan, elenen
+
+
+def seri(kod, ilk_yil=None, son_yil=None, dusuk_guveni_at=False,
+         olanaksizi_at=True):
+    """Bir istasyonun yıllık maksimum akım serisi (yıla göre sıralı)."""
+    return seri_denetimli(kod, ilk_yil, son_yil, dusuk_guveni_at,
+                          olanaksizi_at)[0]
 
 
 def istasyon(kod):

@@ -18,6 +18,8 @@ data/akarsu/*.eski
 
 # data/stations/DMİ.kmz is the canonical copy; root is a local fallback
 /DMİ.kmz
+# data/regions/YZD_ALANLAR.kmz asıl kopya; kökteki bayt bayt aynısı
+/YZD_ALANLAR.kmz
 
 .commandcode/
 /aster30m.vrt
@@ -32,9 +34,25 @@ data/DMİ_yedek.kmz
 # Excel açıkken bıraktığı kilit dosyaları
 ~$*
 
+# Aylık CHELSA yığını (288 MB) — kalibrasyonun hız önbelleği, türetilmiş veri.
+# tools/su_butcesi.py yoksa kaynaktan yeniden indirir.
+data/yagis/_onbellek_aylik.npz
+
 # Yerel çalışma verisi — depoya girmemeli (GitHub 100 MB üstü dosyayı reddeder).
 # Data.db ~1.6 GB, Havzalar.rar ~1.8 GB, Havzalar/ ~6 GB.
 /Data.db
 /Havzalar/
 *.rar
 *.7z
+
+# DSİ akım gözlem ağı KMZ'si (3739 AGİ, D02A001 biçimi) — yerel kaynak veri.
+# Yağış tarafıyla ilgisi yok; agi.sqlite'ın eksik yağış alanlarını doldurmakta
+# kullanılabilir ama şimdilik bağlanmadı.
+/RASATLAR GÖZLEMAĞI*.kmz
+
+# MGM istasyon Excel arşivi (1290 dosya, 105 MB) — yerel kaynak veri.
+# Kullanılan özet data/stations/ ve data/tables/ içindedir.
+# Klasör adı düz I ile yazılmış (DMI), noktalı İ ile değil — ikisi de yazılıyor
+# ki elle oluşturulan kopya da tutulsun.
+/DMI-tümü/
+/DMİ-tümü/

@@ -111,7 +111,12 @@ class ReservoirControlledReq(BaseModel):
 
 class CNReq(BaseModel):
     havza_geojson: dict
-    zemin_grubu: str = "B"
+    # Varsayılan bilerek "C": Türkiye'nin %92'si bu gruba düşüyor (bkz.
+    # tools/zemin_grubu_uret.py). Eskiden "B" idi ve hiçbir gerekçesi yoktu —
+    # ülkenin yalnız %1.6'sına uyuyor, üstelik grup Q100'ü kat kat değiştiriyor.
+    # Arayüz zaten /api/zemin-grubu ile havzadan belirleyip gönderiyor; bu
+    # varsayılan yalnız doğrudan API çağıranlar için son çare.
+    zemin_grubu: str = "C"
 
 
 class ThiessenReq(BaseModel):
@@ -477,6 +482,24 @@ def api_cn(req: CNReq):
         return _err(e)
 
 
+@app.post("/api/zemin-grubu")
+def api_zemin_grubu(req: CNReq):
+    """Havzanın hidrolojik zemin grubu (A/B/C/D) — toprağından belirlenir.
+
+    Grup, CN üzerinden sonucu en çok değiştiren girdidir; eskiden gerekçesiz
+    bir varsayılan (B) olarak duruyordu. Artık SoilGrids dokusundan NRCS
+    ölçütüyle belirlenir ve GEREKÇESİ döndürülür — kullanıcı görüp
+    değiştirebilsin diye.
+    """
+    from backend.core import zemin
+    try:
+        if not zemin.var_mi():
+            return {"var": False}
+        return {"var": True, **zemin.havza(req.havza_geojson)}
+    except Exception as e:
+        return _err(e)
+
+
 @app.post("/api/yzd-region")
 def api_yzd_region(req: CNReq):
     """Havza poligonundan YZD alansal dağılım bölgesini (A/B/C) bulur."""
@@ -488,21 +511,22 @@ def api_yzd_region(req: CNReq):
 
 
 @app.get("/api/stations/default")
-def api_stations_default():
-    """data/stations (yoksa proje kökü) altındaki ilk KMZ/KML'yi varsayılan
-    istasyon seti olarak döner."""
+def api_stations_default(en_az_yil: int = 10):
+    """Thiessen'in varsayılan istasyon kümesi — yalnız MGM ölçüm veri tabanı.
+
+    Yıllık maksimum serisi `en_az_yil` uzunluğunda olan istasyonlar döner, yani
+    her Thiessen hücresi kendi ölçtüğü yağışı taşır ve Adım 5'teki P24
+    bağlanması kimlik eşleşmesidir.
+
+    Eski `data/stations/bir_cikti.kml` artık otomatik yüklenmiyor; dosya
+    duruyor ve `POST /api/stations` ile elle yüklenebilir (o zaman istasyonlar
+    kod taşımadığı için P24 en yakın uygun MGM istasyonundan koordinatla gelir).
+    """
+    from backend.core import mgm
     try:
-        cands = []
-        for d in (os.path.join(ROOT, "data", "stations"), ROOT):
-            if os.path.isdir(d):
-                cands += [os.path.join(d, f) for f in sorted(os.listdir(d))
-                          if f.lower().endswith((".kmz", ".kml"))]
-        if not cands:
-            return {"istasyonlar": [], "dosya": None}
-        from backend.core import thiessen
-        with open(cands[0], "rb") as f:
-            sts = thiessen.parse_kmz(f.read())
-        return {"istasyonlar": sts, "dosya": os.path.basename(cands[0])}
+        sts = mgm.thiessen_kumesi(en_az_yil)
+        return {"istasyonlar": sts, "kaynak": "mgm", "dosya": "mgm.sqlite",
+                "en_az_yil": en_az_yil, "olcumlu": len(sts)}
     except Exception as e:
         return _err(e)
 
@@ -576,10 +600,20 @@ def api_dplv():
 
 @app.get("/api/mgm-stations")
 def api_mgm_stations():
-    """MGM 2020 PLV: istasyon 24 saatlik tekerrürlü yağışları + PLV oranları."""
+    """MGM 2020 tablosu — YALNIZ plüviyograf (PLV) oranları.
+
+    Bu tablonun P24 sütunları bilerek döndürülmüyor. P2…P100 artık
+    `/api/mgm-frekans` ile 1290 istasyonun ham yıllık maksimum ölçümünden
+    hesaplanıyor; hazır tekerrür tablosunu paralelde tutmak, iki farklı
+    kaynaktan iki farklı yağış üretip hangisinin kullanıldığını belirsiz
+    bırakırdı. Uçtan tümüyle çıkarmak, kazara yeniden bağlanmasını da önler.
+    """
     from backend.core import tables
     try:
-        return tables.load("mgm_plv_2020")
+        d = tables.load("mgm_plv_2020")
+        return {**d, "istasyonlar": [{"no": s.get("no"), "ad": s["ad"],
+                                      "plv": s["plv"]}
+                                     for s in d["istasyonlar"]]}
     except Exception as e:
         return _err(e)
 
@@ -831,6 +865,97 @@ def api_agi_seri(kod: str, ilk_yil: int = 0, son_yil: int = 0,
         return _err(e)
 
 
+@app.get("/api/mgm-bilgi")
+def api_mgm_bilgi():
+    """MGM meteoroloji veri tabanı kurulu mu, kaç istasyon frekansa uygun."""
+    from backend.core import mgm
+    try:
+        return mgm.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/mgm")
+def api_mgm(bati: float, guney: float, dogu: float, kuzey: float,
+            en_az_yil: int = 10):
+    """Pencere içindeki MGM istasyonları (yıllık maksimum serisi olanlar)."""
+    from backend.core import mgm
+    try:
+        return {"istasyonlar": mgm.pencere((bati, guney, dogu, kuzey),
+                                           en_az_yil=en_az_yil)}
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/mgm-seri")
+def api_mgm_seri(kod: str, tur: str = ""):
+    """Bir MGM istasyonunun yıllık maksimum serisi ya da istenen rasat türü."""
+    from backend.core import mgm
+    try:
+        out = {"istasyon": mgm.istasyon(kod), "turler": mgm.turler(kod)}
+        out["seri"] = mgm.seri(kod, tur) if tur else mgm.yillik_maks(kod)
+        return out
+    except Exception as e:
+        return _err(e)
+
+
+class MgmFrekansGirdi(BaseModel):
+    kod: str
+    ilk_yil: int = 0
+    son_yil: int = 0
+
+
+@app.post("/api/mgm-frekans")
+def api_mgm_frekans(g: MgmFrekansGirdi):
+    """Yağış frekans analizi — NTFA ile aynı hesap, girdi yıllık en büyük
+    günlük yağış (mm). Sonuçtaki `P24`, Adım 5 tablosunun P2…P100 sütunları."""
+    from backend.core import mgm
+    try:
+        return mgm.frekans(g.kod, g.ilk_yil or None, g.son_yil or None)
+    except Exception as e:
+        return _err(e)
+
+
+class MgmEslesGirdi(BaseModel):
+    istasyonlar: list[dict]             # [{ad|name, lat, lon}] — Thiessen satırları
+    en_az_yil: int = 10
+    en_cok_km: float = 25.0
+    tercih_yil: int = 25                # yarıçap içinde bu uzunluktaki seri yeğlenir
+    hesapla: bool = True                # eşleşenler için P2…P100'ü de üret
+
+
+@app.post("/api/mgm-eslestir")
+def api_mgm_eslestir(g: MgmEslesGirdi):
+    """Thiessen istasyonlarını MGM veri tabanına bağlar ve P2…P100 hesaplar.
+
+    Önce koordinat, sonra ad denenir — KMZ'deki ad serbest metindir, koordinat
+    ölçülmüş büyüklüktür. Eşleşmenin hangi yolla ve kaç km'den kurulduğu
+    döndürülür ki kullanıcı kararı denetleyebilsin."""
+    from backend.core import mgm
+    try:
+        out = mgm.eslestir(g.istasyonlar, en_az_yil=g.en_az_yil,
+                           en_cok_km=g.en_cok_km, tercih_yil=g.tercih_yil)
+        if g.hesapla:
+            onbellek = {}
+            for k in out:
+                e = k.get("eslesen")
+                if not e:
+                    continue
+                kod = e["kod"]
+                if kod not in onbellek:
+                    try:
+                        f = mgm.frekans(kod)
+                        onbellek[kod] = {"P24": f["P24"],
+                                         "dagilim": f["kabul_edilen_adi"],
+                                         "yil_sayisi": f["parametreler"]["yil_sayisi"]}
+                    except Exception as hata:
+                        onbellek[kod] = {"hata": str(hata)}
+                k["frekans"] = onbellek[kod]
+        return {"eslesme": out}
+    except Exception as e:
+        return _err(e)
+
+
 class TfaGirdi(BaseModel):
     kod: str = ""                       # AGİ kodu (veriyi veri tabanından al)
     x: list[float] | None = None        # ya da doğrudan seri ver
@@ -838,6 +963,13 @@ class TfaGirdi(BaseModel):
     ilk_yil: int = 0
     son_yil: int = 0
     dusuk_guveni_at: bool = False
+    # Fiziksel olarak olanaksız kayıtları ele (Creager dünya zarfı + aykırı
+    # işaret × oran). Varsayılan AÇIK: kapalıyken D24A029'un bozuk 1981 kaydı
+    # Q100'ü 1301 yerine 7314 m³/s veriyordu.
+    olanaksizi_at: bool = True
+    # Grubbs-Beck aykırılarını çıkarıp analizi bir kez daha koş; ikinci sonuç
+    # `aykirisiz` altında döner. Asıl sonuç değişmez — amaç karşılaştırma.
+    aykiri_disla: bool = False
 
 
 @app.post("/api/tfa")
@@ -848,18 +980,25 @@ def api_tfa(g: TfaGirdi):
     karşılaştırılır; Dmax'ı en küçük olan "kabul edilen" dağılımdır."""
     from backend.core import agi, tfa
     try:
-        ad, x, yillar = g.kod, g.x, g.yillar
+        ad, x, yillar, elenen = g.kod, g.x, g.yillar, []
         if g.kod:
             ist = agi.istasyon(g.kod)
-            s = agi.seri(g.kod, g.ilk_yil or None, g.son_yil or None, g.dusuk_guveni_at)
+            s, elenen = agi.seri_denetimli(
+                g.kod, g.ilk_yil or None, g.son_yil or None,
+                g.dusuk_guveni_at, g.olanaksizi_at)
             x = [k["q"] for k in s]
             yillar = [k["yil"] for k in s]
             ad = f"{ist['kod']} {ist['ad']}".strip()
         if not x:
             raise ValueError("Analiz için seri gerekli (kod ya da x)")
-        sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar)
+        sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar,
+                         aykiri_disla=g.aykiri_disla)
         if g.kod:
             sonuc["istasyon_bilgi"] = agi.istasyon(g.kod)
+        # Elenen kayıtlar sonuçla birlikte döner: hangi değerin neden analiz
+        # dışı kaldığı görünmezse, bir sessiz varsayılanı başkasıyla
+        # değiştirmiş oluruz.
+        sonuc["elenen_kayitlar"] = elenen
         return sonuc
     except Exception as e:
         return _err(e)
@@ -874,6 +1013,7 @@ class BtfaGirdi(BaseModel):
     disla: list[str] = []               # büyüme eğrisine katılmayacaklar
     transfer_kod: str = ""              # tek istasyondan alan oranıyla aktarım
     transfer_ussu: float = 2.0 / 3.0
+    aykiri_disla: bool = False          # homojen olmayanları çıkarıp tekrar koş
     ilk_yil: int = 0
     son_yil: int = 0
     dusuk_guveni_at: bool = False
@@ -901,7 +1041,8 @@ def api_btfa(g: BtfaGirdi):
         return btfa.bolgesel(seriler, g.alan_km2, us=g.us, katsayi=g.katsayi,
                              katsayi_serbest=g.katsayi_serbest, disla=g.disla,
                              transfer_kod=g.transfer_kod or None,
-                             transfer_ussu=g.transfer_ussu)
+                             transfer_ussu=g.transfer_ussu,
+                             aykiri_disla=g.aykiri_disla)
     except Exception as e:
         return _err(e)
 
@@ -1037,6 +1178,57 @@ def api_su(g: SuGirdi):
     try:
         return su.potansiyel(g.kod, g.ilk_yil or None, g.son_yil or None,
                              talep_ls=g.talep_ls)
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/yagis-bilgi")
+def api_yagis_bilgi():
+    """Yıllık toplam yağış katmanı kurulu mu, kaynağı/lejantı nedir."""
+    from backend.core import yagis
+    try:
+        return yagis.bilgi()
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/yagis/{katman}/{z}/{x}/{y}.png")
+def api_yagis_karo(katman: str, z: int, x: int, y: int):
+    """Yağış/PET/net yağış XYZ karo servisi (renk merdivenli, saydam)."""
+    from fastapi.responses import Response
+    from backend.core import yagis
+    try:
+        if not (0 <= z <= 22):
+            raise ValueError("geçersiz zoom")
+        png = yagis.karo(z, x, y, katman)
+    except Exception as e:
+        return _err(e)
+    if png is None:
+        return Response(status_code=204)
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/api/yagis-nokta")
+def api_yagis_nokta(lat: float, lon: float):
+    """Tıklanan noktada yağış / PET / net yağış (mm/yıl)."""
+    from backend.core import yagis
+    try:
+        return yagis.nokta(lat, lon)
+    except Exception as e:
+        return _err(e)
+
+
+class YagisHavzaGirdi(BaseModel):
+    geometri: dict
+
+
+@app.post("/api/yagis-havza")
+def api_yagis_havza(g: YagisHavzaGirdi):
+    """Havza üzerindeki alansal ortalama yıllık yağış."""
+    from backend.core import yagis
+    try:
+        return yagis.havza_ortalamasi(g.geometri)
     except Exception as e:
         return _err(e)
 

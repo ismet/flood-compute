@@ -205,6 +205,15 @@
         <span id="akarsuInfo" class="small"></span>
       </div>
       <div class="rain-tools" style="margin-top:2px">
+        <label class="chk" title="CHELSA v2.1 (1981-2010 normali, ~1 km piksel) tabanlı iklim katmanları. Türkiye'de 1005 MGM istasyonuna karşı yağışta en yüksek uyumu veren ızgara veri setidir. Katman açıkken haritaya tıklayınca o noktanın P / PET / AET / net yağış değerleri okunur."><input type="checkbox" id="yagisAc"> 🌧 İklim katmanı</label>
+        <label class="inline" title="P: yıllık toplam yağış. PET: potansiyel evapotranspirasyon (Penman-Monteith). Net yağış: P − gerçek ET (Budyko-Fu); uzun dönem ortalama akış yüksekliğine karşılık gelir.">Katman
+          <select id="yagisKatman" style="max-width:230px"></select></label>
+        <label class="inline" title="Katmanın saydamlığı.">Saydamlık<input id="yagisOpak" type="range" min="20" max="100" value="75" style="width:90px"></label>
+        <button id="btnYagisHavza" class="small-btn" title="Çıkarılmış havzanın üzerine düşen piksellerin alansal ortalaması — üç katman için birden, ayrıca AET ve akış katsayısı. Tek noktanın değerinden çok daha anlamlıdır.">Havza ortalaması</button>
+      </div>
+      <div id="yagisLejant" class="small"></div>
+      <div id="yagisInfo" class="small"></div>
+      <div class="rain-tools" style="margin-top:2px">
         <button id="btnEditGeom" class="small-btn" title="Havza sınırını ve dere ağını haritada elle düzenleyin: köşe noktalarını sürükleyin, çift tıklayarak yeni köşe ekleyin. Uygulayınca alan, L, Lc ve kot profili düzenlenmiş geometriden yeniden üretilir.">✏️ Havza / dere düzenle</button>
         <button id="btnEditApply" class="small-btn hidden">✓ Uygula ve yeniden hesapla</button>
         <button id="btnEditCancel" class="small-btn hidden">✕ Vazgeç</button>
@@ -268,10 +277,16 @@
       yoksa EEA CLC2018 servisinden <b>otomatik indirilir</b>.</p>
       <div class="grid2">
         <label>Zemin grubu
-          <select id="inpSoil"><option>A</option><option selected>B</option><option>C</option><option>D</option></select>
+          <!-- C işaretli, çünkü işaretsiz bırakmak tarayıcıya İLK seçeneği (A)
+               seçtirir: en geçirimli grup, en düşük CN, en düşük debi. Havza
+               çıkarılır çıkarılmaz zeminGrubunuBelirle() bunu topraktan gelen
+               değerle değiştirir; C yalnız o belirlenemezse kalır ve
+               Türkiye'nin %92.3'ünün grubudur (bkz. tools/zemin_grubu_uret.py). -->
+          <select id="inpSoil"><option>A</option><option>B</option><option selected>C</option><option>D</option></select>
         </label>
         <button id="btnCN" class="primary">CORINE'den CN hesapla</button>
       </div>
+      <div id="zeminInfo" class="small"></div>
       <div id="cnStatus" class="status"></div>
       <div class="grid2">
         <label>CN (Şart II)<input id="inpCN2" type="number" step="0.1" value="75"></label>
@@ -282,8 +297,12 @@
 
     <!-- ADIM 4: Thiessen -->
     <section class="page hidden" data-page="4">
-      <p class="hint">Varsayılan istasyon seti (<code>data/stations/bir_cikti.kml</code>, MGM
-      istasyon ağı) otomatik kullanılır; isterseniz başka bir KMZ/KML yükleyin. Thiessen
+      <p class="hint">Varsayılan küme <b>MGM ölçüm ağıdır</b>
+      (<code>data/mgm/mgm.sqlite</code>): en az 10 yıllık günlük maksimum yağış
+      ölçümü olan 1184 istasyon. Böylece her Thiessen hücresi <b>kendi ölçtüğü</b>
+      yağışı taşır ve Adım 5'teki P2–P100 doğrudan o istasyonun serisinden
+      hesaplanır. İsterseniz kendi KMZ/KML'nizi yükleyin — o istasyonlar ölçüm
+      taşımadığı için yağışları en yakın uygun MGM istasyonundan gelir. Thiessen
       poligonları havzaya kesilerek alan ağırlıkları bulunur.</p>
       <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan</button>
       <input type="file" id="kmzFile" accept=".kmz,.kml">
@@ -365,6 +384,8 @@
         <label class="inline" title="Analize dahil edilecek ilk su yılı. Boş bırakılırsa serinin tamamı kullanılır.">İlk yıl<input id="tfaIlkYil" type="number" step="1" placeholder="tümü" style="width:80px"></label>
         <label class="inline">Son yıl<input id="tfaSonYil" type="number" step="1" placeholder="tümü" style="width:80px"></label>
         <label class="chk" title="Eski yıllıkların OCR'ında değeri şüpheli bulunan kayıtları analiz dışı bırakır (Güven kolonu 'düşük' olanlar)."><input type="checkbox" id="tfaDusukAt"> düşük güvenli kayıtları at</label>
+        <label class="chk" title="Creager dünya rekor zarfını aşan ya da aykırı işaretli olup istasyonun ikinci en büyüğünün 5 katından fazla olan kayıtları eler. Bunlar taşkın değil, eski yıllıkların çıkarımında bozulmuş değerlerdir; veritabanında 118 tane var. Kaldırırsanız Q100 aşırı yüksek çıkabilir."><input type="checkbox" id="tfaOlanaksizAt" checked> olanaksız kayıtları at</label>
+        <label class="chk" title="Grubbs-Beck testiyle (Bulletin 17B) aykırı bulunan değerleri çıkarıp analizi bir kez daha koşar ve iki sonucu yan yana gösterir. Asıl sonuç değişmez. DİKKAT: Bulletin 17B, yüksek aykırıyı hatalı olduğu kanıtlanmadıkça seride tutmayı söyler — atmak tasarım debisini emniyetsiz tarafa çeker."><input type="checkbox" id="tfaAykiriAt"> aykırıları çıkarıp karşılaştır</label>
         <button id="btnTfa" class="primary" disabled>Frekans analizi yap</button>
       </div>
       <div id="tfaStatus" class="status"></div>
@@ -387,7 +408,11 @@
       <div class="rain-tools" style="margin-top:2px">
         <label class="inline" title="Karşılaştırma satırı: seçilen tek istasyonun noktasal sonucunu alan oranıyla havzaya taşır. Q_havza = Q_AGİ × (A_havza/A_AGİ)^üs">Aktarım AGİ'si<select id="btfaTransfer"><option value="">yok</option></select></label>
         <label class="inline">Aktarım üssü<input id="btfaTransferUs" type="number" step="0.001" value="0.667" style="width:80px"></label>
+        <label class="chk" title="Homojenlik testinden geçemeyen istasyonlar çıkarılıp analiz bir kez daha koşulur; iki durum yan yana karşılaştırılır."><input type="checkbox" id="btfaAykiriAt" checked> aykırıları çıkarıp tekrarla</label>
         <button id="btnBtfa" class="primary" disabled>Bölgesel analiz yap</button>
+      </div>
+      <div id="btfaHomojenGrafikKutu" class="hidden" style="height:280px;margin-top:6px">
+        <canvas id="btfaHomojenGrafik"></canvas>
       </div>
       <div id="btfaStatus" class="status"></div>
       <div id="btfaSonuc"></div>

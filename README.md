@@ -21,12 +21,15 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/dem/` | (Opsiyonel) yerel DEM'ler (EPSG:4326 GeoTIFF, VRT, ERDAS .img veya ESRI Grid klasörü). ASTER 30 m grid'i `data/dem/aster30m/` altına yerleştirin. Yoksa Copernicus GLO-30 karoları otomatik indirilir (`data/dem/cache/`). |
 | `data/corine/` | (Opsiyonel) yerel CORINE 2018 GeoTIFF (sınıf kodları 111–523 veya grid kodu 1–44). Havzayı kapsayan yerel raster yoksa **EEA CLC2018 servisinden otomatik indirilir** (100 m, resmi lejand renklerinden sınıflandırılır, `data/corine/cache/` altına önbelleklenir). |
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
-| `data/stations/` | Varsayılan istasyon seti (`bir_cikti.kml`, 2315 istasyon). Adım 4'e girildiğinde otomatik kullanılır; arayüzden farklı bir KMZ/KML de yüklenebilir. |
+| `data/stations/` | Eski istasyon ağı (`bir_cikti.kml`, 2315 istasyon). **Artık otomatik yüklenmiyor** — istasyon numarası taşımadığı için ölçüm veri tabanına numarayla bağlanamıyor ve yağışını komşu istasyondan ödünç alıyordu. Dosya duruyor, arayüzden elle yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
-| `data/tables/mgm_plv_2020.json` | MGM 2020 PLV: 236 istasyonun 24 saatlik tekerrürlü yağışları (P2–P500) + 14 PLV oranı. `MGM PLV 2020 son2.xlsx`'ten `tools/extract_mgm_plv.py` ile üretilir. Adım 5'te istasyon başına P2–P100 ve DPLV seçimi için kullanılır (`/api/mgm-stations`). |
+| `data/tables/mgm_plv_2020.json` | MGM 2020 tablosu — **yalnız 14 plüviyograf (PLV) oranı** için kullanılır. Dosyadaki P2–P500 sütunları duruyor ama `/api/mgm-stations` bunları **bilerek döndürmüyor**: P2–P100 artık `data/mgm/mgm.sqlite`'taki ham ölçümden hesaplanıyor. İki yağış kaynağını paralel tutmak, bir projede hangisinin kullanıldığını belirsiz bırakıyordu. `tools/extract_mgm_plv.py` ile üretilir. |
+| `data/zemin/` | `hsg_tr.tif` — hidrolojik zemin grubu (A/B/C/D), ~1 km, 80 kB. SoilGrids dokusundan Saxton & Rawls Ksat'ı hesaplanıp NRCS NEH-630 Tablo 7-1 sınırlarına vurulur; grup **profildeki en geçirimsiz katmana** göre verilir. Türkiye: %92.3 C, %6.1 D, %1.6 B. Üretmek: `python tools/zemin_grubu_uret.py`. Ana kayaya derinliği içermez, bu yüzden **alt sınırdır** — dağlık havzada gerçek grup bir kademe daha geçirimsiz olabilir. |
+| `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 24+ tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 5'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
-| `data/agi/` | `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
+| `data/agi/` | ⚠ Eski yıllıkların (1979–1986) çıkarımında **118 pik kaydının başına fazladan bir rakam yapışmış** (D24A029 1981: 9500 m³/s, diğer 29 yıl 68–1033). NTFA/BTFA bunları varsayılan olarak eler ve hangisini neden elediğini sonuçta gösterir. `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
+| `data/yagis/` | `yagis_tr.tif` (yağış), `pet_tr.tif` (potansiyel evapotranspirasyon), `net_tr.tif` (net yağış = P − AET) — CHELSA v2.1, 1981–2010 normali, ~1 km piksel, toplam 6.6 MB. Haritada tematik katman; nokta ve havza alansal ortalaması sorgulanır. Yeniden üretmek: `python tools/yagis_haritasi_indir.py`. |
 | `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (6 adım)
@@ -43,12 +46,49 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    otomatik indirilir); seçilen hidrolojik zemin grubuna (A/B/C/D) göre
    `data/tables/corine_cn.json` tablosundan alansal ağırlıklı CN(II);
    CN(III) Excel'deki dönüşüm tablosuyla.
-4. **Thiessen** — Varsayılan `bir_cikti.kml` istasyonları otomatik yüklenir (veya
-   KMZ/KML yüklenir); Voronoi hücreleri havzaya kesilerek alan ağırlıkları
-   (DATAGİR H kolonu karşılığı) bulunur. Haritada yalnız pay alan istasyonlar çizilir.
-5. **Yağış** — Her istasyon satırı `Ad P2 P5 P10 P25 P50 P100 [OEY]` formatında
-   yapıştırılır; Thiessen ağırlıklı P24'ler hesaplanır. DPLV zaman-dağılım
-   istasyonu seçilir (TEKİRDAĞ/ÇORLU/KARTAL) veya 14 oran elle yapıştırılır.
+
+   **Zemin grubu havzanın toprağından otomatik seçilir** (`data/zemin/hsg_tr.tif`,
+   `/api/zemin-grubu`) ve gerekçesi ekranda yazar: hangi grubun havzanın yüzde
+   kaçını kapladığı, dayandığı Ksat aralığı. Kullanıcı değiştirebilir; baskın
+   grup %60'ın altındaysa "havza karışık" uyarısı çıkar.
+
+   ⚠ **Bu, hesabın en kritik girdisidir.** Karakurt havzasında (7500 km²,
+   Aras) yalnız zemin grubunu B'den C'ye almak Q100'ü **296 → 771 m³/s**
+   çıkarıyor; A ile D arasında on kat oynuyor. Daha önce açılır listede
+   gerekçesiz bir varsayılan (B) seçili geliyordu ve kullanıcı dokunmazsa
+   sonucu sessizce o belirliyordu — oysa üretilen ülke haritasına göre B,
+   Türkiye'nin **%1.6**'sına uyuyor (%92.3 C, %6.1 D). O varsayılan kaldırıldı.
+4. **Thiessen** — Varsayılan küme **MGM ölçüm ağıdır**: en az 10 yıllık günlük
+   maksimum yağış ölçümü olan **1184 istasyon** (`data/mgm/mgm.sqlite`). Voronoi
+   hücreleri havzaya kesilerek alan ağırlıkları (DATAGİR H kolonu karşılığı)
+   bulunur; haritada yalnız pay alan istasyonlar çizilir. Kendi KMZ/KML'nizi de
+   yükleyebilirsiniz.
+
+   Küme bilerek ölçümü olan istasyonlarla sınırlı: böylece **her hücre kendi
+   ölçtüğü yağışı taşır** ve Adım 5'teki P2–P100 bağlanması kimlik eşleşmesidir
+   — koordinat ya da ad üzerinden bulanık eşleştirme yoktur. Bedeli açık olsun:
+   MGM ağının seyrek olduğu bölgelerde hücreler büyür ve havza ortalaması daha
+   az noktadan hesaplanır. Karşılığında hiçbir hücre başka istasyonun yağışını
+   taşımaz.
+5. **Yağış** — **📊 Ölçümden hesapla** düğmesi Thiessen istasyonlarını MGM ölçüm
+   veritabanına (`data/mgm/mgm.sqlite`) bağlar ve P2–P100'ü her istasyonun
+   **yıllık en büyük günlük yağış** serisinden frekans analiziyle üretir — NTFA
+   ile aynı hesap (altı dağılım, moment yöntemi, Smirnov-Kolmogorov ile kabul).
+   Değerler elle de girilebilir/yapıştırılabilir; OEY her hâlde elle girilir.
+   Tabloda her satırın **kaynağı** görünür: kaç yıllık seri, kabul edilen
+   dağılım, eşleşmenin nasıl kurulduğu. Varsayılan kümede istasyon zaten ölçüm
+   veri tabanının kendi kaydı olduğu için eşleşme **kimlik** eşleşmesidir
+   (`kod`, mesafe 0). Yalnız elle yüklenen KMZ veya haritaya konan noktalar
+   koordinatla bağlanır; orada da yarıçap içinde ≥25 yıllık seri varsa daha
+   yakındaki kısa seriye yeğlenir — Lüleburgaz'da 5.7 km'de 10 yıllık, 6.3 km'de
+   74 yıllık istasyon var.
+   DPLV zaman-dağılım istasyonu ayrıca seçilir (TEKİRDAĞ/ÇORLU/KARTAL, ya da
+   MGM 2020 tablosundan) veya 14 oran elle yapıştırılır.
+
+   ⚠ **P100'e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor:
+   komşu iki istasyonda SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl)
+   P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var; aykırı bir değer
+   gördüğünüzde satırdan başka istasyon seçin.
 6. **Hesap** — Tek tıkla:
    * **DSİ Sentetik**: qp = 414·A⁻⁰·²²⁵·(L·Lc/√S)⁻⁰·¹⁶ → BH2 boyutsuz birim
      hidrograf 0.5 sa adıma örneklenir; 2/4/6/8/12/18/24 saatlik sağanaklar
@@ -94,6 +134,20 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    aynı üç bloktur: tekerrür debileri, istatistik parametreler, K-S testi.
    `backend/core/tfa.py`, golden test: `backend/tests/test_tfa_golden.py`.
 
+   **Aykırı değer testi (Grubbs-Beck, Bulletin 17B).** Her analizde otomatik
+   koşar ve sonuçla birlikte raporlanır: n, K<sub>n</sub>, üst/alt sınır ve
+   sınır dışında kalan değerler. "Aykırıları çıkarıp karşılaştır" kutusu
+   işaretlenirse analiz aykırısız bir kez daha koşulur ve iki sonuç tekerrür
+   tekerrür yan yana, yüzde farkıyla verilir. **Asıl sonuç değişmez.**
+
+   ⚠ **Yüksek aykırıyı atmak standart uygulama değildir.** Bulletin 17B, yüksek
+   aykırıyı *hatalı olduğu kanıtlanmadıkça* seride tutmayı söyler: o değer üst
+   kuyruk hakkındaki en bilgilendirici gözlemdir ve atılması tasarım debisini
+   emniyetsiz tarafa, düşüğe çeker. Düşük aykırılar ise rutin olarak sansürlenir.
+   Karşılaştırma bu yüzden var — atmak için değil, ne kadar fark ettiğini
+   görmek için. (Aykırı atmakla "düzelmek" de garanti değil: D24A029'da tek
+   düşük aykırının çıkarılması Q100'ü **1301'den 1481 m³/s'ye yükseltiyor**.)
+
    Aynı adımın altında **BTFA (Bölgesel Taşkın Frekans Analizi)** vardır:
    listeden birden çok AGİ işaretlenir, her biri için NTFA yapılır, boyutsuz
    büyüme eğrileri (Q<sub>T</sub>/Q<sub>2</sub>) ortalanarak bölgesel eğri
@@ -108,8 +162,16 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    BTFA sonucunda **homojenlik testi** (Dalrymple, 1960) da verilir: her
    istasyonun kendi Q<sub>10</sub>/Q<sub>2</sub> oranı bölgesel eğri üzerinde
    hangi tekerrüre denk geliyor bulunur ve serinin kısalığından beklenen %95
-   bandıyla karşılaştırılır. Banda sığmayan istasyonlar kırmızı işaretlenir;
-   onları listeden çıkarıp analizi yenilemek bölgeyi homojenleştirir.
+   bandıyla karşılaştırılır. Sonuç **grafik olarak** da çizilir: yatayda kayıt
+   uzunluğu, düşeyde eşdeğer tekerrür (log), taralı alan %95 zarfı — kısa
+   serilerde bandın ne kadar genişlediği ancak böyle görülüyor. Banda sığmayan
+   istasyonlar kırmızı üçgenle gösterilir.
+
+   **"Aykırıları çıkarıp tekrarla"** kutusu işaretliyse analiz bir kez daha
+   koşulur ve iki durum yan yana verilir: her tekerrür için tüm istasyonlarla
+   ve aykırısız debiler, aralarındaki yüzde fark (%10'u aşan farklar kırmızı),
+   aykırısız büyüme eğrisi ve indeks debi bağıntısı. Aykırıyı atma kararı,
+   hangi sayının ne kadar değiştiği görülmeden verilmemeli.
 
    Aynı adımda **MMY (Muhtemel Maksimum Yağış)** hesabı vardır: bir meteoroloji
    istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle
@@ -223,6 +285,110 @@ paketinde bulunur:
 
 Arayüz `.sid` seçilir seçilmez (`/api/raster-converter`) ortama uygun uyarıyı
 gösterir; desteklenmiyorsa yükleme hiç başlatılmaz.
+
+## İklim katmanları (yağış · PET · net yağış)
+
+Harita panelindeki **🌧 İklim katmanı** kutusuyla açılır, açılır listeden üç
+katman seçilir. Hepsi aynı kaynak, dönem ve ızgaradan gelir: **CHELSA v2.1**,
+1981–2010 normali, 30 arc-sec ≈ 1 km piksel, CC0.
+
+| katman | nedir | Türkiye ort. |
+|---|---|---|
+| **P** | yıllık toplam yağış (bio12) | 740 mm |
+| **PET** | potansiyel evapotranspirasyon, Penman-Monteith | 1138 mm |
+| **net** | P − AET, ≈ yıllık ortalama akış yüksekliği | 170 mm |
+
+Neden CHELSA: 1005 MGM istasyonuna karşı yapılan karşılaştırmada Türkiye'de
+yıllık yağışta en yüksek uyumu veren ızgara veri seti — Lin uyum katsayısı
+**0.824**; ERA5-Land 0.760, CHIRPS 0.742, WorldClim 0.712 (Keserci vd. 2026,
+*Int. J. Climatology*). WorldClim, Akdeniz'in dağlık kesiminde yükselti–yağış
+ilişkisini ters çevirecek kadar sapıyor (CCC 0.081); CHELSA orografik etkiyi
+hesaba katıyor.
+
+**Net yağış neden P − PET değil:** Türkiye'de PET (1138 mm) yağıştan (740 mm)
+büyüktür; P − PET neredeyse her yerde negatif çıkar ve bu *iklimsel su
+açığıdır*, akış değildir — buharlaşabilecek su düşenden çok olamaz.
+
+**Neden aylık hesap:** Net yağış yıllık toplamlardan değil, **aylık su
+bütçesinden** çıkarılır. Türkiye'de yağış kışa, buharlaşma isteği yaza yığılır;
+yıllık toplamlar bu karşıtlığı yutup kışın doğrudan akışa geçen suyu görmez.
+Her ay için: 0 °C altındaki yağış kar olarak birikir ve sıcaklıkla erir
+(derece-gün, 2.5 mm/°C/gün); giren su PET'i aşarsa toprak dolar, AWC'yi aşan
+kısım akışa geçer; açık kalırsa toprak neminden çekilir. Başlangıç neminin
+etkisi sönsün diye 12 ay üç kez döndürülür.
+
+**AWC toprak verisinden gelir.** Kullanılabilir su tutma kapasitesi sonucun
+baskın parametresidir (50 mm ile 200 mm arasında ülke akışı 180'den 98 km³'e
+iner), bu yüzden sabit varsayılmaz: ISRIC **SoilGrids v2.0**'dan (1 km, CC-BY)
+kum, kil, organik karbon ve iri taneli malzeme okunup Saxton & Rawls (2006)
+pedotransfer fonksiyonlarıyla türetilir — `python tools/awc_soilgrids.py`.
+Derinlik kademeli yazılır (0-5 … 0-100 cm için 7, 19, 37, 71, 116 mm), çünkü
+hidrolojik olarak etkin derinlik kalibre edilen bir parametredir.
+
+### Katman ölçüme oturtulmuştur
+
+Ham Thornthwaite-Mather bütçesi akışı **%35 eksik** veriyordu. Üç yapısal
+parametre — etkin toprak derinliği, PET çarpanı (CHELSA'nın referans-çim
+PET'ini gerçek örtüye ölçekler) ve doygunluk fazlası hızlı akış payı —
+1981-2010 arasında en az 20 tam su yılı ölçmüş **41 doğal AGİ** havzasına
+oturtuldu: `tools/net_kalibrasyon.py`, doğrulama `tools/net_yagis_dogrulama.py`.
+Sonuç `etkin derinlik 0-100 cm, pet_carpan 0.80, hizli_pay 0.70`.
+
+Doğallık, rezervuar envanteri olmadığı için serinin kendisinden elenir:
+Mann-Kendall (gidiş), Pettitt (sıçrama) ve DEM havzasının DSİ'nin bildirdiği
+alanla %20 içinde uyuşması. DSİ havza 5/6/7 (Gediz, Küçük ve Büyük Menderes)
+tümüyle dışlanır — sulama alımı kayıttan önce başladığı için istatistiksel
+eleme göremiyor; oradaki AGİ'ler alımdan *sonraki* akışı ölçüyor, katman ise
+alımdan *önceki* doğal akışı hesaplıyor.
+
+| | n | r | NSE | yanlılık |
+|---|--:|--:|--:|--:|
+| ham katman | 41 | — | +0.42 | −35% |
+| **kalibre katman** | 41 | **0.86** | **+0.72** | **+1%** |
+| çapraz doğrulama (5 kat) | 41 | — | +0.58 | |
+
+Skor 5 katlı çapraz doğrulamayla da verilir: parametre, skorun ölçüldüğü
+istasyonları görmez. Aynı istasyonlara uydurup sonra onlarla "doğruladık"
+demek hiçbir şey kanıtlamaz; iki sayı arasındaki fark kazancın ne kadarının
+gerçek olduğunu söyler.
+
+**Kalan zayıflıklar — kapatılmadılar:** Akdeniz (r 0.97, NSE 0.82), İç Anadolu
+(0.89 / 0.74) ve Karadeniz (0.84 / 0.59) tutuyor. **Ege/Marmara, sulama
+havzaları çıkarıldıktan sonra da tutmuyor** (r 0.43, NSE 0.01; Susurluk ve
+Meriç'te ~+70% fazla). Aras havzasında %44 fazla veriyor — kar egemen
+havzalar, derece-gün katsayısı (2.5 mm/°C/gün) kalibre *edilmedi*. Sonuç
+güzelleşene kadar istasyon elemek kalibrasyonu anlamsızlaştıracağı için
+bunlara dokunulmadı.
+
+**Ülke ölçeğinde:** Türkiye sınırı içinde P 740 mm (579 km³), net 280 mm
+(219 km³), akış katsayısı **0.379** — DSİ'nin kendi su bütçesindeki
+186/501 = 0.371 ile neredeyse birebir. Hacmin DSİ'nin 186 km³'ünden yüksek
+çıkması akış üretiminden değil **yağıştan** geliyor: CHELSA Türkiye'ye 740 mm
+veriyor, MGM/DSİ 574 mm. Bu, katmanın değil kaynak veri setinin farkıdır.
+
+Sonuç kuraklık gradyanı boyunca doğru davranıyor: Konya'da **net = 0** —
+kapalı havzada düşen suyun tamamı buharlaşır. Akışın büyük kısmı
+kış+ilkbaharda, Nisan'da zirve (kar erimesi), Ağustos'ta ~2 mm.
+
+Katman açıkken **haritaya tıklayınca** o noktanın P, PET, AET, net yağış ve
+akış katsayısı balonda okunur; seçili katmanın satırı koyu gösterilir. Outlet
+seçimi, ara havza noktası veya istasyon ekleme kipi açıkken sorgu yapılmaz —
+o kipler önceliklidir.
+
+**Havza ortalaması** düğmesi üç katmanın da **alansal ortalamasını** verir
+(medyan, aralık, sapma) ve bunlardan AET ile akış katsayısını türetir — dağlık
+havzada tek noktanın değeri yanıltıcıdır. `backend/core/yagis.py`.
+
+⚠ **Ölçek uyarısı:** CHELSA'nın Türkiye ortalaması 740 mm, MGM'nin uzun dönem
+istasyon ortalaması ise 574 mm. Fark, istasyonların ovalarda yoğunlaşıp yüksek
+kesimleri örneklememesinden de kaynaklanabilir (o durumda 740 daha doğru bir
+alansal ortalamadır), CHELSA'nın ıslak sapmasından da. Aynı şekilde ω = 2.6
+ile ülke akışı 133 km³ çıkıyor; yaygın olarak anılan ~186 km³'e ω ≈ 2.0
+karşılık geliyor. Literatür değerini korudum — ω'yı ulusal toplamı tutturmak
+için değiştirmek, yağıştaki olası sapmayı AET içinde gizlemek olurdu.
+Kesin iş için havza ortalamasını yakındaki bir AGİ'nin **özgül verimiyle**
+(Su Potansiyeli sekmesi) karşılaştırın; gerekirse
+`python tools/yagis_haritasi_indir.py` içindeki `FU_OMEGA` değiştirilebilir.
 
 ## KMZ dışa aktarımı
 

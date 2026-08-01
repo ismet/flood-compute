@@ -271,11 +271,62 @@ DAGILIM_ADI = {
 }
 
 
-def ozet(x, istasyon="", yillar=None):
+def grubbs_beck(x):
+    """Grubbs-Beck aykırı değer testi — USGS Bulletin 17B'nin standardı.
+
+    Logaritmik uzayda çalışır (taşkın serileri log-normal/log-Pearson ailesine
+    uyduğu için) ve ortalamadan K_n standart sapma uzaktaki değerleri aykırı
+    sayar:
+
+        üst sınır = exp(x̄ + K_n·s)        alt sınır = exp(x̄ − K_n·s)
+
+    K_n, Bulletin 17B'nin %10 anlamlılık düzeyi için verdiği polinomdur
+    (10 ≤ n ≤ 149 aralığında geçerli).
+
+    YÜKSEK AYKIRIYI ÇIKARMAK STANDART UYGULAMA DEĞİLDİR. Bulletin 17B, yüksek
+    aykırıyı HATALI OLDUĞU KANITLANMADIKÇA seride TUTMAYI söyler: o değer üst
+    kuyruk hakkındaki en bilgilendirici gözlemdir ve atılması tasarım debisini
+    olduğundan düşük, yani EMNİYETSİZ tarafa çeker. Düşük aykırılar ise rutin
+    olarak sansürlenir; küçük değerler momentleri bozarak üst kuyruğu da bozar.
+
+    Bu yüzden burada aykırılar otomatik ATILMAZ — iki sonuç yan yana verilir,
+    karar kullanıcınındır.
+    """
+    n = len(x)
+    if n < 10:
+        return {"uygulanabilir": False,
+                "neden": f"Grubbs-Beck en az 10 yıl ister, {n} yıl var"}
+    pozitif = [v for v in x if v > 0]
+    if len(pozitif) < 10:
+        return {"uygulanabilir": False, "neden": "10'dan az pozitif değer"}
+
+    y = [math.log(v) for v in pozitif]
+    ort = _mean(y)
+    s = math.sqrt(sum((v - ort) ** 2 for v in y) / (len(y) - 1))
+    kn = (-3.62201 + 6.28446 * n ** 0.25 - 2.49835 * n ** 0.5
+          + 0.491436 * n ** 0.75 - 0.037911 * n)
+    ust = math.exp(ort + kn * s)
+    alt = math.exp(ort - kn * s)
+    return {
+        "uygulanabilir": True, "n": n, "kn": round(kn, 4),
+        "ust_sinir": ust, "alt_sinir": alt,
+        "yuksek": sorted((v for v in x if v > ust), reverse=True),
+        "dusuk": sorted(v for v in x if 0 < v < alt),
+        "uyari": ("Bulletin 17B: yüksek aykırı, hatalı olduğu kanıtlanmadıkça "
+                  "seride TUTULUR — atmak tasarım debisini emniyetsiz tarafa, "
+                  "düşüğe çeker."),
+    }
+
+
+def ozet(x, istasyon="", yillar=None, aykiri_disla=False):
     """SONUÇLAR sayfasının karşılığı: tam NTFA çıktısı.
 
     x       : yıllık maksimum akımlar (m³/s), sıra önemsiz
     yillar  : x ile aynı uzunlukta yıl listesi (opsiyonel, veri tablosu için)
+    aykiri_disla : Grubbs-Beck aykırıları çıkarılıp analiz bir kez daha koşulur;
+                   ikinci sonuç `aykirisiz` altında döner. Asıl sonuç DEĞİŞMEZ —
+                   amaç aykırının ne kadar fark yarattığını göstermek, onu
+                   sessizce atmak değil.
     """
     ist = istatistikler(x)
     q = kuantiller(x, ist)
@@ -290,8 +341,9 @@ def ozet(x, istasyon="", yillar=None):
              "yil": (sorted(yillar)[i] if yillar and len(yillar) == n else None),
              "x": xv, "sirali": xs[i], "amprik_yuzde": (i + 1) / (n + 1) * 100}
             for i, xv in enumerate(x)]
+    gb = grubbs_beck(x)
 
-    return {
+    out = {
         "istasyon": istasyon,
         "veri": veri,
         "parametreler": {
@@ -312,4 +364,20 @@ def ozet(x, istasyon="", yillar=None):
         "kabul_edilen": kabul,
         "kabul_edilen_adi": DAGILIM_ADI.get(kabul, ""),
         "kabul_edilen_q": q.get(kabul) if kabul else None,
+        "aykiri": gb,
     }
+    if aykiri_disla and gb.get("uygulanabilir"):
+        atilacak = set(gb["yuksek"]) | set(gb["dusuk"])
+        kalan = [(v, yillar[i] if yillar and len(yillar) == len(x) else None)
+                 for i, v in enumerate(x) if v not in atilacak]
+        if len(kalan) >= 10:
+            ay = ozet([v for v, _ in kalan], istasyon=istasyon,
+                      yillar=[y for _, y in kalan] if all(y for _, y in kalan) else None,
+                      aykiri_disla=False)
+            ay["cikarilan"] = {"yuksek": gb["yuksek"], "dusuk": gb["dusuk"]}
+            out["aykirisiz"] = ay
+        else:
+            out["aykirisiz_hata"] = (
+                f"Aykırılar çıkarılınca {len(kalan)} yıl kalıyor; frekans "
+                "analizi için en az 10 yıl gerekli.")
+    return out
