@@ -1800,7 +1800,8 @@ async function zeminGrubunuBelirle() {
   try {
     const r = await api("/api/zemin-grubu", { havza_geojson: S.havza });
     if (!r.var) {
-      el.innerHTML = `<span class="warn">⚠ Zemin grubu katmanı kurulu değil — grubu elle seçin
+      el.innerHTML = `<span class="warn">⚠ Zemin grubu katmanı kurulu değil — grup topraktan
+        belirlenemedi, listede <b>${$("inpSoil").value}</b> duruyor (varsayılan). Elle kontrol edin.
         (<code>python tools/zemin_grubu_uret.py</code>)</span>`;
       return;
     }
@@ -1813,7 +1814,10 @@ async function zeminGrubunuBelirle() {
       + (r.kararsiz ? ` · <span class="warn">⚠ baskın grup zayıf, havza karışık — elle kontrol edin</span>` : "")
       + `<br>⚠ ${r.uyari}</span>`;
   } catch (e) {
-    el.innerHTML = `<span class="warn">⚠ Zemin grubu belirlenemedi (${e.message}) — elle seçin</span>`;
+    // Sessizce varsayılana düşmek, bu parametrede kabul edilemez: hangi grubun
+    // kullanıldığı ve topraktan mı geldiği her hâlde yazılmalı.
+    el.innerHTML = `<span class="warn">⚠ Zemin grubu belirlenemedi (${e.message}) —
+      listede <b>${$("inpSoil").value}</b> duruyor (varsayılan, ölçümden gelmiyor). Elle kontrol edin.</span>`;
   }
 }
 

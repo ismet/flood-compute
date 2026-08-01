@@ -277,7 +277,12 @@
       yoksa EEA CLC2018 servisinden <b>otomatik indirilir</b>.</p>
       <div class="grid2">
         <label>Zemin grubu
-          <select id="inpSoil"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+          <!-- C işaretli, çünkü işaretsiz bırakmak tarayıcıya İLK seçeneği (A)
+               seçtirir: en geçirimli grup, en düşük CN, en düşük debi. Havza
+               çıkarılır çıkarılmaz zeminGrubunuBelirle() bunu topraktan gelen
+               değerle değiştirir; C yalnız o belirlenemezse kalır ve
+               Türkiye'nin %92.3'ünün grubudur (bkz. tools/zemin_grubu_uret.py). -->
+          <select id="inpSoil"><option>A</option><option>B</option><option selected>C</option><option>D</option></select>
         </label>
         <button id="btnCN" class="primary">CORINE'den CN hesapla</button>
       </div>
