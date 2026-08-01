@@ -1736,7 +1736,7 @@ async function useDefaultStations() {
       return setStatus("thStatus",
         "İstasyon kümesi boş (python tools/mgm_veritabani_olustur.py)", "err");
     await loadStationSet(r.istasyonlar,
-      `${r.istasyonlar.length} istasyon — ${r.olcumlu} ölçümlü (MGM), ${r.ek} ek (KML)`);
+      `MGM ölçüm ağı — ${r.istasyonlar.length} istasyon (≥${r.en_az_yil} yıl yağış ölçümü)`);
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
 $("btnDefaultSt").onclick = useDefaultStations;

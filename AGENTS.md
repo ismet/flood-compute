@@ -112,11 +112,12 @@ backend/core/         — Computation engine (no framework dependency)
                           field and serves only pluviograph (PLV) ratios. Two
                           parallel rainfall sources made it unknowable which one
                           a project actually used.
-                          Thiessen matching is by COORDINATE first (KMZ names are
-                          free text; dozens of Turkish villages share a name),
-                          and prefers a ≥25-year record inside the radius over a
-                          nearer short one — Lüleburgaz has a 10-year gauge at
-                          5.7 km and a 74-year one at 6.3 km.
+                          The step-4 Thiessen set IS this database, so step-5
+                          matching is by `kod` — identity, not search. Coordinate
+                          matching survives only for uploaded KMZs and
+                          hand-placed points; there it prefers a ≥25-year record
+                          inside the radius over a nearer short one (Lüleburgaz
+                          has a 10-year gauge at 5.7 km, a 74-year one at 6.3).
 frontend/             — 3 files: index.html, app.js (all logic), style.css
 data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
                         CORINE class → rational C range matrix)
@@ -152,12 +153,13 @@ data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
 ```
 data/tables/*.json          — 14 Excel-extracted lookup tables (do not edit by hand)
 data/regions/YZD_ALANLAR.kmz — A/B/C flood region polygons
-data/stations/bir_cikti.kml  — legacy 2315-station network. NOT obsolete: the
-                               step-4 default set is this MERGED with mgm.sqlite
-                               (1267 measured + 1733 legacy-only = 3000). The
-                               measured DB feeds P24; the legacy net keeps
-                               Thiessen geometry alive where MGM is sparse.
-data/mgm/mgm.sqlite          — MGM observation sheets, 1290 stations (13 MB)
+data/stations/bir_cikti.kml  — legacy 2315-station network, NO LONGER auto-loaded.
+                               It carries no station number, so it cannot be
+                               joined to the measurement DB by identity and its
+                               cells borrowed rainfall from a neighbour. Kept on
+                               disk; still uploadable through /api/stations.
+data/mgm/mgm.sqlite          — MGM observation sheets, 1290 stations (13 MB).
+                               1184 of them (≥10 yr) ARE the step-4 Thiessen set.
 data/akarsu/akarsu.sqlite    — DSİ river network (405k lines, 68 MB, committed)
 data/agi/agi.sqlite          — DSİ+EİE annual peak flows (2732 stations, 3.8 MB)
 data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB)
@@ -214,7 +216,7 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `POST /api/yil-ara` | Return period from Q/Q10/Q100 (analytical inverse) |
 | `POST /api/rainfall/parse` | Parse pasted rainfall table |
 | `POST /api/yzd-region` | YZD region (A/B/C) from basin |
-| `GET /api/stations/default` | Default Thiessen set: mgm.sqlite merged with the legacy station KML |
+| `GET /api/stations/default` | Default Thiessen set: MGM stations with ≥`en_az_yil` of rainfall record |
 | `GET /api/mgm-stations` | MGM 2020 PLV (236 stations) |
 | `GET /api/dplv` | DPLV station list |
 | `GET /api/geocode` | OSM Nominatim (Turkey) |

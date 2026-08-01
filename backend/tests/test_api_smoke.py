@@ -217,30 +217,31 @@ else:
     assert eski and "plv" in eski[0], "PLV oranları kayboldu"
     assert "P24" not in eski[0], "eski tablo hâlâ P24 döndürüyor"
 
-    # Adım 4'ün varsayılan kümesi: ölçüm veri tabanı + eski KML BİRLEŞİMİ.
-    # Eski ağ kaldırılmadı; MGM'nin seyrek olduğu bölgelerde Thiessen
-    # geometrisini o taşıyor. İki taraf da kümede olmalı.
+    # Adım 4'ün varsayılan kümesi YALNIZ ölçüm veri tabanıdır. Her istasyonun
+    # kendi yağış serisi olmalı — kümede ölçümsüz istasyon bulunması, bir
+    # Thiessen hücresinin başka istasyonun yağışını taşıması demektir.
     d = c.get("/api/stations/default").json()
     sts = d["istasyonlar"]
-    assert d["olcumlu"] > 1000, f"ölçümlü istasyon az: {d['olcumlu']}"
-    assert d["ek"] > 1000, f"eski KML kümesi kayboldu: {d['ek']}"
-    assert len(sts) == d["olcumlu"] + d["ek"]
+    assert d["kaynak"] == "mgm", f"varsayılan küme MGM dışı: {d.get('kaynak')}"
+    assert len(sts) > 1000, f"küme küçük: {len(sts)}"
+    assert all(s.get("kod") for s in sts), "kümede kodsuz (ölçümsüz) istasyon var"
+    assert all(s["yil_sayisi"] >= d["en_az_yil"] for s in sts)
     assert all(s.get("lat") is not None and s.get("lon") is not None for s in sts)
-    # kodlu istasyonlar Adım 5'te kimlikle eşleşmeli, arama yapılmamalı
-    kodlu = next(s for s in sts if s.get("kod") and s["yil_sayisi"] >= 25)
+
+    # Varsayılan kümeden gelen istasyon Adım 5'te KİMLİKLE eşleşmeli
+    kodlu = next(s for s in sts if s["yil_sayisi"] >= 25)
     e2 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
         {"ad": kodlu["name"], "lat": kodlu["lat"], "lon": kodlu["lon"],
          "kod": kodlu["kod"]}]}).json()["eslesme"]
     assert e2[0]["yontem"] == "kod" and e2[0]["mesafe_km"] == 0.0
-    # kodsuz (eski KML) istasyon koordinatla bağlanmalı
-    kodsuz = next(s for s in sts if not s.get("kod"))
+    # Elle yüklenen KMZ / haritaya konan nokta (kodsuz) koordinatla bağlanır
     e3 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
-        {"ad": kodsuz["name"], "lat": kodsuz["lat"], "lon": kodsuz["lon"],
+        {"ad": "Elle konan nokta", "lat": 41.05, "lon": 27.80,
          "kod": None}]}).json()["eslesme"]
-    assert e3[0]["yontem"] in ("koordinat", "koordinat-kısa", "ad", None)
+    assert e3[0]["yontem"] in ("koordinat", "koordinat-kısa"), e3[0]["yontem"]
 
-    print(f"Thiessen kümesi OK: {len(sts)} istasyon "
-          f"({d['olcumlu']} ölçümlü + {d['ek']} eski ağdan)")
+    print(f"Thiessen kümesi OK: {len(sts)} istasyon, hepsi ≥{d['en_az_yil']} yıl "
+          f"kendi ölçümüyle")
     print(f"MGM/yağış frekansı OK: {b['istasyon']} istasyon, "
           f"{b['frekansa_uygun']} frekansa uygun, {kod} → "
           f"P2={p['2']} P100={p['100']} mm ({f['kabul_edilen_adi']}, "

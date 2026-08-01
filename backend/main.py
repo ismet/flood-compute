@@ -488,30 +488,22 @@ def api_yzd_region(req: CNReq):
 
 
 @app.get("/api/stations/default")
-def api_stations_default():
-    """Thiessen'in varsayılan istasyon kümesi — MGM ölçüm veri tabanı + eski KML.
+def api_stations_default(en_az_yil: int = 10):
+    """Thiessen'in varsayılan istasyon kümesi — yalnız MGM ölçüm veri tabanı.
 
-    İki kaynak birleştirilir, silinmez: ölçüm veri tabanı (`data/mgm/mgm.sqlite`)
-    P24'ü besler, eski `data/stations/bir_cikti.kml` ise MGM ağının seyrek
-    olduğu bölgelerde Thiessen geometrisini ayakta tutar. Tekilleştirme
-    `mgm.birlestir()` içinde, MGM koordinatlarının derece-dakika çözünürlüğüne
-    göre ayarlanmış eşiklerle yapılır.
+    Yıllık maksimum serisi `en_az_yil` uzunluğunda olan istasyonlar döner, yani
+    her Thiessen hücresi kendi ölçtüğü yağışı taşır ve Adım 5'teki P24
+    bağlanması kimlik eşleşmesidir.
 
-    Kendi kümesini kullanmak isteyen `POST /api/stations` ile KMZ/KML yükler.
+    Eski `data/stations/bir_cikti.kml` artık otomatik yüklenmiyor; dosya
+    duruyor ve `POST /api/stations` ile elle yüklenebilir (o zaman istasyonlar
+    kod taşımadığı için P24 en yakın uygun MGM istasyonundan koordinatla gelir).
     """
     from backend.core import mgm
     try:
-        kml = None
-        d = os.path.join(ROOT, "data", "stations")
-        if os.path.isdir(d):
-            aday = [os.path.join(d, f) for f in sorted(os.listdir(d))
-                    if f.lower().endswith((".kmz", ".kml"))]
-            kml = aday[0] if aday else None
-        sts = mgm.thiessen_kumesi(kml)
-        n_olcum = sum(1 for s in sts if s.get("kod"))
-        return {"istasyonlar": sts, "kaynak": "mgm+kml",
-                "dosya": f"mgm.sqlite + {os.path.basename(kml)}" if kml else "mgm.sqlite",
-                "olcumlu": n_olcum, "ek": len(sts) - n_olcum}
+        sts = mgm.thiessen_kumesi(en_az_yil)
+        return {"istasyonlar": sts, "kaynak": "mgm", "dosya": "mgm.sqlite",
+                "en_az_yil": en_az_yil, "olcumlu": len(sts)}
     except Exception as e:
         return _err(e)
 
