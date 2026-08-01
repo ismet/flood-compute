@@ -967,6 +967,9 @@ class TfaGirdi(BaseModel):
     # işaret × oran). Varsayılan AÇIK: kapalıyken D24A029'un bozuk 1981 kaydı
     # Q100'ü 1301 yerine 7314 m³/s veriyordu.
     olanaksizi_at: bool = True
+    # Grubbs-Beck aykırılarını çıkarıp analizi bir kez daha koş; ikinci sonuç
+    # `aykirisiz` altında döner. Asıl sonuç değişmez — amaç karşılaştırma.
+    aykiri_disla: bool = False
 
 
 @app.post("/api/tfa")
@@ -988,7 +991,8 @@ def api_tfa(g: TfaGirdi):
             ad = f"{ist['kod']} {ist['ad']}".strip()
         if not x:
             raise ValueError("Analiz için seri gerekli (kod ya da x)")
-        sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar)
+        sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar,
+                         aykiri_disla=g.aykiri_disla)
         if g.kod:
             sonuc["istasyon_bilgi"] = agi.istasyon(g.kod)
         # Elenen kayıtlar sonuçla birlikte döner: hangi değerin neden analiz

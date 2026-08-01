@@ -112,6 +112,15 @@ backend/core/         — Computation engine (no framework dependency)
                           value over closed basins (Konya: P=389, AET=389, net=0).
                           Any masking here must compare against src.nodata.
   tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
+                          plus the Grubbs-Beck outlier test (Bulletin 17B),
+                          always reported, never auto-applied. aykiri_disla=True
+                          reruns without the outliers and returns it alongside
+                          under `aykirisiz`; the primary result is untouched.
+                          17B keeps high outliers unless proven erroneous —
+                          dropping them biases the design flood LOW, which is
+                          the unsafe direction. Removing outliers does not even
+                          reliably lower the answer: on D24A029 censoring one
+                          low outlier RAISES Q100 from 1301 to 1481.
   btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
   su.py                 — Water potential: basin → nearby gauges → record gaps →

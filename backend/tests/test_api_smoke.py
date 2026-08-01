@@ -281,3 +281,29 @@ if b.get("var"):
         assert q1 < q0 / 3, f"eleme Q100'ü düşürmedi: {q0:.0f} -> {q1:.0f}"
         print(f"Bozuk kayıt elemesi OK: D24A029 Q100 {q0:.0f} -> {q1:.0f} m³/s "
               f"({len(el)} kayıt elendi)")
+
+# --- Grubbs-Beck aykırı testi (Bulletin 17B) + aykırısız karşılaştırma
+if b.get("var"):
+    ay = c.post("/api/tfa", json={"kod": "D24A029", "aykiri_disla": True}).json()
+    if "hata" not in ay:
+        a = ay["aykiri"]
+        assert a["uygulanabilir"] and a["n"] >= 10
+        assert a["alt_sinir"] < a["ust_sinir"], a
+        # sınırlar dışındaki her değer listelenmiş olmalı
+        icerik = set(a["yuksek"]) | set(a["dusuk"])
+        for k in ay["veri"]:
+            v = k["x"]
+            if v > a["ust_sinir"] or 0 < v < a["alt_sinir"]:
+                assert v in icerik, f"{v} sınır dışında ama aykırı listesinde yok"
+            else:
+                assert v not in icerik, f"{v} sınır içinde ama aykırı sayılmış"
+        # aykırısız koşu ya sonuç ya gerekçe döndürmeli, sessiz kalmamalı
+        assert ("aykirisiz" in ay) or ("aykirisiz_hata" in ay)
+        if "aykirisiz" in ay:
+            assert ay["aykirisiz"]["parametreler"]["yil_sayisi"] < a["n"]
+            # asıl sonuç DEĞİŞMEMELİ — aykırı atmak varsayılan davranış değil
+            assert ay["parametreler"]["yil_sayisi"] == a["n"]
+        print(f"Aykırı testi OK: Kn={a['kn']}, yüksek={len(a['yuksek'])}, "
+              f"düşük={len(a['dusuk'])}, aykırısız="
+              + (f"{ay['aykirisiz']['parametreler']['yil_sayisi']} yıl"
+                 if "aykirisiz" in ay else "yetersiz seri"))

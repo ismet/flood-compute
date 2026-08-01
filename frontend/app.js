@@ -636,6 +636,52 @@ async function agiKatmanAc() {
 $("btnAgiHavza").onclick = agiYukle;
 
 /* ---- NTFA sonuç tablosu (Excel SONUÇLAR sayfasının karşılığı) ---- */
+/* Grubbs-Beck aykırı testi + aykırısız karşılaştırma.
+   Aykırılar OTOMATİK ATILMAZ. Bulletin 17B, yüksek aykırıyı hatalı olduğu
+   kanıtlanmadıkça seride tutmayı söyler: o değer üst kuyruk hakkındaki en
+   bilgilendirici gözlemdir ve atılması tasarım debisini emniyetsiz tarafa
+   çeker. Burada iki sonuç yan yana konur, karar mühendisindir. */
+function tfaAykiriBlok(o) {
+  const a = o.aykiri;
+  if (!a) return "";
+  if (!a.uygulanabilir)
+    return `<p class="small">Aykırı değer testi (Grubbs-Beck) uygulanamadı: ${a.neden}</p>`;
+  const y = a.yuksek || [], d = a.dusuk || [];
+  let h = `<p class="small"><b>Aykırı değer testi (Grubbs-Beck, Bulletin 17B)</b> — `
+    + `n=${a.n}, K<sub>n</sub>=${fmt(a.kn, 3)}, `
+    + `üst sınır ${fmt(a.ust_sinir, 1)} · alt sınır ${fmt(a.alt_sinir, 1)} m³/s</p>`;
+  if (!y.length && !d.length)
+    return h + `<p class="small">Aykırı değer yok — seri sınırlar içinde.</p>`;
+  h += `<p class="small">`
+    + (y.length ? `<b>Yüksek aykırı:</b> ${y.map(v => fmt(v, 1)).join(", ")} m³/s. ` : "")
+    + (d.length ? `<b>Düşük aykırı:</b> ${d.map(v => fmt(v, 1)).join(", ")} m³/s. ` : "")
+    + `</p>`;
+  if (y.length) h += `<div class="warn small">⚠ ${a.uyari}</div>`;
+
+  const ay = o.aykirisiz;
+  if (o.aykirisiz_hata) return h + `<p class="small">${o.aykirisiz_hata}</p>`;
+  if (!ay) return h + `<p class="small">Aykırısız sonucu görmek için `
+    + `"aykırıları çıkarıp karşılaştır" kutusunu işaretleyin.</p>`;
+
+  const T = o.tekerrur, bas = (t) => `<th style="text-align:right">${t}</th>`;
+  const sag = (v) => `<td style="text-align:right">${fmt(v, 1)}</td>`;
+  h += `<p class="small"><b>Aykırılı ↔ aykırısız karşılaştırma (kabul edilen dağılım)</b></p>`
+    + `<table class="tbl small"><tr><th>Durum</th><th>n</th><th>Dağılım</th>`
+    + T.map(bas).join("") + `</tr>`
+    + `<tr><td>aykırılı</td><td>${o.parametreler.yil_sayisi}</td>`
+    + `<td>${o.kabul_edilen_adi}</td>` + (o.kabul_edilen_q || []).map(sag).join("") + `</tr>`
+    + `<tr><td>aykırısız</td><td>${ay.parametreler.yil_sayisi}</td>`
+    + `<td>${ay.kabul_edilen_adi}</td>` + (ay.kabul_edilen_q || []).map(sag).join("") + `</tr>`
+    + `<tr class="sel"><td colspan="3"><b>fark</b></td>`
+    + T.map((t, i) => {
+        const a1 = (o.kabul_edilen_q || [])[i], a2 = (ay.kabul_edilen_q || [])[i];
+        if (a1 == null || a2 == null || !a1) return `<td></td>`;
+        const p = (a2 / a1 - 1) * 100;
+        return `<td style="text-align:right">${p >= 0 ? "+" : ""}${p.toFixed(1)}%</td>`;
+      }).join("") + `</tr></table>`;
+  return h;
+}
+
 function tfaCiz(o) {
   const T = o.tekerrur;
   const bas = (h) => `<th style="text-align:right">${h}</th>`;
@@ -652,6 +698,7 @@ function tfaCiz(o) {
       + `</ul>Analize dahil etmek isterseniz "olanaksız kayıtları at" kutusunu kaldırın;`
       + ` sonuç büyük olasılıkla aşırı yüksek çıkar.</div>`;
   }
+  h += tfaAykiriBlok(o);
 
   h += '<p class="small"><b>Tekerrür debileri (m³/s)</b></p><table class="tbl small">'
     + "<tr><th>Dağılım</th>" + T.map(t => bas(t)).join("") + "<th>Kabul</th></tr>";
@@ -705,6 +752,7 @@ $("btnTfa").onclick = async () => {
       son_yil: +$("tfaSonYil").value || 0,
       dusuk_guveni_at: $("tfaDusukAt").checked,
       olanaksizi_at: $("tfaOlanaksizAt") ? $("tfaOlanaksizAt").checked : true,
+      aykiri_disla: $("tfaAykiriAt") ? $("tfaAykiriAt").checked : false,
     });
     S.tfa = o;
     tfaCiz(o);

@@ -134,6 +134,20 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    aynı üç bloktur: tekerrür debileri, istatistik parametreler, K-S testi.
    `backend/core/tfa.py`, golden test: `backend/tests/test_tfa_golden.py`.
 
+   **Aykırı değer testi (Grubbs-Beck, Bulletin 17B).** Her analizde otomatik
+   koşar ve sonuçla birlikte raporlanır: n, K<sub>n</sub>, üst/alt sınır ve
+   sınır dışında kalan değerler. "Aykırıları çıkarıp karşılaştır" kutusu
+   işaretlenirse analiz aykırısız bir kez daha koşulur ve iki sonuç tekerrür
+   tekerrür yan yana, yüzde farkıyla verilir. **Asıl sonuç değişmez.**
+
+   ⚠ **Yüksek aykırıyı atmak standart uygulama değildir.** Bulletin 17B, yüksek
+   aykırıyı *hatalı olduğu kanıtlanmadıkça* seride tutmayı söyler: o değer üst
+   kuyruk hakkındaki en bilgilendirici gözlemdir ve atılması tasarım debisini
+   emniyetsiz tarafa, düşüğe çeker. Düşük aykırılar ise rutin olarak sansürlenir.
+   Karşılaştırma bu yüzden var — atmak için değil, ne kadar fark ettiğini
+   görmek için. (Aykırı atmakla "düzelmek" de garanti değil: D24A029'da tek
+   düşük aykırının çıkarılması Q100'ü **1301'den 1481 m³/s'ye yükseltiyor**.)
+
    Aynı adımın altında **BTFA (Bölgesel Taşkın Frekans Analizi)** vardır:
    listeden birden çok AGİ işaretlenir, her biri için NTFA yapılır, boyutsuz
    büyüme eğrileri (Q<sub>T</sub>/Q<sub>2</sub>) ortalanarak bölgesel eğri
