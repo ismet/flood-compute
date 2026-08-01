@@ -45,6 +45,11 @@ data/yagis/_onbellek_aylik.npz
 *.rar
 *.7z
 
+# DSİ akım gözlem ağı KMZ'si (3739 AGİ, D02A001 biçimi) — yerel kaynak veri.
+# Yağış tarafıyla ilgisi yok; agi.sqlite'ın eksik yağış alanlarını doldurmakta
+# kullanılabilir ama şimdilik bağlanmadı.
+/RASATLAR GÖZLEMAĞI*.kmz
+
 # MGM istasyon Excel arşivi (1290 dosya, 105 MB) — yerel kaynak veri.
 # Kullanılan özet data/stations/ ve data/tables/ içindedir.
 # Klasör adı düz I ile yazılmış (DMI), noktalı İ ile değil — ikisi de yazılıyor
