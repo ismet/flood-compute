@@ -116,7 +116,21 @@ backend/core/         — Computation engine (no framework dependency)
   mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
   su.py                 — Water potential: basin → nearby gauges → record gaps →
                           regression gap-filling → area-ratio transfer to the outlet
-  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query)
+  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query).
+                          SCREENS OUT CORRUPT PEAKS BY DEFAULT (seri_denetimli).
+                          The yearbook PDFs were extracted with a leading digit
+                          glued onto some values in the 1979-1986 volumes:
+                          D24A029 reads 9500 m3/s for 1981 where every other
+                          year is 68-1033, and that one value pushed Q100 from
+                          1301 to 7314. 118 such records exist. Two independent
+                          tests, either sufficient: the Creager C=100 world
+                          envelope (skipped when area is the 1.0 placeholder —
+                          there the AREA is wrong, and those rows are canals and
+                          springs anyway), and outlier-flagged AND above 5x the
+                          station's second largest. Neither alone works: 53 of
+                          130 flagged records are physically plausible, and real
+                          record floods reach 3-4x. Excluded rows are RETURNED,
+                          not dropped silently — /api/tfa reports elenen_kayitlar.
   mgm.py                — MGM weather-station database (1290 stations, every
                           observation sheet). Supplies P2…P100 for step 5 by
                           running tfa.py on each station's annual maximum daily

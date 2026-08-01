@@ -264,3 +264,20 @@ else:
           f"{z['piksel']} piksel, Ksat {z['ksat_araligi_mm_sa']} mm/sa")
 
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")
+
+# --- Bozuk pik kayıtları NTFA'ya girmemeli.
+# D24A029'un 1981 kaydı 9500 m³/s yazıyor (diğer 29 yıl 68-1033 arası) ve
+# Q100'ü 1301'den 7314 m³/s'ye çıkarıyordu. Aynı yıl mansaptaki daha büyük
+# havzalı istasyon 389 m³/s ölçmüş — su yok olmaz, değer yanlıştır.
+if b.get("var"):
+    t1 = c.post("/api/tfa", json={"kod": "D24A029"}).json()
+    t0 = c.post("/api/tfa", json={"kod": "D24A029", "olanaksizi_at": False}).json()
+    if "hata" not in t1:
+        el = t1.get("elenen_kayitlar") or []
+        assert el and el[0]["yil"] == 1981, f"bozuk 1981 kaydı elenmedi: {el}"
+        assert el[0]["sebep"], "eleme sebebi boş dönmemeli"
+        q1 = t1["kabul_edilen_q"][t1["tekerrur"].index(100)]
+        q0 = t0["kabul_edilen_q"][t0["tekerrur"].index(100)]
+        assert q1 < q0 / 3, f"eleme Q100'ü düşürmedi: {q0:.0f} -> {q1:.0f}"
+        print(f"Bozuk kayıt elemesi OK: D24A029 Q100 {q0:.0f} -> {q1:.0f} m³/s "
+              f"({len(el)} kayıt elendi)")

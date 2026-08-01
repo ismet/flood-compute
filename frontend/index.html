@@ -384,6 +384,7 @@
         <label class="inline" title="Analize dahil edilecek ilk su yılı. Boş bırakılırsa serinin tamamı kullanılır.">İlk yıl<input id="tfaIlkYil" type="number" step="1" placeholder="tümü" style="width:80px"></label>
         <label class="inline">Son yıl<input id="tfaSonYil" type="number" step="1" placeholder="tümü" style="width:80px"></label>
         <label class="chk" title="Eski yıllıkların OCR'ında değeri şüpheli bulunan kayıtları analiz dışı bırakır (Güven kolonu 'düşük' olanlar)."><input type="checkbox" id="tfaDusukAt"> düşük güvenli kayıtları at</label>
+        <label class="chk" title="Creager dünya rekor zarfını aşan ya da aykırı işaretli olup istasyonun ikinci en büyüğünün 5 katından fazla olan kayıtları eler. Bunlar taşkın değil, eski yıllıkların çıkarımında bozulmuş değerlerdir; veritabanında 118 tane var. Kaldırırsanız Q100 aşırı yüksek çıkabilir."><input type="checkbox" id="tfaOlanaksizAt" checked> olanaksız kayıtları at</label>
         <button id="btnTfa" class="primary" disabled>Frekans analizi yap</button>
       </div>
       <div id="tfaStatus" class="status"></div>

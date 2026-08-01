@@ -641,6 +641,18 @@ function tfaCiz(o) {
   const bas = (h) => `<th style="text-align:right">${h}</th>`;
   let h = `<h3 class="small">${o.istasyon}</h3>`;
 
+  // Elenen kayıtlar sonucun EN BAŞINDA gösterilir. Sessizce elemek, sessizce
+  // dahil etmek kadar kötü olurdu: D24A029'un bozuk 1981 kaydı Q100'ü 1301
+  // yerine 7314 m³/s yapıyordu ve bunu kimse görmüyordu.
+  const el = o.elenen_kayitlar || [];
+  if (el.length) {
+    h += `<div class="warn small"><b>⚠ ${el.length} kayıt analiz dışı bırakıldı</b>`
+      + ` — fiziksel olarak olanaksız bulundu (eski yıllıkların çıkarımında bozulmuş):<ul>`
+      + el.map(k => `<li><b>${k.yil}: ${fmt(k.q, 1)} m³/s</b> — ${k.sebep}</li>`).join("")
+      + `</ul>Analize dahil etmek isterseniz "olanaksız kayıtları at" kutusunu kaldırın;`
+      + ` sonuç büyük olasılıkla aşırı yüksek çıkar.</div>`;
+  }
+
   h += '<p class="small"><b>Tekerrür debileri (m³/s)</b></p><table class="tbl small">'
     + "<tr><th>Dağılım</th>" + T.map(t => bas(t)).join("") + "<th>Kabul</th></tr>";
   o.debiler.forEach(d => {
@@ -692,6 +704,7 @@ $("btnTfa").onclick = async () => {
       ilk_yil: +$("tfaIlkYil").value || 0,
       son_yil: +$("tfaSonYil").value || 0,
       dusuk_guveni_at: $("tfaDusukAt").checked,
+      olanaksizi_at: $("tfaOlanaksizAt") ? $("tfaOlanaksizAt").checked : true,
     });
     S.tfa = o;
     tfaCiz(o);

@@ -963,6 +963,10 @@ class TfaGirdi(BaseModel):
     ilk_yil: int = 0
     son_yil: int = 0
     dusuk_guveni_at: bool = False
+    # Fiziksel olarak olanaksız kayıtları ele (Creager dünya zarfı + aykırı
+    # işaret × oran). Varsayılan AÇIK: kapalıyken D24A029'un bozuk 1981 kaydı
+    # Q100'ü 1301 yerine 7314 m³/s veriyordu.
+    olanaksizi_at: bool = True
 
 
 @app.post("/api/tfa")
@@ -973,10 +977,12 @@ def api_tfa(g: TfaGirdi):
     karşılaştırılır; Dmax'ı en küçük olan "kabul edilen" dağılımdır."""
     from backend.core import agi, tfa
     try:
-        ad, x, yillar = g.kod, g.x, g.yillar
+        ad, x, yillar, elenen = g.kod, g.x, g.yillar, []
         if g.kod:
             ist = agi.istasyon(g.kod)
-            s = agi.seri(g.kod, g.ilk_yil or None, g.son_yil or None, g.dusuk_guveni_at)
+            s, elenen = agi.seri_denetimli(
+                g.kod, g.ilk_yil or None, g.son_yil or None,
+                g.dusuk_guveni_at, g.olanaksizi_at)
             x = [k["q"] for k in s]
             yillar = [k["yil"] for k in s]
             ad = f"{ist['kod']} {ist['ad']}".strip()
@@ -985,6 +991,10 @@ def api_tfa(g: TfaGirdi):
         sonuc = tfa.ozet(x, istasyon=ad, yillar=yillar)
         if g.kod:
             sonuc["istasyon_bilgi"] = agi.istasyon(g.kod)
+        # Elenen kayıtlar sonuçla birlikte döner: hangi değerin neden analiz
+        # dışı kaldığı görünmezse, bir sessiz varsayılanı başkasıyla
+        # değiştirmiş oluruz.
+        sonuc["elenen_kayitlar"] = elenen
         return sonuc
     except Exception as e:
         return _err(e)
