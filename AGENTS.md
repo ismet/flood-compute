@@ -27,6 +27,7 @@ python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> da
 python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
 python tools/mgm_veritabani_olustur.py                # one-off: DMI-tümü/*.xls -> data/mgm/mgm.sqlite
 python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
+python tools/zemin_grubu_uret.py                      # one-off: SoilGrids -> data/zemin/hsg_tr.tif (soil group)
 python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
 python tools/net_yagis_dogrulama.py                   # validate net layer vs AGİ gauges (slow: DEM delineation)
 python tools/net_yagis_dogrulama.py --yeniden-oku     # re-score saved basins against the current layer (fast)
@@ -68,6 +69,20 @@ backend/core/         — Computation engine (no framework dependency)
   corine_online.py    — EEA CLC2018 WMS downloader
   thiessen.py         — Voronoi/Thiessen weights from KMZ
   snowmelt.py         — Degree-day snowmelt (KAR1)
+  zemin.py            — Hydrologic soil group (A/B/C/D) from the basin's soil.
+                          THE most consequential input in the whole computation:
+                          on the Karakurt basin, B vs C moves Q100 from 296 to
+                          771 m3/s, A vs D by a factor of ten. It used to be a
+                          hardcoded dropdown default of B with no justification
+                          — and B fits 1.6% of Turkey (92.3% is C). Now derived
+                          from SoilGrids texture via Saxton & Rawls Ksat and the
+                          NRCS NEH-630 Table 7-1 bands, governed by the LEAST
+                          transmissive layer in the profile. Returns its own
+                          reasoning (per-group area shares, Ksat band) so the
+                          choice is visible and overridable.
+                          Does NOT know depth to bedrock, so it is a LOWER
+                          bound; in steep basins the true group may be one step
+                          less permeable.
   yzd_region.py       — YZD region (A/B/C) from basin polygon
   report.py           — Word (.docx) flood report
   dilekce.py          — MGM petition (.docx/.pdf)
@@ -215,6 +230,7 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `POST /api/dilekce` | Generate MGM petition (.docx/.pdf) |
 | `POST /api/yil-ara` | Return period from Q/Q10/Q100 (analytical inverse) |
 | `POST /api/rainfall/parse` | Parse pasted rainfall table |
+| `POST /api/zemin-grubu` | Hydrologic soil group (A/B/C/D) for a basin, with its reasoning |
 | `POST /api/yzd-region` | YZD region (A/B/C) from basin |
 | `GET /api/stations/default` | Default Thiessen set: MGM stations with ≥`en_az_yil` of rainfall record |
 | `GET /api/mgm-stations` | MGM 2020 PLV (236 stations) |

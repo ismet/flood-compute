@@ -247,4 +247,20 @@ else:
           f"P2={p['2']} P100={p['100']} mm ({f['kabul_edilen_adi']}, "
           f"{f['parametreler']['yil_sayisi']} yıl)")
 
+# --- Hidrolojik zemin grubu havzadan belirlenmeli, varsayılana düşmemeli.
+# Bu parametre Q100'ü kat kat değiştiriyor; sessiz bir varsayılan, sonucu
+# kimsenin sormadığı bir seçimin belirlemesi demekti.
+z = c.post("/api/zemin-grubu", json={"havza_geojson": {
+    "type": "Polygon", "coordinates": [[[41.4, 39.8], [42.2, 39.8],
+                                        [42.2, 40.3], [41.4, 40.3], [41.4, 39.8]]]}}).json()
+if not z.get("var"):
+    print("Zemin grubu atlandı: katman yok (python tools/zemin_grubu_uret.py)")
+else:
+    assert z["grup"] in ("A", "B", "C", "D"), z
+    assert abs(sum(z["dagilim"].values()) - 100.0) < 0.5, z["dagilim"]
+    assert z["dagilim"][z["grup"]] == z["pay_yuzde"]
+    assert z["piksel"] > 0 and z["uyari"], "gerekçe/uyarı boş dönmemeli"
+    print(f"Zemin grubu OK: {z['grup']} (%{z['pay_yuzde']}), "
+          f"{z['piksel']} piksel, Ksat {z['ksat_araligi_mm_sa']} mm/sa")
+
 print("\nTÜM API DUMAN TESTLERİ GEÇTİ")

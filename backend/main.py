@@ -111,7 +111,12 @@ class ReservoirControlledReq(BaseModel):
 
 class CNReq(BaseModel):
     havza_geojson: dict
-    zemin_grubu: str = "B"
+    # Varsayılan bilerek "C": Türkiye'nin %92'si bu gruba düşüyor (bkz.
+    # tools/zemin_grubu_uret.py). Eskiden "B" idi ve hiçbir gerekçesi yoktu —
+    # ülkenin yalnız %1.6'sına uyuyor, üstelik grup Q100'ü kat kat değiştiriyor.
+    # Arayüz zaten /api/zemin-grubu ile havzadan belirleyip gönderiyor; bu
+    # varsayılan yalnız doğrudan API çağıranlar için son çare.
+    zemin_grubu: str = "C"
 
 
 class ThiessenReq(BaseModel):
@@ -473,6 +478,24 @@ def api_cn(req: CNReq):
     from backend.core import corine
     try:
         return corine.cn_from_basin(req.havza_geojson, req.zemin_grubu)
+    except Exception as e:
+        return _err(e)
+
+
+@app.post("/api/zemin-grubu")
+def api_zemin_grubu(req: CNReq):
+    """Havzanın hidrolojik zemin grubu (A/B/C/D) — toprağından belirlenir.
+
+    Grup, CN üzerinden sonucu en çok değiştiren girdidir; eskiden gerekçesiz
+    bir varsayılan (B) olarak duruyordu. Artık SoilGrids dokusundan NRCS
+    ölçütüyle belirlenir ve GEREKÇESİ döndürülür — kullanıcı görüp
+    değiştirebilsin diye.
+    """
+    from backend.core import zemin
+    try:
+        if not zemin.var_mi():
+            return {"var": False}
+        return {"var": True, **zemin.havza(req.havza_geojson)}
     except Exception as e:
         return _err(e)
 

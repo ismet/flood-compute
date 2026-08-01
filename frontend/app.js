@@ -1135,6 +1135,7 @@ function applyBasinResult(r, baslik) {
     yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem}) — otomatik seçildi`;
     $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})`;
   }
+  zeminGrubunuBelirle();   // zemin grubunu da havzadan seç (sessiz varsayılan yok)
   const ia = r.ice_aktarim;
   const detay = ia ? `\n${ia.poligon_sayisi} poligon, ${ia.cizgi_sayisi} çizgi okundu` +
     ` | dere ağı: ${r.dere_kaynagi === "ice_aktarim" ? "dosyadan" : "DEM'den türetildi"}` +
@@ -1489,6 +1490,7 @@ map.on("click", async (ev) => {
       const ovTxt = ov ? " | örtüşme: " + Object.entries(ov).map(([k, v]) => `${k}=${(v * 100).toFixed(0)}%`).join(" ") : "";
       $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})${ovTxt}`;
     }
+    zeminGrubunuBelirle();   // zemin grubunu da havzadan seç (sessiz varsayılan yok)
     // teşhis: çözünürlük + kenetleme mesafesi (havza beklenenden küçükse ipucu)
     let dgn = "";
     if (r.cozunurluk_m) dgn += `\nDEM çözünürlüğü: ${r.cozunurluk_m} m`;
@@ -1784,6 +1786,36 @@ async function loadDplv() {
   renderDplvGrid();
 }
 loadDplv();
+
+/* ---- Hidrolojik zemin grubunu havzanın toprağından seç ----
+   Bu parametre taşkın hesabının sonucunu en çok değiştiren girdidir: Karakurt
+   havzasında B ile C arasında Q100 296'dan 771 m³/s'ye çıkıyor. Eskiden açılır
+   listede gerekçesiz bir varsayılan (B) seçili geliyordu ve kullanıcı
+   dokunmazsa sonucu sessizce o belirliyordu — oysa B, Türkiye'nin %1.6'sına
+   uyuyor. Artık YZD bölgesiyle aynı kalıp: otomatik belirlenir, GEREKÇESİ
+   yazılır, kullanıcı değiştirebilir. */
+async function zeminGrubunuBelirle() {
+  const el = $("zeminInfo");
+  if (!S.havza) return;
+  try {
+    const r = await api("/api/zemin-grubu", { havza_geojson: S.havza });
+    if (!r.var) {
+      el.innerHTML = `<span class="warn">⚠ Zemin grubu katmanı kurulu değil — grubu elle seçin
+        (<code>python tools/zemin_grubu_uret.py</code>)</span>`;
+      return;
+    }
+    S.zemin = r;
+    $("inpSoil").value = r.grup;
+    const d = Object.entries(r.dagilim).filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k}=%${v}`).join(" · ");
+    el.innerHTML = `🌍 Otomatik: <b>${r.grup}</b> (havzanın %${r.pay_yuzde}'si) — ${d}`
+      + `<br><span class="small">${r.yontem}; Ksat ${r.ksat_araligi_mm_sa} mm/sa`
+      + (r.kararsiz ? ` · <span class="warn">⚠ baskın grup zayıf, havza karışık — elle kontrol edin</span>` : "")
+      + `<br>⚠ ${r.uyari}</span>`;
+  } catch (e) {
+    el.innerHTML = `<span class="warn">⚠ Zemin grubu belirlenemedi (${e.message}) — elle seçin</span>`;
+  }
+}
 
 /* ---- MGM PLV 2020 tablosu — YALNIZ plüviyograf (PLV) oranları için ----
    P2–P100 artık buradan gelmiyor; ölçüm veritabanından frekans analiziyle
@@ -4055,6 +4087,8 @@ function clearSingleBasin() {
   S.outlet = null; S.havza = null; S.dere = null; S.kanal = null;
   S.kotlar = Array(11).fill("");
   S.thiessen = []; S.istasyonlar = []; S.yzdBolge = null;
+  S.zemin = null;
+  if ($("zeminInfo")) $("zeminInfo").innerHTML = "";
   S.stBase = null; S.stExclude = new Set(); S.stExtra = []; S.stPlace = false;
   S.rainValues = {}; S.P24w = null; S.OETw = null; S.yagis = [];
   // MGM eşleşmeleri ve yakın istasyon listesi havzaya bağlıdır; yeni havzada

@@ -24,6 +24,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/stations/` | Eski istasyon ağı (`bir_cikti.kml`, 2315 istasyon). **Artık otomatik yüklenmiyor** — istasyon numarası taşımadığı için ölçüm veri tabanına numarayla bağlanamıyor ve yağışını komşu istasyondan ödünç alıyordu. Dosya duruyor, arayüzden elle yüklenebilir. |
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
 | `data/tables/mgm_plv_2020.json` | MGM 2020 tablosu — **yalnız 14 plüviyograf (PLV) oranı** için kullanılır. Dosyadaki P2–P500 sütunları duruyor ama `/api/mgm-stations` bunları **bilerek döndürmüyor**: P2–P100 artık `data/mgm/mgm.sqlite`'taki ham ölçümden hesaplanıyor. İki yağış kaynağını paralel tutmak, bir projede hangisinin kullanıldığını belirsiz bırakıyordu. `tools/extract_mgm_plv.py` ile üretilir. |
+| `data/zemin/` | `hsg_tr.tif` — hidrolojik zemin grubu (A/B/C/D), ~1 km, 80 kB. SoilGrids dokusundan Saxton & Rawls Ksat'ı hesaplanıp NRCS NEH-630 Tablo 7-1 sınırlarına vurulur; grup **profildeki en geçirimsiz katmana** göre verilir. Türkiye: %92.3 C, %6.1 D, %1.6 B. Üretmek: `python tools/zemin_grubu_uret.py`. Ana kayaya derinliği içermez, bu yüzden **alt sınırdır** — dağlık havzada gerçek grup bir kademe daha geçirimsiz olabilir. |
 | `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 24+ tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 5'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
@@ -45,6 +46,18 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    otomatik indirilir); seçilen hidrolojik zemin grubuna (A/B/C/D) göre
    `data/tables/corine_cn.json` tablosundan alansal ağırlıklı CN(II);
    CN(III) Excel'deki dönüşüm tablosuyla.
+
+   **Zemin grubu havzanın toprağından otomatik seçilir** (`data/zemin/hsg_tr.tif`,
+   `/api/zemin-grubu`) ve gerekçesi ekranda yazar: hangi grubun havzanın yüzde
+   kaçını kapladığı, dayandığı Ksat aralığı. Kullanıcı değiştirebilir; baskın
+   grup %60'ın altındaysa "havza karışık" uyarısı çıkar.
+
+   ⚠ **Bu, hesabın en kritik girdisidir.** Karakurt havzasında (7500 km²,
+   Aras) yalnız zemin grubunu B'den C'ye almak Q100'ü **296 → 771 m³/s**
+   çıkarıyor; A ile D arasında on kat oynuyor. Daha önce açılır listede
+   gerekçesiz bir varsayılan (B) seçili geliyordu ve kullanıcı dokunmazsa
+   sonucu sessizce o belirliyordu — oysa üretilen ülke haritasına göre B,
+   Türkiye'nin **%1.6**'sına uyuyor (%92.3 C, %6.1 D). O varsayılan kaldırıldı.
 4. **Thiessen** — Varsayılan küme **MGM ölçüm ağıdır**: en az 10 yıllık günlük
    maksimum yağış ölçümü olan **1184 istasyon** (`data/mgm/mgm.sqlite`). Voronoi
    hücreleri havzaya kesilerek alan ağırlıkları (DATAGİR H kolonu karşılığı)
