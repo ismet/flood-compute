@@ -63,8 +63,81 @@ DEM_10M = os.environ.get(
                             "tr10clip.img"))
 
 
+# Depoyla taşınan 10 m KESİTLERİ. Kaynağın tamamı 23.5 GB — GitHub'ın dosya
+# başına 100 MB sınırının 236, Git LFS'in 2 GB sınırının 12 katı; gönderilemez.
+# Ama çalışılan bölgenin kesiti ucuz: bir havza + 500 m tampon sıkıştırılmış
+# 0.1 MB, 55×55 km'lik bir alan 11 MB. tools/dem10_kes.py bunları üretir.
+#
+# Kesitler data/dem/ İÇİNE KONMAZ, ayrı klasörde durur. data/dem/ 30 m havuzu
+# ve get_dem_mosaic oradaki dosyaları merge ediyor; merge karışık çözünürlükte
+# ilk dosyanınkini dayatır, yani 10 m kesit ya 30 m'ye düşürülür ya da bütün
+# pencereyi 10 m'ye çıkarıp belleği patlatır. Ayrı tutmak bu ikilemi kaldırır.
+DEM10_DIR = os.path.join(ROOT, "data", "dem10")
+_DEM10_KESIT_CACHE = None
+
+
+def _10m_kesitler():
+    """data/dem10 altındaki WGS84 kesitler -> [(yol, bounds)]."""
+    global _DEM10_KESIT_CACHE
+    if _DEM10_KESIT_CACHE is not None:
+        return _DEM10_KESIT_CACHE
+    import rasterio
+    out = []
+    if os.path.isdir(DEM10_DIR):
+        for fn in sorted(os.listdir(DEM10_DIR)):
+            if not fn.lower().endswith((".tif", ".tiff")):
+                continue
+            try:
+                with rasterio.open(os.path.join(DEM10_DIR, fn)) as s:
+                    if s.crs and s.crs.to_epsg() == 4326:
+                        out.append((os.path.join(DEM10_DIR, fn), s.bounds))
+            except Exception:
+                pass
+    _DEM10_KESIT_CACHE = out
+    return out
+
+
+def _kesit_bul(bbox):
+    """bbox'ı tümüyle kapsayan kesit varsa yolunu döner."""
+    w, s, e, n = bbox
+    for yol, b in _10m_kesitler():
+        if b.left <= w and b.bottom <= s and b.right >= e and b.top >= n:
+            return yol
+    return None
+
+
 def dem_10m_var_mi():
-    return bool(DEM_10M) and os.path.exists(DEM_10M)
+    """10 m verisi bir biçimde erişilebilir mi (tam kaynak ya da kesit)."""
+    return (bool(DEM_10M) and os.path.exists(DEM_10M)) or bool(_10m_kesitler())
+
+
+def _kesitten_pencere(kesit, bbox, max_cells=None):
+    """Depodaki 10 m kesitten bbox penceresini geçici GeoTIFF'e yazar."""
+    import rasterio
+    import tempfile
+    from rasterio.windows import from_bounds
+
+    w, s, e, n = bbox
+    with rasterio.open(kesit) as src:
+        win = from_bounds(w, s, e, n, src.transform)
+        oku = max(1, int(round(math.sqrt(
+            (win.width * win.height) / float(max_cells))))) if (
+            max_cells and win.width * win.height > max_cells) else 1
+        arr = src.read(1, window=win,
+                       out_shape=(1, max(2, int(win.height // oku)),
+                                  max(2, int(win.width // oku))))[0] \
+            if oku > 1 else src.read(1, window=win)
+        tr = src.window_transform(win)
+        if oku > 1:
+            tr = rasterio.Affine(tr.a * oku, tr.b, tr.c, tr.d, tr.e * oku, tr.f)
+        profil = {"driver": "GTiff", "height": arr.shape[0], "width": arr.shape[1],
+                  "count": 1, "dtype": arr.dtype, "crs": src.crs,
+                  "transform": tr, "nodata": src.nodata}
+    fd, yol = tempfile.mkstemp(suffix="_10m.tif")
+    os.close(fd)
+    with rasterio.open(yol, "w", **profil) as dst:
+        dst.write(arr, 1)
+    return yol
 
 
 def _10m_pencere(bbox, max_cells=None):
@@ -82,11 +155,19 @@ def _10m_pencere(bbox, max_cells=None):
     from rasterio.warp import calculate_default_transform, reproject, Resampling
     from rasterio.windows import from_bounds, Window
 
-    if not dem_10m_var_mi():
-        raise RuntimeError(
-            f"10 m DEM bulunamadı: {DEM_10M}\n"
-            "Yolu DEM_10M ortam değişkeniyle verebilirsiniz.")
     w, s, e, n = bbox
+    kesit = _kesit_bul(bbox)
+    if kesit:
+        # Depoyla gelen kesit zaten WGS84; yeniden projeksiyon gerekmez.
+        return _kesitten_pencere(kesit, bbox, max_cells)
+    if not (DEM_10M and os.path.exists(DEM_10M)):
+        raise RuntimeError(
+            "Bu alan için 10 m verisi yok.\n"
+            f"  · Tam kaynak ({DEM_10M}) bu makinede bulunamadı; yolu DEM_10M "
+            "ortam değişkeniyle verebilirsiniz.\n"
+            f"  · data/dem10 altında bu alanı kapsayan kesit de yok "
+            f"({len(_10m_kesitler())} kesit var). Kaynağın bulunduğu makinede "
+            "`python tools/dem10_kes.py --bbox ...` ile üretip depoya ekleyin.")
     with rasterio.open(DEM_10M) as src:
         tr = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
         # kenarları yoğunlaştır (20 nokta/kenar) — eğri projeksiyonda köşeler yetmez
@@ -452,6 +533,21 @@ def delineate_iki_asamali(lat, lon, tampon_m=500.0, river_km2=1.0, snap_m=500.0,
     dlon = tam / (111320.0 * max(math.cos(orta), 1e-6))
     bbox = (min(xs) - dlon, min(ys) - dlat, max(xs) + dlon, max(ys) + dlat)
 
+    # 10 m'nin kazandırdığı yer var mı? Havza çıkarımı MAX_CELLS ile sınırlı;
+    # 10 m'de hücre sayısı onu aşınca DEM kabalaştırılır ve fiilen 30 m'ye
+    # döner. Ölçüldü: 800 km²'ye kadar tam 10 m, 2000 km²'de 15.8 m,
+    # 7500 km²'de 30.6 m — yani büyük havzada iki aşama koşmanın anlamı yok.
+    sinir_km2 = (max_cells or MAX_CELLS) * 100.0 / 1e6
+    alan1 = ilk.get("alan_km2") or 0.0
+    kazanc_uyarisi = None
+    if alan1 > 8 * sinir_km2:
+        kazanc_uyarisi = (
+            f"Havza {alan1:.0f} km²; 10 m'de {alan1*1e4:,.0f} hücre eder ve "
+            f"hücre sınırı ({max_cells or MAX_CELLS:,}) yüzünden DEM "
+            f"~{10*(alan1*1e4/(max_cells or MAX_CELLS))**0.5:.0f} m'ye "
+            "kabalaştırılır — yani 30 m ile aynı yere çıkar. 10 m'nin kazancı "
+            f"kabaca {8*sinir_km2:.0f} km²'nin altındaki havzalarda görülür.")
+
     hedef = hedef_alan_km2 or ilk.get("alan_km2")
     edges, out = _delineate_once(lat, lon, bbox, river_km2, snap_m=snap_m,
                                  max_cells=max_cells, dem_source="10m",
@@ -464,6 +560,8 @@ def delineate_iki_asamali(lat, lon, tampon_m=500.0, river_km2=1.0, snap_m=500.0,
     }
     out["tampon_m"] = tam
     out["dem_kaynagi"] = "10m"
+    if kazanc_uyarisi:
+        out.setdefault("uyarilar", []).append(kazanc_uyarisi)
     if any(edges.values()):
         out.setdefault("uyarilar", []).append(
             f"Havza, {tam:.0f} m tamponla açılan 10 m penceresinin kenarına "

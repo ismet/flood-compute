@@ -71,6 +71,16 @@ Area agrees within ~1%, but L and Lc come out 18% and 43% LONGER at 10 m --
 channel length is scale-dependent and DSI's Ct is calibrated on map-measured
 lengths, so 10 m lengths inflate tp by ~17% and depress the peak. The result
 warns and says to take area/elevations from 10 m and L/Lc from 30 m.
+Clips travel with the repo in data/dem10 (tools/dem10_kes.py) so the 10 m
+option works where the 23.5 GB source is absent; `_kesit_bul` prefers a
+covering clip over the source. Clips carry a +300 m margin because the app
+recomputes its window from its OWN stage-1 basin at full precision and a
+hand-rounded box misses by metres -- that is how the first clip failed to
+match. They live OUTSIDE data/dem: that pool is merged, and merge imposes the
+first file's resolution on the rest.
+10 m only pays below ~5000 km2: MAX_CELLS (8e6) coarsens it back to 30 m above
+that (800 km2 -> 10 m, 2000 -> 15.8, 7500 -> 30.6). Both the API result and the
+clip tool say so.
 Source WKT has no TOWGS84; PROJ picks "ED50 to WGS 84 (1)", declared accuracy
 10 m (one cell) -- the gain is resolution, not absolute position.
 

@@ -19,7 +19,8 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | Klasör | İçerik |
 |---|---|
 | Harita altlıkları | Sağ üstteki katman kutusundan **Harita** (OpenStreetMap), **Uydu** (Esri World Imagery) ve **Topoğrafya** (OpenTopoMap — eş yükselti eğrileri + kabartma gölgelemesi, CC-BY-SA). Outlet'i yatağın üstüne koyarken vadi tabanını görmek için topoğrafya altlığı işe yarar; OSM'de dere çizgisi çoğu yerde yok, uyduda ağaç altında görünmüyor. |
-| Ulusal 10 m DEM | (Opsiyonel) `D:\demdata\Yukseklik_10mDEM\10M\tr10clip.img` — 165031×71347 = 11.8 milyar hücre, 23.5 GB, **ED50 üzerinde özel bir Lambert projeksiyonunda**. Yolu `DEM_10M` ortam değişkeniyle değiştirilebilir. Adım 1'de DEM kaynağı "Ulusal 10 m" seçilirse **iki aşamalı** çalışır: 30 m ile havza bulunur → sınırına tampon eklenir → 10 m o pencereden kesilip WGS84'e döndürülür → karakteristikler ondan hesaplanır. Bir havza penceresi ~1 s (dosya karolu ve piramitli). |
+| `data/dem10/` | **10 m DEM kesitleri** — depoyla taşınır. Kaynağın tamamı 23.5 GB (GitHub dosya sınırının 236, Git LFS sınırının 12 katı) ve gönderilemez; ama çalışılan bölgenin kesiti ucuz: bir havza + tampon **0.2 MB**, ~55×55 km 11 MB. `python tools/dem10_kes.py --havza <kmz>` ya da `--bbox b g d k` ile üretilir; WGS84, sıkıştırılmış, +300 m emniyet paylı. Kesit depoda olduğunda 10 m seçeneği kaynağın bulunmadığı makinelerde (deploy dahil) da çalışır. `data/dem/` içine **konmaz**: orası 30 m havuzu ve merge karışık çözünürlükte ilk dosyanınkini dayatır. |
+| Ulusal 10 m DEM (tam) | (Opsiyonel) `D:\demdata\Yukseklik_10mDEM\10M\tr10clip.img` — 11.8 milyar hücre, 23.5 GB, ED50 üzerinde özel Lambert. Yolu `DEM_10M` ile değiştirilir. Yalnız kesit ÜRETMEK için gerekir; günlük kullanımda kesitler yeter. |
 | `data/dem/` | (Opsiyonel) yerel DEM'ler (EPSG:4326 GeoTIFF, VRT, ERDAS .img veya ESRI Grid klasörü). ASTER 30 m grid'i `data/dem/aster30m/` altına yerleştirin. Yoksa Copernicus GLO-30 karoları otomatik indirilir (`data/dem/cache/`). |
 | `data/corine/` | (Opsiyonel) yerel CORINE 2018 GeoTIFF (sınıf kodları 111–523 veya grid kodu 1–44). Havzayı kapsayan yerel raster yoksa **EEA CLC2018 servisinden otomatik indirilir** (100 m, resmi lejand renklerinden sınıflandırılır, `data/corine/cache/` altına önbelleklenir). |
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
@@ -76,6 +77,12 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    10 m uzunlukları t<sub>p</sub>'yi %17 büyütür ve pik debiyi o oranda
    düşürür. Uygulama bunu uyarı olarak yazar. 10 m'nin gerçek kazancı
    **kot profili ve alan** ayrıntısındadır.
+
+   **10 m nereye kadar işe yarar:** havza çıkarımı `MAX_CELLS` (8 milyon) ile
+   sınırlı. 10 m'de hücre sayısı bunu aşınca DEM kabalaştırılır ve fiilen 30 m'ye
+   döner — 800 km²'ye kadar tam 10 m, 2000 km²'de 15.8 m, 7500 km²'de 30.6 m.
+   Yani **~5000 km² üstünde 10 m seçmenin hiçbir kazancı yok**; uygulama ve
+   kesme aracı bunu uyarı olarak yazar.
 
    ⚠ **Datum notu:** kaynakta `TOWGS84` parametresi yok; PROJ "ED50 to WGS 84
    (1)" dönüşümünü seçiyor ve ilan edilen doğruluğu **10 m** — tam bir hücre.
