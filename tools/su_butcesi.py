@@ -82,7 +82,8 @@ def aylik_yigin(bbox=TURKIYE, onbellek=ONBELLEK, yeniden=False):
     """
     import numpy as np
     import rasterio
-    from rasterio.transform import Affine
+    from rasterio.crs import CRS          # `rasterio.crs` diye erişme: bkz.
+    from rasterio.transform import Affine  # corine_online.py'deki aynı tuzak
 
     if onbellek and os.path.exists(onbellek) and not yeniden:
         z = np.load(onbellek, allow_pickle=False)
@@ -92,7 +93,7 @@ def aylik_yigin(bbox=TURKIYE, onbellek=ONBELLEK, yeniden=False):
         # coğrafyaya yazılırdı.
         profil = dict(height=int(z["h"]), width=int(z["w"]),
                       transform=Affine.from_gdal(*z["tr"]),
-                      crs=rasterio.crs.CRS.from_string(str(z["crs"])),
+                      crs=CRS.from_string(str(z["crs"])),
                       count=1, dtype="float32", driver="GTiff")
         return z["P"], z["PET"], z["T"], z["gecerli"], profil
 

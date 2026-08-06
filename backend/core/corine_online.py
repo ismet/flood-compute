@@ -68,6 +68,13 @@ def fetch_classified(bbox_wgs84, pad_ratio=0.05):
     import rasterio
     from rasterio.io import MemoryFile
     from rasterio.transform import from_bounds
+    # Alt modül ADIYLA içe aktarılır; `rasterio.errors` diye erişilmez.
+    # `import rasterio` alt modüllerin bağlanmasını GARANTİ ETMEZ. Bu uygulama
+    # GIS kütüphanelerini uç fonksiyonların içinde tembel import ediyor ve
+    # istekler iş parçacığı havuzunda koşuyor; bir iş parçacığı rasterio'yu ilk
+    # kez kurarken başka biri yarı kurulmuş modüle bakarsa
+    # "module 'rasterio' has no attribute 'errors'" düşer.
+    from rasterio.errors import NotGeoreferencedWarning
 
     w, s, e, n = bbox_wgs84
     pw, ph = (e - w) * pad_ratio, (n - s) * pad_ratio
@@ -100,7 +107,7 @@ def fetch_classified(bbox_wgs84, pad_ratio=0.05):
 
     import warnings
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
         with MemoryFile(r.content) as mf, mf.open() as src:
             bands = src.read()
     rgb = np.transpose(bands[:3], (1, 2, 0))
