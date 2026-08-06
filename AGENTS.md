@@ -18,6 +18,7 @@ python backend/tests/test_kmz_export.py               # KMZ writer round-trip
 python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS
 python backend/tests/test_corine_c.py                 # CORINE -> rational C derivation
 python backend/tests/test_akarsu.py                   # DSİ river layer (skips if data absent)
+python backend/tests/test_kenetleme.py                # outlet snap jump warning (no DEM needed)
 python backend/tests/test_tfa_golden.py               # NTFA golden (ornek.xlsm, 6 distributions)
 python backend/tests/test_btfa_golden.py              # BTFA golden (Karamandere index-flood)
 python backend/tests/test_mmy_golden.py               # MMY golden (Hershfield PMP, 2 workbooks)
@@ -50,6 +51,16 @@ docker build -t taskin-hesap .                        # build Docker image
 ## GIS delineation
 
 Runs in a **subprocess** behind a global `threading.Lock`. Acquire with `blocking=False`; return **503** if locked. Same pattern for multi-delineate and import-basin. Prevents pyflwdir+numba memory corruption.
+
+Snapping uses "highest accumulation within snap_m" (the ArcHydro / QGIS Snap
+Pour Point convention). That convention assumes the click is ON the channel and
+snap_m covers the DEM's positional error — a cell or two. The default 500 m is
+±18 cells on a 28 m DEM, so widening it walks to ever-larger rivers and the area
+never converges: at Beyagac 1000 m gives 25 km2 and 2000 m gives 215, because a
+different river sits 2 km away. `_kenetleme_uyar` warns when the snap saturates
+the radius AND the result exceeds 1.5x the largest channel right under the click.
+Both conditions are needed: sliding downstream along the SAME channel also
+saturates the radius but is harmless (Beyagac at 500 m snaps 477 m and is right).
 
 Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, `gis.py:41`), `HOST`, `PORT`, `APP_PASSWORD`.
 

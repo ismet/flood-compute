@@ -293,7 +293,7 @@ def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=8,
         if best is None or out["alan_km2"] > best["alan_km2"]:
             best = out
         if kapali and out["alan_km2"] >= 0.9 * best["alan_km2"]:
-            return out                       # kesilmemiş, güvenilir sonuç
+            return _kenetleme_uyar(out)      # kesilmemiş, güvenilir sonuç
         # yalnız taşan kenarları büyüt (havza membaya doğru uzar; her yönü
         # büyütmek hücre sayısını 4'e katlar, tek yön 2'ye)
         gw, gh = (e - w), (n - s)
@@ -314,7 +314,48 @@ def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=8,
         s, n = max(s, lat - max_span_deg), min(n, lat + max_span_deg)
     if best is None:
         raise RuntimeError("Havza çıkarılamadı: tıklanan nokta bir akış yoluna oturmuyor olabilir")
-    return best  # en büyük/güvenilir sonuç (kenara değiyorsa uyarıyla)
+    return _kenetleme_uyar(best)  # en büyük/güvenilir sonuç (kenara değiyorsa uyarıyla)
+
+
+YAKIN_PAY = 0.2       # yarıçapın bu kadarı "tıklamanın dibi" sayılır
+SICRAMA_KAT = 1.5     # seçilen kanal, dipteki en büyüğün bu katıysa atlamıştır
+
+
+def _kenetleme_uyar(out):
+    """Kenetleme BAŞKA BİR AKARSUYA atladıysa uyarır.
+
+    Kenetleme kuralı "yarıçap içindeki en yüksek akış birikimi"dir (ArcHydro /
+    QGIS 'Snap Pour Point' geleneği). O gelenek, kullanıcının yatağın ÜSTÜNE
+    tıkladığını ve yarıçapın DEM'in konum hatasını (bir iki hücre) karşıladığını
+    varsayar. Yarıçap büyüdükçe kural hep daha uzaktaki daha büyük nehri seçer
+    ve alan yakınsamaz: Beyağaç'ta 1000 m'de 25 km², 2000 m'de 215 km² çıkıyor,
+    çünkü 2 km ötede bambaşka bir akarsu var.
+
+    Ama kenetlemenin pencere kenarına oturması TEK BAŞINA kusur değildir —
+    aynı nehir üzerinde mansaba kaymak alanı değiştirmez. Aynı Beyağaç
+    noktasında 500 m yarıçapla kenetleme 477 m gidiyor ve sonuç doğru
+    (24.58 km²), çünkü 31 m'deki kolun ta kendisine oturuyor, sadece biraz
+    aşağısına. Sırf mesafeye bakıp uyarmak yanlış alarm olurdu.
+
+    O yüzden ölçüt şu: tıklamanın DİBİNDEKİ en büyük kolla seçilen alanı
+    karşılaştır. Seçilen, dipdekinin katına çıkmışsa gerçekten başka bir
+    akarsuya atlanmıştır ve alan yarıçapın rastlantısal bir fonksiyonudur.
+    """
+    if not out.get("kenetleme_doymus"):
+        return out
+    r = out.get("kenetleme_yaricapi_m") or 0.0
+    secilen = out.get("alan_km2") or 0.0
+    en_yakin = out.get("yakin_en_buyuk_km2")
+    if not en_yakin or secilen <= SICRAMA_KAT * en_yakin:
+        return out                       # aynı kol üzerinde kaymış, sorun yok
+    out.setdefault("uyarilar", []).append(
+        f"Çıkış noktası {out['snap_mesafe_m']:.0f} m ötedeki bir akarsuya "
+        f"kenetlendi ({r:.0f} m'lik arama yarıçapının kenarı) ve seçilen havza "
+        f"{secilen:.1f} km², oysa tıklamanın dibindeki kol {en_yakin:.1f} km². "
+        "Kenetleme büyük olasılıkla KOMŞU BİR AKARSUYA atladı — alan yarıçapa "
+        "bağımlı hale geldi. Kenetleme yarıçapını küçültün, noktayı yatağın "
+        "üstüne alın ya da 'yakındaki diğer kollar'dan doğru olanı seçin.")
+    return out
 
 
 def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
@@ -391,6 +432,14 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
     # rakip kolları acc serbest bırakılmadan ÖNCE çıkar (aşağıda del ediliyor)
     adaylar = aday_kanallar(acc_arr, transform, dx, dy, lat, lon, h, w,
                             cell_km2, maks_m=max(snap_m, 800.0))
+    # Tıklamanın DİBİNDEKİ en büyük kol — kenetlemenin komşu akarsuya atlayıp
+    # atlamadığını sınamak için referans (bkz. _kenetleme_uyar). `adaylar`
+    # listesine bakılamaz: o yalnız en büyük dördü döndürür, geniş yarıçapta
+    # yakındaki küçük kollar listeden düşer ve atlama görünmez olur.
+    yakin = aday_kanallar(acc_arr, transform, dx, dy, lat, lon, h, w, cell_km2,
+                          maks_m=min(max(snap_m * 0.25, 150.0), 500.0),
+                          en_fazla=6)
+    yakin_en_buyuk = max((k["alan_km2"] for k in yakin), default=None)
     del acc
     gc.collect()
 
@@ -474,6 +523,16 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
         # teşhis: kullanılan çözünürlük, snap mesafesi, pencere
         "cozunurluk_m": round((dx + dy) / 2.0, 1),
         "snap_mesafe_m": round(_seg_len_m(lon, lat, x_snap, y_snap), 1),
+        # Kenetleme arama penceresinin KENARINA oturduysa sonuç yarıçapa
+        # bağımlıdır ve yakınsamamıştır. Kural "yarıçap içindeki en yüksek
+        # birikim" olduğu için, pencere büyüdükçe hep daha uzaktaki daha büyük
+        # nehir seçilir: Beyağaç'ta 1000 m'de 25 km², 2000 m'de 215 km² çıkıyor
+        # — 2 km ötedeki BAŞKA bir akarsuya atlıyor. Kullanıcı bu sıçramayı
+        # göremezse, yarıçapın rastlantısal değerini havza alanı sanır.
+        "kenetleme_doymus": bool(
+            _seg_len_m(lon, lat, x_snap, y_snap) > 0.8 * snap_m),
+        "kenetleme_yaricapi_m": round(float(snap_m), 1),
+        "yakin_en_buyuk_km2": yakin_en_buyuk,
         "pencere_deg": [round(v, 4) for v in bbox],
         # tıklama çevresindeki rakip kollar: kenetleme belirsizse arayüz
         # bunları alternatif olarak sunar (bkz. aday_kanallar)
