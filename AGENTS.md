@@ -62,6 +62,18 @@ the radius AND the result exceeds 1.5x the largest channel right under the click
 Both conditions are needed: sliding downstream along the SAME channel also
 saturates the radius but is harmless (Beyagac at 500 m snaps 477 m and is right).
 
+National 10 m DEM (`DEM_10M`, default D:\demdata\...\tr10clip.img, 23.5 GB,
+11.8e9 cells, custom Lambert on ED50) is used TWO-STAGE via
+`delineate_iki_asamali`: 30 m finds the basin, its boundary is buffered, the
+10 m window is cut and reprojected to WGS84, characteristics recomputed. Stage
+two targets stage one's area so both stages describe the same branch.
+Area agrees within ~1%, but L and Lc come out 18% and 43% LONGER at 10 m --
+channel length is scale-dependent and DSI's Ct is calibrated on map-measured
+lengths, so 10 m lengths inflate tp by ~17% and depress the peak. The result
+warns and says to take area/elevations from 10 m and L/Lc from 30 m.
+Source WKT has no TOWGS84; PROJ picks "ED50 to WGS 84 (1)", declared accuracy
+10 m (one cell) -- the gain is resolution, not absolute position.
+
 Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, `gis.py:41`), `HOST`, `PORT`, `APP_PASSWORD`.
 
 ## Frontend

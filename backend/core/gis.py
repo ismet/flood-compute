@@ -46,6 +46,95 @@ MAX_CELLS = int(os.environ.get("DELINEATE_MAX_CELLS", 8_000_000))
 # beklenmez.
 MAKS_ARAMA_M = float(os.environ.get("SNAP_MAKS_ARAMA_M", "2000"))
 
+# --- 10 m ulusal DEM (opsiyonel, çok büyük) --------------------------------
+# ERDAS .img, 165031×71347 = 11.8 milyar hücre (23.5 GB), ED50 üzerinde özel
+# bir Lambert Conformal Conic projeksiyonunda. Karolu (64×64) ve piramitli
+# olduğu için pencere okuması hızlıdır: bir havza penceresi ~1 saniye.
+#
+# WGS84'e dönüştürmenin bir bedeli var ve gizlenmemeli: kaynakta TOWGS84
+# parametresi yok, PROJ "ED50 to WGS 84 (1)" dönüşümünü seçiyor ve onun ilan
+# edilen doğruluğu 10 m — yani tam bir hücre. Türkiye'de yaygın kullanılan
+# (-84,-107,-120) parametreleriyle arasındaki fark ölçüldü: 18 m. Dolayısıyla
+# 10 m DEM'in konum doğruluğu 30 m DEM'inkinden iyi ama "10 m" etiketinin
+# vaat ettiği kadar değil; kazanç ÇÖZÜNÜRLÜKTE (vadi tabanı, kanal ayrıntısı),
+# mutlak konumda değil.
+DEM_10M = os.environ.get(
+    "DEM_10M", os.path.join("D:", os.sep, "demdata", "Yukseklik_10mDEM", "10M",
+                            "tr10clip.img"))
+
+
+def dem_10m_var_mi():
+    return bool(DEM_10M) and os.path.exists(DEM_10M)
+
+
+def _10m_pencere(bbox, max_cells=None):
+    """10 m DEM'den bbox penceresini kesip WGS84 GeoTIFF olarak yazar.
+
+    bbox: (w, s, e, n) WGS84. Döner: geçici dosya yolu.
+
+    Kaynak projeksiyon eğri (Lambert) olduğu için hedef dikdörtgenin KENARLARI
+    yoğunlaştırılarak dönüştürülür — yalnız dört köşeyi dönüştürmek pencereyi
+    eksik açar ve çıktının köşeleri boş kalır (prototipte %14'ü boştu).
+    """
+    import rasterio
+    import tempfile
+    from pyproj import Transformer
+    from rasterio.warp import calculate_default_transform, reproject, Resampling
+    from rasterio.windows import from_bounds, Window
+
+    if not dem_10m_var_mi():
+        raise RuntimeError(
+            f"10 m DEM bulunamadı: {DEM_10M}\n"
+            "Yolu DEM_10M ortam değişkeniyle verebilirsiniz.")
+    w, s, e, n = bbox
+    with rasterio.open(DEM_10M) as src:
+        tr = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
+        # kenarları yoğunlaştır (20 nokta/kenar) — eğri projeksiyonda köşeler yetmez
+        k = 20
+        xs, ys = [], []
+        for i in range(k + 1):
+            f = i / k
+            xs += [w + f * (e - w), w + f * (e - w), w, e]
+            ys += [s, n, s + f * (n - s), s + f * (n - s)]
+        px, py = tr.transform(xs, ys)
+        pay = 20 * abs(src.transform.a)          # 20 hücre emniyet payı
+        win = from_bounds(min(px) - pay, min(py) - pay, max(px) + pay,
+                          max(py) + pay, src.transform)
+        win = win.intersection(Window(0, 0, src.width, src.height))
+        if win.width < 2 or win.height < 2:
+            raise RuntimeError(
+                "Havza 10 m DEM'in kapsamı dışında (DEM Türkiye ile sınırlı).")
+        arr = src.read(1, window=win)
+        wtr = src.window_transform(win)
+        # Hedef ızgara doğrudan İSTENEN kutudan kurulur, kaynak penceresinin
+        # sınırlarından değil: Lambert'ten WGS84'e geçerken dikdörtgen dönüyor
+        # ve kaynak sınırından türetilen hedefin köşeleri boş kalıyor (ölçüldü:
+        # çıktının %14'ü). İstenen kutuyu üretmek hem tümüyle dolu hem küçük.
+        coz = abs(src.transform.a)               # kaynak hücre (m)
+        orta = math.radians((s + n) / 2.0)
+        res_lat = coz / 110540.0
+        res_lon = coz / (111320.0 * max(math.cos(orta), 1e-6))
+        dw = max(2, int(math.ceil((e - w) / res_lon)))
+        dh = max(2, int(math.ceil((n - s) / res_lat)))
+        # hücre sınırı: 10 m'de büyük havza belleği patlatır, kabalaştır
+        if max_cells and dw * dh > max_cells:
+            f = math.sqrt(dw * dh / float(max_cells))
+            dw, dh = max(2, int(dw / f)), max(2, int(dh / f))
+        dst_tr = rasterio.transform.from_bounds(w, s, e, n, dw, dh)
+        out = np.full((dh, dw), src.nodata, dtype=arr.dtype)
+        reproject(arr, out, src_transform=wtr, src_crs=src.crs,
+                  dst_transform=dst_tr, dst_crs="EPSG:4326",
+                  src_nodata=src.nodata, dst_nodata=src.nodata,
+                  resampling=Resampling.bilinear)
+        profil = {"driver": "GTiff", "height": dh, "width": dw, "count": 1,
+                  "dtype": arr.dtype, "crs": "EPSG:4326", "transform": dst_tr,
+                  "nodata": src.nodata}
+    fd, yol = tempfile.mkstemp(suffix="_10m.tif")
+    os.close(fd)
+    with rasterio.open(yol, "w", **profil) as dst:
+        dst.write(out, 1)
+    return yol
+
 
 # ------------------------------------------------------------------ DEM temini
 _LOCAL_DEM_CACHE = None
@@ -140,6 +229,8 @@ def get_dem_mosaic(bbox, max_cells=None, dem_source="auto"):
     from shapely.ops import unary_union
 
     w, s, e, n = bbox
+    if dem_source == "10m":                 # ulusal 10 m DEM (ED50 LCC -> WGS84)
+        return _10m_pencere(bbox, max_cells=max_cells)
     srcs = []
     covered = False
     if dem_source != "copernicus":          # yerel DEM'leri kullan
@@ -321,6 +412,87 @@ def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=8,
 
 YAKIN_PAY = 0.2       # yarıçapın bu kadarı "tıklamanın dibi" sayılır
 SICRAMA_KAT = 1.5     # seçilen kanal, dipteki en büyüğün bu katıysa atlamıştır
+
+
+def delineate_iki_asamali(lat, lon, tampon_m=500.0, river_km2=1.0, snap_m=500.0,
+                          hedef_alan_km2=None, max_cells=None,
+                          ilk_kaynak="auto"):
+    """İki aşamalı havza çıkarımı: 30 m ile bul, 10 m ile ölç.
+
+    10 m DEM 11.8 milyar hücre; havzanın nerede olduğunu bilmeden ondan okuma
+    yapılamaz. O yüzden sıra şu:
+
+      1. 30 m DEM ile havza çıkarılır — hızlı, ülke çapında kapsamlı.
+      2. Havza sınırına `tampon_m` kadar pay eklenir. Pay şart: 10 m akış
+         yolları 30 m'dekinden biraz farklı gider ve su bölümü çizgisi birkaç
+         yüz metre oynayabilir; pencere tam sınırdan kesilirse havza kenardan
+         budanır.
+      3. 10 m DEM (ED50 Lambert) o pencereden kesilip WGS84'e döndürülür.
+      4. Havza karakteristikleri (alan, L, Lc, kot profili) 10 m'den yeniden
+         hesaplanır.
+
+    İKİNCİ AŞAMA BİRİNCİNİN ALANINI HEDEF ALIR. Kavşakta 10 m ağı, 30 m'nin
+    oturduğundan başka bir kola oturabilir ve iki aşama farklı havzayı anlatır.
+    Kullanıcı bir hedef vermediyse birinci aşamanın alanı hedef yapılır; böylece
+    iki aşama aynı havzayı ölçer, yalnız çözünürlük değişir.
+    """
+    ilk = delineate(lat, lon, river_km2=river_km2, snap_m=snap_m,
+                    max_cells=max_cells, dem_source=ilk_kaynak,
+                    hedef_alan_km2=hedef_alan_km2)
+    gj = ilk.get("havza_geojson") or {}
+    koord = gj.get("coordinates") or []
+    halkalar = koord if gj.get("type") == "Polygon" else [h for p in koord for h in p]
+    xs = [p[0] for h in halkalar for p in h]
+    ys = [p[1] for h in halkalar for p in h]
+    if not xs:
+        raise RuntimeError("Birinci aşamada havza sınırı üretilemedi")
+    tam = max(0.0, float(tampon_m))
+    orta = math.radians((min(ys) + max(ys)) / 2.0)
+    dlat = tam / 110540.0
+    dlon = tam / (111320.0 * max(math.cos(orta), 1e-6))
+    bbox = (min(xs) - dlon, min(ys) - dlat, max(xs) + dlon, max(ys) + dlat)
+
+    hedef = hedef_alan_km2 or ilk.get("alan_km2")
+    edges, out = _delineate_once(lat, lon, bbox, river_km2, snap_m=snap_m,
+                                 max_cells=max_cells, dem_source="10m",
+                                 hedef_alan_km2=hedef)
+    out = _kenetleme_uyar(out)
+    out["ilk_asama"] = {
+        "kaynak": ilk_kaynak, "alan_km2": ilk.get("alan_km2"),
+        "L_km": ilk.get("L_km"), "Lc_km": ilk.get("Lc_km"),
+        "cozunurluk_m": ilk.get("cozunurluk_m"),
+    }
+    out["tampon_m"] = tam
+    out["dem_kaynagi"] = "10m"
+    if any(edges.values()):
+        out.setdefault("uyarilar", []).append(
+            f"Havza, {tam:.0f} m tamponla açılan 10 m penceresinin kenarına "
+            "değiyor — alan budanmış olabilir. Tamponu büyütüp tekrar deneyin.")
+    # ÖLÇEK UYARISI. Akarsu uzunluğu ölçeğe bağlı bir büyüklüktür: çözünürlük
+    # arttıkça akış yolu her kıvrımı sayar ve uzar. Ölçüldü — Beyağaç'ta 30 m'de
+    # L=9.10 Lc=4.80, 10 m'de L=10.76 Lc=6.88. Alan %1 aynı, uzunluklar %18/%43
+    # uzun. Bu, DSİ'nin Ct/Cp katsayılarıyla çelişir: onlar HARİTADAN ölçülmüş
+    # (~1-2 km genelleme) uzunluklarla kalibre edilmiştir. tp = Ct·(L·Lc)^0.30
+    # olduğu için 10 m uzunlukları tp'yi büyütür ve pik debiyi DÜŞÜRÜR.
+    l1, l2 = ilk.get("L_km"), out.get("L_km")
+    c1, c2 = ilk.get("Lc_km"), out.get("Lc_km")
+    if l1 and l2 and c1 and c2 and (l2 * c2) > 1.2 * (l1 * c1):
+        tp_kat = ((l2 * c2) / (l1 * c1)) ** 0.30
+        out.setdefault("uyarilar", []).append(
+            f"10 m'de L={l2:.2f} Lc={c2:.2f} km, 30 m'de L={l1:.2f} Lc={c1:.2f} km. "
+            "Akarsu uzunluğu ÖLÇEĞE BAĞLIDIR — ince DEM her kıvrımı sayar. "
+            f"Snyder/DSİ'nin Ct katsayısı haritadan ölçülmüş uzunluklara göre "
+            f"kalibrelidir; bu L/Lc ile tp %{(tp_kat-1)*100:.0f} büyür ve pik "
+            "debi o oranda düşer. ALAN ve KOT profili için 10 m'yi kullanın, "
+            "L/Lc için 30 m değerlerini (ya da haritadan ölçüleni) tercih edin.")
+    a1, a2 = ilk.get("alan_km2"), out.get("alan_km2")
+    if a1 and a2 and abs(a2 - a1) > 0.15 * a1:
+        out.setdefault("uyarilar", []).append(
+            f"10 m alanı ({a2:.2f} km²) 30 m alanından ({a1:.2f} km²) "
+            f"%{abs(a2/a1-1)*100:.0f} farklı. Çözünürlük değişince su bölümü "
+            "biraz oynar, ama bu kadarı iki aşamanın FARKLI KOLA oturduğuna "
+            "işaret edebilir — 'beklenen alan' verip tekrar deneyin.")
+    return out
 
 
 def _kenetleme_uyar(out):

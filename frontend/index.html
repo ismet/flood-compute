@@ -239,8 +239,10 @@
             <option value="auto">Otomatik (yerel varsa)</option>
             <option value="yerel">ASTER 30 m (yerel, hızlı)</option>
             <option value="copernicus">Copernicus GLO-30 (indir)</option>
+            <option value="10m">Ulusal 10 m (iki aşamalı)</option>
           </select>
         </label>
+        <label id="lblTampon" class="hidden" title="10 m seçildiğinde: önce 30 m ile havza bulunur, sınırına bu kadar pay eklenir, 10 m DEM o pencereden kesilir. Pay şart — 10 m akış yolları biraz farklı gider ve su bölümü birkaç yüz metre oynayabilir; tam sınırdan kesilirse havza kenardan budanır.">10 m tamponu (m)<input id="inpTampon" type="number" step="100" min="0" value="500"></label>
       </div>
       <div class="small" id="demHint">ASTER yereldir ve indirme yapmaz; büyük ve <b>düz ova</b>
         havzalarında akış ağı Copernicus'tan sapabildiği için sonucu şüpheliyse Copernicus ile

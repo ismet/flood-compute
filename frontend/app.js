@@ -66,6 +66,14 @@ function renderRainLegend() {
      <span class="small">(${rng.n} istasyon)</span>`;
 }
 
+/* 10 m DEM iki aşamalı çalışır ve tampon ister; kutu yalnız o seçilince görünür. */
+document.addEventListener("DOMContentLoaded", () => {
+  const d = document.getElementById("inpDem"), l = document.getElementById("lblTampon");
+  if (!d || !l) return;
+  const g = () => l.classList.toggle("hidden", d.value !== "10m");
+  d.addEventListener("change", g); g();
+});
+
 /* ---------------- harita ---------------- */
 const map = L.map("map").setView([39.2, 32.8], 6);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -1540,6 +1548,7 @@ map.on("click", async (ev) => {
       // yakın kol" der. Kavşakta tıklandığında fark büyük: Beyağaç'ta 24.6 km²
       // yerine doğru kol olan 8.3 km² geliyor ve nokta 477 m değil 78 m kayıyor.
       hedef_alan_km2: +$("inpHedefAlan").value || 0,
+      tampon_m: +$("inpTampon").value || 500,
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
   S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
