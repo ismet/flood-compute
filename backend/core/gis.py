@@ -258,7 +258,8 @@ def _monoton_profil(prof, min_dh=0.1):
 
 
 def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=8,
-              snap_m=500.0, max_cells=None, max_span_deg=8.0, dem_source="auto"):
+              snap_m=500.0, max_cells=None, max_span_deg=8.0, dem_source="auto",
+              hedef_alan_km2=None):
     """Outlet (lat, lon) için havza çıkarımı. GeoJSON + fiziksel parametreler döner.
 
     Pencere, havzanın **taştığı kenarlar** yönünde büyütülerek yinelenir; böylece
@@ -274,7 +275,8 @@ def delineate(lat, lon, buffer_deg=0.08, river_km2=1.0, max_tries=8,
     for attempt in range(max_tries):
         res = _delineate_once(lat, lon, (w, s, e, n), river_km2,
                               snap_m=snap_m, max_cells=max_cells,
-                              dem_source=dem_source)
+                              dem_source=dem_source,
+                              hedef_alan_km2=hedef_alan_km2)
         if res is None:
             # akış yoluna oturmadı: pencereyi her yönde büyütüp tekrar dene
             gw, gh = (e - w), (n - s)
@@ -359,7 +361,7 @@ def _kenetleme_uyar(out):
 
 
 def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
-                    dem_source="auto"):
+                    dem_source="auto", hedef_alan_km2=None):
     import gc
     import pyflwdir
     from rasterio import features as rfeatures
@@ -397,8 +399,10 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
     # _akarsuya_kenetle). snap_m artık bir üst sınırdır, hedef yarıçap değil.
     h, w = flw.shape
     esik_hucre = max(1.0, river_km2 / cell_km2)
+    hedef_hucre = (hedef_alan_km2 / cell_km2) if hedef_alan_km2 else None
     row, col, x_snap, y_snap, _kenet_m, _kenet_esik = _akarsuya_kenetle(
-        acc, transform, dx, dy, lat, lon, h, w, esik_hucre, snap_m)
+        acc, transform, dx, dy, lat, lon, h, w, esik_hucre, snap_m,
+        hedef_hucre=hedef_hucre)
     idx_out = row * w + col
 
     # havza maskesi
@@ -543,8 +547,20 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
 
 # ==================== ÇOK PARÇALI HAVZA (ARA HAVZA) ====================
 def _akarsuya_kenetle(acc, transform, dx, dy, lat, lon, h, w,
-                      esik_hucre, maks_m):
+                      esik_hucre, maks_m, hedef_hucre=None):
     """Tıklanan noktayı EN YAKIN akarsu hücresine kenetler.
+
+    `hedef_hucre` verilirse (beklenen yağış alanının hücre karşılığı) kural
+    değişir: yarıçap içindeki hücreler arasından birikimi HEDEFE EN YAKIN olan
+    seçilir, eşitlikte tıklamaya yakın olan. Sebebi somut — Beyağaç'ta tıklanan
+    noktanın 31 m yanında 8.2 km²'lik kol var ama "en yüksek birikim" kuralı
+    477 m yürüyüp iki kolun birleştiği 24.6 km²'yi seçiyor. Kullanıcı havzanın
+    ~10 km² olduğunu biliyorsa doğru kolu göstermenin en dolaysız yolu budur;
+    aynı yöntem doğrulama çalışmasında 500 m'de başarısız olan 14 AGİ havzasının
+    14'ünü de kurtarmıştı (bkz. tools/net_yagis_dogrulama.py `_havza_bul`).
+
+    Bu, "sonucu istenen yere çekmek" DEĞİLDİR: kalibre edilen büyüklük havza
+    alanı değil ÇIKIŞ NOKTASININ YERİdir, alan ise bağımsız olarak bilinir.
 
     Eski kural "arama kutusundaki en yüksek birikim"di ve İKİ YÖNLÜ hata
     veriyordu:
@@ -580,6 +596,24 @@ def _akarsuya_kenetle(acc, transform, dx, dy, lat, lon, h, w,
     d_sutun = (np.arange(c0, c1) - col)[None, :] * dx
     mesafe = np.hypot(d_satir, d_sutun)
     menzil = mesafe <= max(maks_m, min(dx, dy) * 0.5)
+
+    if hedef_hucre and hedef_hucre > 0:
+        # Hedef alan verildi: birikimi hedefe en yakın kanal hücresini seç.
+        # Mesafe, eşitliği bozan ikincil ölçüt — aynı kol boyunca birikim çok
+        # yavaş değiştiği için yüzlerce hücre benzer puan alır ve bunların
+        # tıklamaya en yakını doğru olandır.
+        aday = menzil & (pencere >= esik_hucre)
+        if aday.any():
+            fark = np.where(aday, np.abs(pencere - hedef_hucre), np.inf)
+            en_iyi = float(fark[aday].min())
+            # %2'lik bir bant: aynı kolun komşu hücreleri arasında mesafe karar versin
+            bant = aday & (fark <= en_iyi + 0.02 * max(hedef_hucre, 1.0))
+            m = np.where(bant, mesafe, np.inf)
+            ri, ci = np.unravel_index(int(np.argmin(m)), m.shape)
+            row2, col2 = r0 + int(ri), c0 + int(ci)
+            x, y = transform * (col2 + 0.5, row2 + 0.5)
+            return (row2, col2, float(x), float(y), float(mesafe[ri, ci]),
+                    float(pencere[ri, ci]))
 
     puan = np.where(menzil, pencere, -1.0)
     ri, ci = np.unravel_index(int(np.argmax(puan)), puan.shape)

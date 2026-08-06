@@ -233,6 +233,7 @@
         <label>Lc (km)<input id="inpLc" type="number" step="0.001"></label>
         <label>Dere eşiği (km²)<input id="inpRivThr" type="number" step="0.1" value="1"></label>
         <label title="Tıklanan nokta, bu yarıçap içindeki en büyük akış birikimine (ana kanala) kenetlenir. Büyük nehirde havza olduğundan küçük çıkıyorsa artırın (ör. 1500 m).">Kanala kenetleme (m)<input id="inpSnap" type="number" step="100" min="50" value="500"></label>
+        <label title="Havzanın yaklaşık alanını biliyorsanız yazın (boş bırakılabilir). Kenetleme o zaman &quot;yarıçaptaki en büyük kol&quot; yerine &quot;alanı buna en yakın kol&quot; kuralını kullanır. Kavşağa tıklandığında kritiktir: kollar birleşmeden 8 ve 16 km², birleştikten sonra 24 km²dir ve en büyüğü seçen kural hep sonuncusunu alır.">Beklenen alan (km², ops.)<input id="inpHedefAlan" type="number" step="0.1" min="0" placeholder="boş = otomatik"></label>
         <label title="ASTER: yerel, indirme yok, çok hızlı — küçük/eğimli havzalarda iyi. Copernicus: karo indirir, yavaş; düz ovalarda ve büyük havzalarda daha güvenilir akış ağı verir.">DEM kaynağı
           <select id="inpDem">
             <option value="auto">Otomatik (yerel varsa)</option>

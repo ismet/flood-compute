@@ -18,6 +18,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 
 | Klasör | İçerik |
 |---|---|
+| Harita altlıkları | Sağ üstteki katman kutusundan **Harita** (OpenStreetMap), **Uydu** (Esri World Imagery) ve **Topoğrafya** (OpenTopoMap — eş yükselti eğrileri + kabartma gölgelemesi, CC-BY-SA). Outlet'i yatağın üstüne koyarken vadi tabanını görmek için topoğrafya altlığı işe yarar; OSM'de dere çizgisi çoğu yerde yok, uyduda ağaç altında görünmüyor. |
 | `data/dem/` | (Opsiyonel) yerel DEM'ler (EPSG:4326 GeoTIFF, VRT, ERDAS .img veya ESRI Grid klasörü). ASTER 30 m grid'i `data/dem/aster30m/` altına yerleştirin. Yoksa Copernicus GLO-30 karoları otomatik indirilir (`data/dem/cache/`). |
 | `data/corine/` | (Opsiyonel) yerel CORINE 2018 GeoTIFF (sınıf kodları 111–523 veya grid kodu 1–44). Havzayı kapsayan yerel raster yoksa **EEA CLC2018 servisinden otomatik indirilir** (100 m, resmi lejand renklerinden sınıflandırılır, `data/corine/cache/` altına önbelleklenir). |
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
@@ -37,6 +38,21 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 1. **Havza** — Haritada outlet'e tıklanır; pyflwdir ile (pit doldurma → D8 akış
    yönü → birikim → outlet kenetleme) havza sınırı, dere ağı, en uzun akış yolu
    (L), ağırlık merkezi hizasına kanal mesafesi (Lc) ve alan çıkarılır.
+
+   **Kavşağa tıklarsanız "beklenen alan" kutusunu doldurun.** Kenetleme
+   varsayılan olarak yarıçap içindeki *en büyük* kola oturur (ArcHydro/QGIS
+   "Snap Pour Point" geleneği) ve bu, kolların birleştiği yerde hep birleşik
+   havzayı seçer. Beyağaç'ta (28.88968 D, 37.24602 K) tıklamanın 31 m yanında
+   8.2 km²'lik kol var ama kural 477 m yürüyüp 24.6 km²'yi alıyor. Beklenen
+   alanı yazınca kural "alanı buna en yakın kol"a döner: hedef 10 km² → 8.27 km²
+   ve nokta 477 m değil **78 m** kayar. Alan bağımsız olarak bilindiği için bu
+   sonucu istenen yere çekmek değildir — kalibre edilen şey çıkış noktasının
+   yeridir.
+
+   ⚠ Kenetleme yarıçapını büyütmek çözüm değildir, çünkü sonuç **yakınsamaz**:
+   aynı noktada 1000 m'de 25 km², 2000 m'de 215 km² çıkıyor — 2 km ötedeki
+   *başka* bir akarsuya atlıyor. Uygulama bu atlamayı artık uyarıyla bildirir
+   (`_kenetleme_uyar`).
 2. **Parametre** — Ana kanal boyunca 11 kot (harmonik eğim profili) DEM'den
    otomatik dolar, elle düzeltilebilir. Bölge sınıfı (A/B/C — YZD eğrisi)
    `data/regions/YZD_ALANLAR.kmz`'den havza konumuna göre **otomatik seçilir**
