@@ -66,6 +66,14 @@ function renderRainLegend() {
      <span class="small">(${rng.n} istasyon)</span>`;
 }
 
+/* 10 m DEM iki aşamalı çalışır ve tampon ister; kutu yalnız o seçilince görünür. */
+document.addEventListener("DOMContentLoaded", () => {
+  const d = document.getElementById("inpDem"), l = document.getElementById("lblTampon");
+  if (!d || !l) return;
+  const g = () => l.classList.toggle("hidden", d.value !== "10m");
+  d.addEventListener("change", g); g();
+});
+
 /* ---------------- harita ---------------- */
 const map = L.map("map").setView([39.2, 32.8], 6);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -73,7 +81,15 @@ const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 const sat = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   { maxZoom: 19, attribution: "Esri World Imagery" });
-L.control.layers({ "Harita": osm, "Uydu": sat }).addTo(map);
+// Topoğrafya altlığı: eş yükselti eğrileri + kabartma gölgelemesi. Outlet'i
+// yatağın üstüne koyarken vadi tabanını görmek için asıl işe yarayan altlık
+// budur; OSM'de dere çizgisi çoğu yerde yok, uyduda ağaç altında görünmüyor.
+// maxZoom 17: OpenTopoMap daha ötesini üretmiyor (18-19 boş karo döner).
+const topo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+  maxZoom: 17,
+  attribution: "© OpenStreetMap katkıcıları, SRTM | © OpenTopoMap (CC-BY-SA)",
+});
+L.control.layers({ "Harita": osm, "Uydu": sat, "Topoğrafya": topo }).addTo(map);
 const layers = {
   havza: L.geoJSON(null, {
     style: { color: "#0d5c63", weight: 2, fillOpacity: .08 },
@@ -1528,6 +1544,11 @@ map.on("click", async (ev) => {
     const r = await api("/api/delineate", {
       lat: ev.latlng.lat, lon: ev.latlng.lng, river_km2: +$("inpRivThr").value || 1,
       snap_m: +$("inpSnap").value || 500, dem_source: $("inpDem").value,
+      // Beklenen alan verilirse kenetleme "en büyük kol" yerine "alanı buna en
+      // yakın kol" der. Kavşakta tıklandığında fark büyük: Beyağaç'ta 24.6 km²
+      // yerine doğru kol olan 8.3 km² geliyor ve nokta 477 m değil 78 m kayıyor.
+      hedef_alan_km2: +$("inpHedefAlan").value || 0,
+      tampon_m: +$("inpTampon").value || 500,
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
   S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun

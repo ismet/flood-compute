@@ -64,7 +64,17 @@ class DelineateReq(BaseModel):
     lon: float
     river_km2: float = 1.0
     snap_m: float = 500.0   # tıklanan noktayı kanala kenetleme yarıçapı (m)
-    dem_source: str = "auto"  # auto | yerel (ASTER) | copernicus
+    dem_source: str = "auto"  # auto | yerel (ASTER) | copernicus | 10m
+    # "10m" seçilirse iki aşamalı çalışır: önce 30 m ile havza bulunur, sınırına
+    # bu kadar pay eklenir, 10 m ulusal DEM (ED50 Lambert) o pencereden kesilip
+    # WGS84'e döndürülür ve karakteristikler ondan hesaplanır. Pay şart: 10 m
+    # akış yolları biraz farklı gider, tam sınırdan kesilirse havza budanır.
+    tampon_m: float = 500.0
+    # Beklenen yağış alanı (km²). Verilirse kenetleme "en yüksek birikim"
+    # yerine "birikimi bu alana en yakın kanal" kuralını kullanır. Beyağaç'ta
+    # tıklamanın 31 m yanındaki 8.2 km²'lik kol yerine 477 m ötedeki birleşik
+    # 24.6 km² seçiliyordu; hedef verilince doğru kola 78 m'de oturuyor.
+    hedef_alan_km2: float = 0.0
 
 
 class MultiDelineateReq(BaseModel):
@@ -213,7 +223,8 @@ def api_delineate(req: DelineateReq):
         proc = subprocess.run(
             [sys.executable, "-m", "backend.core._delineate_subprocess",
              str(req.lat), str(req.lon), str(req.river_km2), "0.08", str(req.snap_m),
-             str(req.dem_source)],
+             str(req.dem_source), str(req.hedef_alan_km2 or 0.0),
+             str(req.tampon_m)],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=480,
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

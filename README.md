@@ -18,6 +18,9 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 
 | Klasör | İçerik |
 |---|---|
+| Harita altlıkları | Sağ üstteki katman kutusundan **Harita** (OpenStreetMap), **Uydu** (Esri World Imagery) ve **Topoğrafya** (OpenTopoMap — eş yükselti eğrileri + kabartma gölgelemesi, CC-BY-SA). Outlet'i yatağın üstüne koyarken vadi tabanını görmek için topoğrafya altlığı işe yarar; OSM'de dere çizgisi çoğu yerde yok, uyduda ağaç altında görünmüyor. |
+| `data/dem10/` | **10 m DEM kesitleri** — depoyla taşınır. Kaynağın tamamı 23.5 GB (GitHub dosya sınırının 236, Git LFS sınırının 12 katı) ve gönderilemez; ama çalışılan bölgenin kesiti ucuz: bir havza + tampon **0.2 MB**, ~55×55 km 11 MB. `python tools/dem10_kes.py --havza <kmz>` ya da `--bbox b g d k` ile üretilir; WGS84, sıkıştırılmış, +300 m emniyet paylı. Kesit depoda olduğunda 10 m seçeneği kaynağın bulunmadığı makinelerde (deploy dahil) da çalışır. `data/dem/` içine **konmaz**: orası 30 m havuzu ve merge karışık çözünürlükte ilk dosyanınkini dayatır. |
+| Ulusal 10 m DEM (tam) | (Opsiyonel) `D:\demdata\Yukseklik_10mDEM\10M\tr10clip.img` — 11.8 milyar hücre, 23.5 GB, ED50 üzerinde özel Lambert. Yolu `DEM_10M` ile değiştirilir. Yalnız kesit ÜRETMEK için gerekir; günlük kullanımda kesitler yeter. |
 | `data/dem/` | (Opsiyonel) yerel DEM'ler (EPSG:4326 GeoTIFF, VRT, ERDAS .img veya ESRI Grid klasörü). ASTER 30 m grid'i `data/dem/aster30m/` altına yerleştirin. Yoksa Copernicus GLO-30 karoları otomatik indirilir (`data/dem/cache/`). |
 | `data/corine/` | (Opsiyonel) yerel CORINE 2018 GeoTIFF (sınıf kodları 111–523 veya grid kodu 1–44). Havzayı kapsayan yerel raster yoksa **EEA CLC2018 servisinden otomatik indirilir** (100 m, resmi lejand renklerinden sınıflandırılır, `data/corine/cache/` altına önbelleklenir). |
 | `data/tables/` | Excel'den çıkarılmış sabit tablolar (BH2 boyutsuz eğri, YZD, ABAK2, DPLV, CN dönüşümleri). Elle düzenlemeyin; yeniden üretmek için `python tools/extract_tables.py`. |
@@ -37,6 +40,54 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 1. **Havza** — Haritada outlet'e tıklanır; pyflwdir ile (pit doldurma → D8 akış
    yönü → birikim → outlet kenetleme) havza sınırı, dere ağı, en uzun akış yolu
    (L), ağırlık merkezi hizasına kanal mesafesi (Lc) ve alan çıkarılır.
+
+   **Kavşağa tıklarsanız "beklenen alan" kutusunu doldurun.** Kenetleme
+   varsayılan olarak yarıçap içindeki *en büyük* kola oturur (ArcHydro/QGIS
+   "Snap Pour Point" geleneği) ve bu, kolların birleştiği yerde hep birleşik
+   havzayı seçer. Beyağaç'ta (28.88968 D, 37.24602 K) tıklamanın 31 m yanında
+   8.2 km²'lik kol var ama kural 477 m yürüyüp 24.6 km²'yi alıyor. Beklenen
+   alanı yazınca kural "alanı buna en yakın kol"a döner: hedef 10 km² → 8.27 km²
+   ve nokta 477 m değil **78 m** kayar. Alan bağımsız olarak bilindiği için bu
+   sonucu istenen yere çekmek değildir — kalibre edilen şey çıkış noktasının
+   yeridir.
+
+   ⚠ Kenetleme yarıçapını büyütmek çözüm değildir, çünkü sonuç **yakınsamaz**:
+   aynı noktada 1000 m'de 25 km², 2000 m'de 215 km² çıkıyor — 2 km ötedeki
+   *başka* bir akarsuya atlıyor. Uygulama bu atlamayı artık uyarıyla bildirir
+   (`_kenetleme_uyar`).
+
+   **Ulusal 10 m DEM (iki aşamalı).** DEM kaynağından seçilir. 10 m veri
+   11.8 milyar hücre olduğu için doğrudan okunamaz; havzanın nerede olduğunu
+   önce 30 m söyler. Sıra: 30 m ile havza → sınıra **tampon** (varsayılan
+   500 m) → 10 m'den o pencere kesilir, ED50 Lambert'ten WGS84'e döndürülür →
+   alan, L, Lc ve 11 kot profili 10 m'den yeniden hesaplanır. İkinci aşama
+   birincinin alanını hedef alır ki iki aşama aynı kolu anlatsın. Beyağaç
+   örneği, uçtan uca 8 saniye:
+
+   | | alan | L | Lc | çözünürlük |
+   |---|--:|--:|--:|--:|
+   | 30 m | 8.274 km² | 9.10 km | 4.80 km | 28 m |
+   | 10 m | 8.372 km² | 10.76 km | 6.88 km | 10.0 m |
+
+   ⚠ **Alan için 10 m'yi, L/Lc için 30 m'yi kullanın.** Alan %1 farkla aynı
+   çıkıyor (aynı havza), ama uzunluklar %18 ve %43 uzuyor — akarsu uzunluğu
+   ölçeğe bağlı bir büyüklüktür, ince DEM her kıvrımı sayar. DSİ'nin Ct/Cp
+   katsayıları **haritadan** ölçülmüş uzunluklarla kalibrelidir;
+   t<sub>p</sub> = C<sub>t</sub>·(L·L<sub>c</sub>)<sup>0.30</sup> olduğu için
+   10 m uzunlukları t<sub>p</sub>'yi %17 büyütür ve pik debiyi o oranda
+   düşürür. Uygulama bunu uyarı olarak yazar. 10 m'nin gerçek kazancı
+   **kot profili ve alan** ayrıntısındadır.
+
+   **10 m nereye kadar işe yarar:** havza çıkarımı `MAX_CELLS` (8 milyon) ile
+   sınırlı. 10 m'de hücre sayısı bunu aşınca DEM kabalaştırılır ve fiilen 30 m'ye
+   döner — 800 km²'ye kadar tam 10 m, 2000 km²'de 15.8 m, 7500 km²'de 30.6 m.
+   Yani **~5000 km² üstünde 10 m seçmenin hiçbir kazancı yok**; uygulama ve
+   kesme aracı bunu uyarı olarak yazar.
+
+   ⚠ **Datum notu:** kaynakta `TOWGS84` parametresi yok; PROJ "ED50 to WGS 84
+   (1)" dönüşümünü seçiyor ve ilan edilen doğruluğu **10 m** — tam bir hücre.
+   Türkiye'de yaygın (−84, −107, −120) parametreleriyle arasındaki fark
+   ölçüldü: 18 m. Yani kazanç çözünürlüktedir, mutlak konumda değil.
 2. **Parametre** — Ana kanal boyunca 11 kot (harmonik eğim profili) DEM'den
    otomatik dolar, elle düzeltilebilir. Bölge sınıfı (A/B/C — YZD eğrisi)
    `data/regions/YZD_ALANLAR.kmz`'den havza konumuna göre **otomatik seçilir**
