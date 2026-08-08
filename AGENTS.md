@@ -4,7 +4,7 @@
 
 **Entry:** `python run.py` → opens http://127.0.0.1:8737
 
-**Virtual environment:** `.venv/` at project root. Activate before running commands. System python3 lacks pyflwdir/rasterio/shapely.
+**Virtual environment:** `.venv/` at project root, built for the system Python **3.14** (3.13 no longer exists on the host). Activate before running commands. System python3 lacks pyflwdir/rasterio/shapely. If venv imports fail with `No module named 'uvicorn'` *while the package is visibly in* `site-packages/` — the venv was created for a different interpreter; rebuild with `python3 -m venv --clear .venv && .venv/bin/pip install -r requirements.txt` (needs the `python3.14-venv` apt package first).
 
 ## Commands
 
@@ -30,11 +30,16 @@ python tools/mgm_veritabani_olustur.py                # one-off: DMI-tümü/*.xl
 python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
 python tools/zemin_grubu_uret.py                      # one-off: SoilGrids -> data/zemin/hsg_tr.tif (soil group)
 python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
+python tools/dem10_kes.py --havza <kmz>|--bbox b g d k # one-off: 10 m DEM clip -> data/dem10/ (repo-carried)
+python tools/agi_alan_tamamla.py [--kmz <DMI-kmz>] [--yaz]  # one-off: fill missing AGİ catchment areas
+tools/mrsid_eklentisi_kur.sh <DSDK.tar.gz>            # one-off: build MrSID GDAL plugin on bare-metal Debian
 python tools/net_yagis_dogrulama.py                   # validate net layer vs AGİ gauges (slow: DEM delineation)
 python tools/net_yagis_dogrulama.py --yeniden-oku     # re-score saved basins against the current layer (fast)
 python tools/net_kalibrasyon.py [--uygula]            # fit budget params to gauges; --uygula writes su_butcesi.py
 python tools/extract_tables.py                        # regenerate JSON tables from Excel
 python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
+systemctl {status|stop|start|restart} taskin-hesap  # systemd service (unit file in repo root;
+                                                     # uvicorn direct, NOT run.py — it opens a browser)
 docker build -t taskin-hesap .                        # build Docker image
 ```
 
@@ -52,6 +57,8 @@ docker build -t taskin-hesap .                        # build Docker image
 
 Runs in a **subprocess** behind a global `threading.Lock`. Acquire with `blocking=False`; return **503** if locked. Same pattern for multi-delineate and import-basin. Prevents pyflwdir+numba memory corruption.
 
+numba 0.66+ no longer types plain tuple *subclasses*: pyflwdir 0.5.12's `@njit` `stream_distance`/`path` receive an `affine.Affine` and die with "Cannot determine Numba type of <affine.Affine>". Wrapped by `_flw_gecici_transform` (gis.py) — hands the jit calls a plain float64 6-tuple, restores the Affine afterwards (other code needs `transform * (x,y)` / `~transform`). Apply it around any NEW pyflwdir njit call that passes a transform.
+
 Snapping uses "highest accumulation within snap_m" (the ArcHydro / QGIS Snap
 Pour Point convention). That convention assumes the click is ON the channel and
 snap_m covers the DEM's positional error — a cell or two. The default 500 m is
@@ -62,7 +69,8 @@ the radius AND the result exceeds 1.5x the largest channel right under the click
 Both conditions are needed: sliding downstream along the SAME channel also
 saturates the radius but is harmless (Beyagac at 500 m snaps 477 m and is right).
 
-National 10 m DEM (`DEM_10M`, default D:\demdata\...\tr10clip.img, 23.5 GB,
+National 10 m DEM (`DEM_10M`, default `<repo>/10M/tr10clip.img` — 23.5 GB
+copy gitignored at repo root; override via env e.g. `D:\demdata\...\tr10clip.img`,
 11.8e9 cells, custom Lambert on ED50) is used TWO-STAGE via
 `delineate_iki_asamali`: 30 m finds the basin, its boundary is buffered, the
 10 m window is cut and reprojected to WGS84, characteristics recomputed. Stage
@@ -89,14 +97,14 @@ Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, `gis.py:41`), `HOST`, `PORT`
 ## Frontend
 
 ```
-backend/main.py       — FastAPI app, 37 endpoints, Pydantic models, HTTP Basic auth
+backend/main.py       — FastAPI app, 63 routes, Pydantic models, HTTP Basic auth
 backend/core/         — Computation engine (no framework dependency)
   engine.py           — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff
   snyder.py           — Snyder synthetic UH
   rational.py         — Rasyonel (A ≤ 1 km²)
   reservoir.py        — Storage-Indication routing + controlled gates
   routing.py          — Multi-basin (ara havza) hydrograph routing
-  gis.py              — Basin delineation, DEM handling (~907 lines)
+  gis.py              — Basin delineation, DEM handling (~1370 lines)
   tables.py           — JSON table loader + interpolation helpers (data layer)
   corine.py           — CORINE → CN lookup + rational C derivation (same pass)
   corine_online.py    — EEA CLC2018 WMS downloader
@@ -190,7 +198,7 @@ backend/core/         — Computation engine (no framework dependency)
                           inside the radius over a nearer short one (Lüleburgaz
                           has a 10-year gauge at 5.7 km, a 74-year one at 6.3).
 frontend/             — 3 files: index.html, app.js (all logic), style.css
-data/tables/          — 14 JSON tables (Excel-extracted; corine_c.json is a
+data/tables/          — 16 JSON tables (Excel-extracted; corine_c.json is a
                         CORINE class → rational C range matrix)
 data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
 data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
@@ -222,7 +230,7 @@ data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
 ## Key data files
 
 ```
-data/tables/*.json          — 14 Excel-extracted lookup tables (do not edit by hand)
+data/tables/*.json          — 16 Excel-extracted lookup tables (do not edit by hand)
 data/regions/YZD_ALANLAR.kmz — A/B/C flood region polygons
 data/stations/bir_cikti.kml  — legacy 2315-station network, NO LONGER auto-loaded.
                                It carries no station number, so it cannot be
@@ -236,7 +244,7 @@ data/agi/agi.sqlite          — DSİ+EİE annual peak flows (2732 stations, 3.8
 data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB)
 ```
 
-## API endpoints (38 total)
+## API endpoints (63 total)
 
 | Endpoint | Notes |
 |---|---|
@@ -246,6 +254,7 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `POST /api/basin-from-geometry` | Same as import-basin but input is GeoJSON, not a file — used after on-map editing |
 | `POST /api/kmz-export` | Basin + streams + selected method's Q2–Q10000 → .kmz |
 | `POST /api/raster-add` | Upload georeferenced raster basemap (`?crs=EPSG:…` if the file has none) |
+| `GET /api/raster-converter` | Whether a MrSID→GeoTIFF converter is installed (UI shows the right warning for .sid uploads) |
 | `POST /api/raster-delete` | Remove a raster basemap |
 | `POST /api/bilgi-katmani` | Non-computation map layer import (any vector format) |
 | `GET /api/raster-layers` | List raster basemaps |
@@ -298,7 +307,10 @@ data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB
 | `GET /api/reservoir-controlled-defaults` | Gated spillway defaults |
 | `GET /api/dilekce-defaults` | Petition default contact/signature info |
 | `GET /api/dilekce-imza` | Default signature/stamp image preview |
-| `POST /api/project/save` / `list` / `load/{ad}` / `DELETE` | Project CRUD |
+| `POST /api/project/save` | Project CRUD — all state as JSON in `data/projects/` (gitignored) |
+| `GET /api/project/list` | |
+| `GET /api/project/load/{ad}` | |
+| `DELETE /api/project/{ad}` | |
 
 ## Core computation formulas
 

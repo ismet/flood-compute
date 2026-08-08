@@ -1,0 +1,49 @@
+# Taşkın Hesap — systemd hizmet birimi
+#
+# Kurulum (bir kez):
+#   sudo cp taskin-hesap.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now taskin-hesap        # açılışta + hemen başlat
+#
+# Yönetim:
+#   sudo systemctl status taskin-hesap              # durum
+#   sudo systemctl stop taskin-hesap                # durdur
+#   sudo systemctl start taskin-hesap               # yeniden başlat
+#   sudo systemctl restart taskin-hesap             # durdur + başlat
+#   journalctl -u taskin-hesap -f                   # canlı günlük
+#
+# Notlar:
+# - run.py KULLANILMAZ (tarayıcı açmaya çalışır); uvicorn doğrudan çalıştırılır.
+# - Parola koruması için şu satırı açın (veya drop-in dosyasıyla verin):
+#     Environment=APP_PASSWORD=gizli-parola
+# - İlk havza çıkarımında DEM/CORINE önbelleği data/dem/cache'e yazılır;
+#   WorkingDirectory bu yüzden proje köküdür ve ilgili klasörler yazılabilir olmalıdır.
+
+[Unit]
+Description=Taşkın Hesap — Sentetik Yöntemler Web Uygulaması
+Documentation=file:///root/projects/flood-compute/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/root/projects/flood-compute
+Environment=HOST=0.0.0.0
+Environment=PORT=8737
+# Environment=APP_PASSWORD=gizli-parola
+
+# Gerekirse başka konumlardan gelen üst düzey komutlar için: absolute path
+ExecStart=/root/projects/flood-compute/.venv/bin/uvicorn backend.main:app --host $HOST --port $PORT --timeout-keep-alive 300
+Restart=always
+RestartSec=3
+# Uzun DEM/KORIN indirmeleri başlatma zamanını artırabilir:
+TimeoutStartSec=180
+
+# Loglar journalctl -u taskin-hesap ile okunur
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

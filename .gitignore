@@ -31,6 +31,10 @@ data/DMİ_yedek.kmz
 # data/dem/aster30m/ kuralı bu yolu kapsamıyordu.
 /aster30M/
 
+# Kökteki ulusal 10 m DEM kopyası (23.5 GB, ERDAS .img ailesi) — yerel kaynak,
+# depoya girmemeli. DEM_10M değişkeni burayı işaret eder (gis.py varsayılanı ROOT/10M/).
+/10M/
+
 # Excel açıkken bıraktığı kilit dosyaları
 ~$*
 

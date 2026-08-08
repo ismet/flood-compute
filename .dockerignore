@@ -4,3 +4,6 @@ data/projects/
 __pycache__/
 *.pyc
 tools/
+# Kökteki ulusal 10 m DEM kopyası (23.5 GB) — görüntü backend kopyalamıyor,
+# build bağlamına alınmasın.
+/10M/
