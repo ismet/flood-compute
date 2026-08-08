@@ -105,8 +105,10 @@ def main():
                 assert "dönüşüm" in metin.lower(), metin      # gerçek dönüşüm hatası
                 print(f"OK  .sid dönüştürücü      var ({yol}) — bozuk veri reddedildi")
             else:
-                assert "MrSID" in metin and "gdal-mrsid" in metin, metin
-                print("OK  .sid dönüştürücü yok  kurulum yolu gösteren hata veriyor")
+                # Dönüştürücü yoksa .sid nasıl okunur, mesaj işlevsel olmalı:
+                # formatı açıklamalı (MrSID) VE çözümü göstermeli (GeoTIFF).
+                assert "MrSID" in metin and "GeoTIFF" in metin, metin
+                print("OK  .sid dönüştürücü yok  GeoTIFF yolunu gösteren hata veriyor")
         # ana dosya reddedilince yan dosyalar da temizlenmeli
         assert not [f for f in os.listdir(raster._dizin()) if f.startswith("h48c2")], \
             "başarısız .sid yüklemesinden artık dosya kaldı"

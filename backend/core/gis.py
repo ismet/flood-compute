@@ -5,6 +5,7 @@ L, Lc ve harmonik kot profili.
 """
 import math
 import os
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -34,6 +35,23 @@ COP30_URL = ("https://copernicus-dem-30m.s3.amazonaws.com/"
 D8 = {64: (-1, 0), 128: (-1, 1), 1: (0, 1), 2: (1, 1),
       4: (1, 0), 8: (1, -1), 16: (0, -1), 32: (-1, -1)}
 
+@contextmanager
+def _flw_gecici_transform(flw):
+    """pyflwdir 0.5.12'nin @njit fonksiyonlarına Affine yerine düz float64
+    tuple'ı verir. numba 0.66+ sıradan tuple alt sınıflarını yazamıyor;
+    Affine (tuple alt sınıfı) bu fonksiyonlarda "Cannot determine Numba type
+    of <affine.Affine>" ile reddediliyor. Bu çağrılar transform'u yalnız
+    index'leriyle okuduğundan (transform[0]=xres, [4]=yres, [5]=north) aynı
+    değerlerin düz tuple'ı yeterlidir. Kapsamdan çıkınca Affine geri verilir;
+    başka kodlar `transform * (x, y)` çarpımını ve `~transform` tersini ister.
+    """
+    eski = flw.transform
+    flw.transform = (eski.a, eski.b, eski.c, eski.d, eski.e, eski.f)
+    try:
+        yield
+    finally:
+        flw.transform = eski
+
 # Havza çıkarımında bir DEM penceresi için üst hücre sınırı. Pencere bundan
 # büyükse DEM kabalaştırılır (bkz. get_dem_mosaic). Büyütmek doğruluğu artırır
 # ama belleği/süreyi de artırır; düşük bellekli sunucuda ortam değişkeniyle
@@ -58,9 +76,13 @@ MAKS_ARAMA_M = float(os.environ.get("SNAP_MAKS_ARAMA_M", "2000"))
 # 10 m DEM'in konum doğruluğu 30 m DEM'inkinden iyi ama "10 m" etiketinin
 # vaat ettiği kadar değil; kazanç ÇÖZÜNÜRLÜKTE (vadi tabanı, kanal ayrıntısı),
 # mutlak konumda değil.
+# Ulusal 10 m DEM kaynağı. Varsayılan, bu makinedeki yerel kopya
+# (repo kökündeki 10M/ klasörü); başka makinede bir kez indirilen/kopyalanan
+# kaynağa DEM_10M ortam değişkeniyle işaret edilir (ör. Windows'ta
+# D:\demdata\Yukseklik_10mDEM\10M\tr10clip.img). 10M/ .gitignore'lıdır —
+# 23.5 GB'lık dosya depoya girmemelidir.
 DEM_10M = os.environ.get(
-    "DEM_10M", os.path.join("D:", os.sep, "demdata", "Yukseklik_10mDEM", "10M",
-                            "tr10clip.img"))
+    "DEM_10M", os.path.join(ROOT, "10M", "tr10clip.img"))
 
 
 # Depoyla taşınan 10 m KESİTLERİ. Kaynağın tamamı 23.5 GB — GitHub'ın dosya
@@ -718,11 +740,12 @@ def _delineate_once(lat, lon, bbox, river_km2, snap_m=500.0, max_cells=None,
     gc.collect()
 
     # ---- en uzun akış yolu: akış mesafesi havza içinde max olan hücreden
-    dist_arr = flw.stream_distance(unit='m')
-    dist_arr = np.where(catch_arr & np.isfinite(dist_arr), dist_arr, -1)
-    head_idx = int(np.argmax(dist_arr))
+    with _flw_gecici_transform(flw):
+        dist_arr = flw.stream_distance(unit='m')
+        dist_arr = np.where(catch_arr & np.isfinite(dist_arr), dist_arr, -1)
+        head_idx = int(np.argmax(dist_arr))
 
-    path_idxs, _ = flw.path(idxs=np.array([head_idx]))
+        path_idxs, _ = flw.path(idxs=np.array([head_idx]))
     path_idxs = np.asarray(path_idxs[0])
 
     # outlet'e kadar olan kısmı al
@@ -967,7 +990,8 @@ def _params_from_mask(flw, transform, acc_arr, dem_raw, dist_all, mask, outlet_i
 
     d = np.where(mask & np.isfinite(dist_all), dist_all, -1)
     head_idx = int(np.argmax(d))
-    path_idxs, _ = flw.path(idxs=np.array([head_idx]))
+    with _flw_gecici_transform(flw):
+        path_idxs, _ = flw.path(idxs=np.array([head_idx]))
     path_idxs = np.asarray(path_idxs[0])
     cut = len(path_idxs) - 1
     for i in range(len(path_idxs)):
@@ -1156,7 +1180,8 @@ def params_from_basin_polygon(havza_gj, river_km2=1.0, max_cells=None,
     idx_out = r_o * w + c_o
     x_out, y_out = transform * (c_o + 0.5, r_o + 0.5)
 
-    dist_all = np.asarray(flw.stream_distance(unit="m"))
+    with _flw_gecici_transform(flw):
+        dist_all = np.asarray(flw.stream_distance(unit="m"))
     res = _params_from_mask(flw, transform, acc, dem_raw, dist_all, mask, idx_out,
                             cell_km2, h, w)
     if res is None:
@@ -1302,7 +1327,8 @@ def multi_delineate(down, ups, river_km2=1.0, snap_m=500.0, max_cells=None,
     dx = abs(transform.a) * 111320.0 * math.cos(math.radians(down["lat"]))
     dy = abs(transform.e) * 110540.0
     cell_km2 = dx * dy / 1e6
-    dist_all = np.asarray(flw.stream_distance(unit="m"))
+    with _flw_gecici_transform(flw):
+        dist_all = np.asarray(flw.stream_distance(unit="m"))
 
     # mansap havzası
     dr, dc, xod, yod = _snap_idx(acc, transform, dx, down["lat"], down["lon"], h, w,
