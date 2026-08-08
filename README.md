@@ -28,14 +28,14 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
 | `data/tables/mgm_plv_2020.json` | MGM 2020 tablosu — **yalnız 14 plüviyograf (PLV) oranı** için kullanılır. Dosyadaki P2–P500 sütunları duruyor ama `/api/mgm-stations` bunları **bilerek döndürmüyor**: P2–P100 artık `data/mgm/mgm.sqlite`'taki ham ölçümden hesaplanıyor. İki yağış kaynağını paralel tutmak, bir projede hangisinin kullanıldığını belirsiz bırakıyordu. `tools/extract_mgm_plv.py` ile üretilir. |
 | `data/zemin/` | `hsg_tr.tif` — hidrolojik zemin grubu (A/B/C/D), ~1 km, 80 kB. SoilGrids dokusundan Saxton & Rawls Ksat'ı hesaplanıp NRCS NEH-630 Tablo 7-1 sınırlarına vurulur; grup **profildeki en geçirimsiz katmana** göre verilir. Türkiye: %92.3 C, %6.1 D, %1.6 B. Üretmek: `python tools/zemin_grubu_uret.py`. Ana kayaya derinliği içermez, bu yüzden **alt sınırdır** — dağlık havzada gerçek grup bir kademe daha geçirimsiz olabilir. |
-| `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 24+ tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 5'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
+| `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 78 tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 5'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | ⚠ Eski yıllıkların (1979–1986) çıkarımında **118 pik kaydının başına fazladan bir rakam yapışmış** (D24A029 1981: 9500 m³/s, diğer 29 yıl 68–1033). NTFA/BTFA bunları varsayılan olarak eler ve hangisini neden elediğini sonuçta gösterir. `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 7'deki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
 | `data/yagis/` | `yagis_tr.tif` (yağış), `pet_tr.tif` (potansiyel evapotranspirasyon), `net_tr.tif` (net yağış = P − AET) — CHELSA v2.1, 1981–2010 normali, ~1 km piksel, toplam 6.6 MB. Haritada tematik katman; nokta ve havza alansal ortalaması sorgulanır. Yeniden üretmek: `python tools/yagis_haritasi_indir.py`. |
 | `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
-## İş akışı (6 adım)
+## İş akışı (7 adım)
 
 1. **Havza** — Haritada outlet'e tıklanır; pyflwdir ile (pit doldurma → D8 akış
    yönü → birikim → outlet kenetleme) havza sınırı, dere ağı, en uzun akış yolu
@@ -431,15 +431,15 @@ o kipler önceliklidir.
 havzada tek noktanın değeri yanıltıcıdır. `backend/core/yagis.py`.
 
 ⚠ **Ölçek uyarısı:** CHELSA'nın Türkiye ortalaması 740 mm, MGM'nin uzun dönem
-istasyon ortalaması ise 574 mm. Fark, istasyonların ovalarda yoğunlaşıp yüksek
-kesimleri örneklememesinden de kaynaklanabilir (o durumda 740 daha doğru bir
-alansal ortalamadır), CHELSA'nın ıslak sapmasından da. Aynı şekilde ω = 2.6
-ile ülke akışı 133 km³ çıkıyor; yaygın olarak anılan ~186 km³'e ω ≈ 2.0
-karşılık geliyor. Literatür değerini korudum — ω'yı ulusal toplamı tutturmak
-için değiştirmek, yağıştaki olası sapmayı AET içinde gizlemek olurdu.
-Kesin iş için havza ortalamasını yakındaki bir AGİ'nin **özgül verimiyle**
-(Su Potansiyeli sekmesi) karşılaştırın; gerekirse
-`python tools/yagis_haritasi_indir.py` içindeki `FU_OMEGA` değiştirilebilir.
+istasyon ortalaması ise 574 mm (yukarıdaki "Ülke ölçeğinde" paragrafı). Fark,
+istasyonların ovalarda yoğunlaşıp yüksek kesimleri örneklememesinden de
+kaynaklanabilir (o durumda 740 daha doğru bir alansal ortalamadır), CHELSA'nın
+ıslak sapmasından da. Kesin iş için havza ortalamasını yakındaki bir AGİ'nin
+**özgül verimiyle** (Su Potansiyeli sekmesi) karşılaştırın. Katmanı üreten
+bütçenin yapısal parametreleri `tools/su_butcesi.py` içinde durur
+(`PET_CARPAN = 0.80`, `HIZLI_PAY = 0.70`, `DERECE_GUN = 2.5`, etkin derinlik
+0–100 cm bandı); değiştirirseniz `python tools/net_yagis_dogrulama.py` ile
+yeniden doğrulayın.
 
 ## KMZ dışa aktarımı
 

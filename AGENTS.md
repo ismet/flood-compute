@@ -2,45 +2,45 @@
 
 **Stack:** Python 3 (FastAPI + uvicorn) + vanilla HTML/CSS/JS (Leaflet + Chart.js). No JS build tooling. Port **8737**, not 8000.
 
-**Entry:** `python run.py` → opens http://127.0.0.1:8737
+**Entry:** `python run.py` → opens http://127.0.0.1:8737 (auto-opens browser only on localhost)
 
 **Virtual environment:** `.venv/` at project root, built for the system Python **3.14** (3.13 no longer exists on the host). Activate before running commands. System python3 lacks pyflwdir/rasterio/shapely. If venv imports fail with `No module named 'uvicorn'` *while the package is visibly in* `site-packages/` — the venv was created for a different interpreter; rebuild with `python3 -m venv --clear .venv && .venv/bin/pip install -r requirements.txt` (needs the `python3.14-venv` apt package first).
 
 ## Commands
 
 ```bash
-python run.py                                         # dev server (auto-opens browser)
-python backend/tests/test_golden.py                   # DSİ/Mockus golden (49 peaks)
-python backend/tests/test_snyder_golden.py            # Snyder golden
-python backend/tests/test_reservoir_golden.py         # reservoir routing golden
-python backend/tests/test_api_smoke.py                # API smoke (FastAPI TestClient)
-python backend/tests/test_kmz_export.py               # KMZ writer round-trip
-python backend/tests/test_raster.py                   # raster basemap XYZ tiles + CRS
-python backend/tests/test_corine_c.py                 # CORINE -> rational C derivation
-python backend/tests/test_akarsu.py                   # DSİ river layer (skips if data absent)
-python backend/tests/test_kenetleme.py                # outlet snap jump warning (no DEM needed)
-python backend/tests/test_tfa_golden.py               # NTFA golden (ornek.xlsm, 6 distributions)
-python backend/tests/test_btfa_golden.py              # BTFA golden (Karamandere index-flood)
-python backend/tests/test_mmy_golden.py               # MMY golden (Hershfield PMP, 2 workbooks)
-python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb>  # one-off: MDB -> data/akarsu/akarsu.sqlite
-python tools/akarsu_sikistir.py                       # one-off: recode an old float32 akarsu.sqlite
-python tools/agi_veritabani_olustur.py <pik.csv>      # one-off: peaks CSV -> data/agi/agi.sqlite
-python tools/su_veritabani_olustur.py <Data.db>       # one-off: daily flows -> data/su/su.sqlite
+python run.py                                         # dev server (port 8737)
+python backend/tests/test_golden.py                   # DSİ/Mockus golden (49-peak KABULET matrix)
+python backend/tests/test_snyder_golden.py           # Snyder golden
+python backend/tests/test_reservoir_golden.py        # reservoir routing golden
+python backend/tests/test_api_smoke.py               # API smoke (FastAPI TestClient)
+python backend/tests/test_kmz_export.py              # KMZ writer round-trip
+python backend/tests/test_raster.py                  # raster basemap XYZ tiles + CRS
+python backend/tests/test_corine_c.py                # CORINE → rational C derivation
+python backend/tests/test_akarsu.py                  # DSİ river layer (skips if data absent)
+python backend/tests/test_kenetleme.py               # outlet snap jump warning (no DEM needed)
+python backend/tests/test_tfa_golden.py              # NTFA golden (ornek.xlsm, 6 distributions)
+python backend/tests/test_btfa_golden.py             # BTFA golden (Karamandere index-flood)
+python backend/tests/test_mmy_golden.py              # MMY golden (Hershfield PMP, 2 workbooks)
+python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb> # one-off: MDB -> data/akarsu/akarsu.sqlite
+python tools/akarsu_sikistir.py                      # one-off: recode an old float32 akarsu.sqlite
+python tools/agi_veritabani_olustur.py <pik.csv>     # one-off: peaks CSV -> data/agi/agi.sqlite
+python tools/su_veritabani_olustur.py <Data.db>      # one-off: daily flows -> data/su/su.sqlite
 python tools/mgm_veritabani_olustur.py                # one-off: DMI-tümü/*.xls -> data/mgm/mgm.sqlite
-python tools/awc_soilgrids.py                         # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
-python tools/zemin_grubu_uret.py                      # one-off: SoilGrids -> data/zemin/hsg_tr.tif (soil group)
-python tools/yagis_haritasi_indir.py                  # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
-python tools/dem10_kes.py --havza <kmz>|--bbox b g d k # one-off: 10 m DEM clip -> data/dem10/ (repo-carried)
-python tools/agi_alan_tamamla.py [--kmz <DMI-kmz>] [--yaz]  # one-off: fill missing AGİ catchment areas
-tools/mrsid_eklentisi_kur.sh <DSDK.tar.gz>            # one-off: build MrSID GDAL plugin on bare-metal Debian
-python tools/net_yagis_dogrulama.py                   # validate net layer vs AGİ gauges (slow: DEM delineation)
-python tools/net_yagis_dogrulama.py --yeniden-oku     # re-score saved basins against the current layer (fast)
-python tools/net_kalibrasyon.py [--uygula]            # fit budget params to gauges; --uygula writes su_butcesi.py
-python tools/extract_tables.py                        # regenerate JSON tables from Excel
-python tools/extract_mgm_plv.py                       # extract MGM PLV data (needs Excel at repo root)
-systemctl {status|stop|start|restart} taskin-hesap  # systemd service (unit file in repo root;
-                                                     # uvicorn direct, NOT run.py — it opens a browser)
-docker build -t taskin-hesap .                        # build Docker image
+python tools/awc_soilgrids.py                        # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
+python tools/zemin_grubu_uret.py                     # one-off: SoilGrids -> data/zemin/hsg_tr.tif
+python tools/yagis_haritasi_indir.py                 # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
+python tools/dem10_kes.py --havza <kmz>|--bbox b g d k  # one-off: 10 m DEM clip -> data/dem10/
+python tools/agi_alan_tamamla.py [--kmz <DMI-kmz>] [--yaz]  # fill missing AGİ catchment areas
+tools/mrsid_eklentisi_kur.sh <DSDK.tar.gz>          # build MrSID GDAL plugin (bare-metal Debian)
+python tools/net_yagis_dogrulama.py                  # validate net layer vs AGİ gauges (slow: DEM delineation)
+python tools/net_yagis_dogrulama.py --yeniden-oku     # re-score saved basins against current layer (fast)
+python tools/net_kalibrasyon.py [--uygula]           # fit budget params; --uygula writes su_butcesi.py
+python tools/extract_tables.py                       # regenerate JSON tables from Excel
+python tools/extract_mgm_plv.py                      # extract MGM PLV data (needs Excel at repo root)
+systemctl {status|stop|start|restart} taskin-hesap   # systemd service (unit in repo root; uvicorn
+                                                     # direct, NOT run.py — it opens a browser)
+docker build -t taskin-hesap .                       # build Docker image
 ```
 
 ## Conventions
@@ -48,308 +48,167 @@ docker build -t taskin-hesap .                        # build Docker image
 - **Turkish naming everywhere** (variables, comments, API fields, UI labels)
 - **Lazy GIS imports** — import pyflwdir, rasterio, numba, shapely **inside endpoint functions**, never at module top
 - **Tests run as `python` scripts** (not pytest). All use `sys.path.insert(0, ...)` before importing backend modules. Copy this pattern.
-- **Stateless computation** — client sends full state, server returns results. No session.
-- **No database** — `data/tables/*.json` loaded via `backend.core.tables.load()` with `@lru_cache`
-- **Error responses** always return `{"hata": str(e)}` — use `_err(e)` from `backend.main` (returns `JSONResponse(status_code=400)`)
+- **Stateless computation** — client sends full state, server returns results. No session (except project save/load under `data/projects/`).
+- **No database** — `data/tables/*.json` (16 files) loaded via `backend.core.tables.load()` with `@lru_cache`
+- **Error responses** always `{"hata": str(e)}` — use `_err(e)` from `backend.main` (returns `JSONResponse(status_code=400)`)
 - **POST endpoints** accept Pydantic model JSON bodies, except `POST /api/stations` and `POST /api/raster-add` (multipart form).
 
 ## GIS delineation
 
-Runs in a **subprocess** behind a global `threading.Lock`. Acquire with `blocking=False`; return **503** if locked. Same pattern for multi-delineate and import-basin. Prevents pyflwdir+numba memory corruption.
+Runs in a **subprocess** behind a global `threading.Lock` (delineate, multi-delineate, import-basin). Acquire with `blocking=False`, return **503** if locked. Prevents pyflwdir+numba scanline memory corruption.
 
-numba 0.66+ no longer types plain tuple *subclasses*: pyflwdir 0.5.12's `@njit` `stream_distance`/`path` receive an `affine.Affine` and die with "Cannot determine Numba type of <affine.Affine>". Wrapped by `_flw_gecici_transform` (gis.py) — hands the jit calls a plain float64 6-tuple, restores the Affine afterwards (other code needs `transform * (x,y)` / `~transform`). Apply it around any NEW pyflwdir njit call that passes a transform.
+**numba 0.66+ breaks pyflwdir's @njit calls on plain tuple* subclasses:** pyflwdir 0.5.12's njit `stream_distance`/`path` receive an `affine.Affine` and die with "Cannot determine Numba type of &lt;affine.Affine&gt;". Wrapped by `_flw_gecici_transform` (gis.py) — hands the jit calls a plain float64 6-tuple, restores the Affine afterwards (other code needs `transform * (x,y)` / `~transform`). Wrap ANY new pyflwdir njit call that passes a transform.
 
-Snapping uses "highest accumulation within snap_m" (the ArcHydro / QGIS Snap
-Pour Point convention). That convention assumes the click is ON the channel and
-snap_m covers the DEM's positional error — a cell or two. The default 500 m is
-±18 cells on a 28 m DEM, so widening it walks to ever-larger rivers and the area
-never converges: at Beyagac 1000 m gives 25 km2 and 2000 m gives 215, because a
-different river sits 2 km away. `_kenetleme_uyar` warns when the snap saturates
-the radius AND the result exceeds 1.5x the largest channel right under the click.
-Both conditions are needed: sliding downstream along the SAME channel also
-saturates the radius but is harmless (Beyagac at 500 m snaps 477 m and is right).
+**Outlet snapping** uses "highest accumulation within snap_m" (ArcHydro/QGIS convention), which assumes the click is ON the channel and snap_m is a cell or two. Default 500 m = ±18 cells on a 28 m DEM; widening walks to ever-larger rivers and the area never converges (Beyagac: 1000 m → 25 km², 2000 m → 215 km² — a *different* river sits 2 km away). `_kenetleme_uyar` warns when the snap saturates the radius AND the result exceeds 1.5× the largest channel under the click — both conditions, because sliding downstream along the SAME channel also saturates but is harmless.
 
-National 10 m DEM (`DEM_10M`, default `<repo>/10M/tr10clip.img` — 23.5 GB
-copy gitignored at repo root; override via env e.g. `D:\demdata\...\tr10clip.img`,
-11.8e9 cells, custom Lambert on ED50) is used TWO-STAGE via
-`delineate_iki_asamali`: 30 m finds the basin, its boundary is buffered, the
-10 m window is cut and reprojected to WGS84, characteristics recomputed. Stage
-two targets stage one's area so both stages describe the same branch.
-Area agrees within ~1%, but L and Lc come out 18% and 43% LONGER at 10 m --
-channel length is scale-dependent and DSI's Ct is calibrated on map-measured
-lengths, so 10 m lengths inflate tp by ~17% and depress the peak. The result
-warns and says to take area/elevations from 10 m and L/Lc from 30 m.
-Clips travel with the repo in data/dem10 (tools/dem10_kes.py) so the 10 m
-option works where the 23.5 GB source is absent; `_kesit_bul` prefers a
-covering clip over the source. Clips carry a +300 m margin because the app
-recomputes its window from its OWN stage-1 basin at full precision and a
-hand-rounded box misses by metres -- that is how the first clip failed to
-match. They live OUTSIDE data/dem: that pool is merged, and merge imposes the
-first file's resolution on the rest.
-10 m only pays below ~5000 km2: MAX_CELLS (8e6) coarsens it back to 30 m above
-that (800 km2 -> 10 m, 2000 -> 15.8, 7500 -> 30.6). Both the API result and the
-clip tool say so.
-Source WKT has no TOWGS84; PROJ picks "ED50 to WGS 84 (1)", declared accuracy
-10 m (one cell) -- the gain is resolution, not absolute position.
+**National 10 m DEM (`DEM_10M`, default `<repo>/10M/tr10clip.img` — override via env; ~23.5 GB, gitignored) is used TWO-STAGE** via `delineate_iki_asamali`: 30 m finds the basin → boundary buffered → 10 m window clipped and reprojected to WGS84 → characteristics recomputed. Stage two targets stage one's area. Area agrees ~1%, but L/Lc come out 18%/43% LONGER at 10 m (channel length is scale-dependent and DSİ's Ct is calibrated to map-measured lengths), which inflates tp ~17% and depresses the peak; results warn to take area/elevations from 10 m, L/Lc from 30 m. Clips travel in `data/dem10/` (`tools/dem10_kes.py`) so the 10 m option works without the 23.5 GB source; `_kesit_bul` prefers a covering clip. Clips carry a **+300 m margin** — the app recomputes its window from its own stage-1 basin and a hand-rounded box misses by metres. They live OUTSIDE `data/dem/`: that pool is a merge and merge imposes the first file's resolution. 10 m only pays below ~5000 km²: MAX_CELLS coarsens above (800 → 10 m, 2000 → 15.8, 7500 → 30.6 m). Source WKT has no TOWGS84; PROJ picks "ED50 to WGS 84 (1)", declared accuracy 10 m — the gain is resolution, not absolute position.
 
-Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, `gis.py:41`), `HOST`, `PORT`, `APP_PASSWORD`.
+Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, gis.py:59), `HOST`, `PORT`, `APP_PASSWORD`, `DEM_10M`.
 
-## Frontend
+## Architecture
 
 ```
-backend/main.py       — FastAPI app, 63 routes, Pydantic models, HTTP Basic auth
-backend/core/         — Computation engine (no framework dependency)
-  engine.py           — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff
-  snyder.py           — Snyder synthetic UH
-  rational.py         — Rasyonel (A ≤ 1 km²)
-  reservoir.py        — Storage-Indication routing + controlled gates
-  routing.py          — Multi-basin (ara havza) hydrograph routing
-  gis.py              — Basin delineation, DEM handling (~1370 lines)
-  tables.py           — JSON table loader + interpolation helpers (data layer)
-  corine.py           — CORINE → CN lookup + rational C derivation (same pass)
-  corine_online.py    — EEA CLC2018 WMS downloader
-  thiessen.py         — Voronoi/Thiessen weights from KMZ
-  snowmelt.py         — Degree-day snowmelt (KAR1)
-  zemin.py            — Hydrologic soil group (A/B/C/D) from the basin's soil.
-                          THE most consequential input in the whole computation:
-                          on the Karakurt basin, B vs C moves Q100 from 296 to
-                          771 m3/s, A vs D by a factor of ten. It used to be a
-                          hardcoded dropdown default of B with no justification
-                          — and B fits 1.6% of Turkey (92.3% is C). Now derived
-                          from SoilGrids texture via Saxton & Rawls Ksat and the
-                          NRCS NEH-630 Table 7-1 bands, governed by the LEAST
-                          transmissive layer in the profile. Returns its own
-                          reasoning (per-group area shares, Ksat band) so the
-                          choice is visible and overridable.
-                          Does NOT know depth to bedrock, so it is a LOWER
-                          bound; in steep basins the true group may be one step
-                          less permeable.
-  yzd_region.py       — YZD region (A/B/C) from basin polygon
-  report.py           — Word (.docx) flood report
-  dilekce.py          — MGM petition (.docx/.pdf)
-  _delineate_subprocess.py   — subprocess entry point: python -m
-  _multi_delineate_subprocess.py
-  _import_basin_subprocess.py — subprocess entry point: python -m
-  vektor.py             — KML/KMZ/GeoJSON parser for basin import
-  kmz_export.py         — KMZ *writer* (basin + streams + return-period peaks)
-  raster.py             — Georeferenced raster basemaps → XYZ tile service
-  akarsu.py             — DSİ river network context layer (SQLite R*Tree, bbox query)
-  yagis.py              — Climate layers (CHELSA v2.1, ~1 km): precipitation, PET
-                          and net precipitation (≈ runoff depth). Colour-ramped
-                          XYZ tiles, point query, basin areal means. Net is NOT
-                          P−PET: PET exceeds P over most of Turkey, so that
-                          difference is a climatic deficit, not runoff. Net comes
-                          from a MONTHLY Thornthwaite-Mather balance with a
-                          degree-day snow model (tools/su_butcesi.py — shared by
-                          the map generator AND the calibrator, deliberately:
-                          two copies could drift and then the calibrated model
-                          would not be the shipped one). Annual totals hide
-                          Turkey's wet-winter/dry-summer contrast.
-                          CALIBRATED against 41 natural stream gauges: raw
-                          NSE +0.42 / -35% bias, calibrated +0.72 / +1%,
-                          5-fold cross-validated +0.58. Weak in Ege/Marmara
-                          (NSE 0.01) and +44% in the Aras basin — known, open.
-                          nodata is 65535, NOT 0: zero runoff is a legitimate
-                          value over closed basins (Konya: P=389, AET=389, net=0).
-                          Any masking here must compare against src.nodata.
-  tfa.py                — NTFA: at-site flood frequency analysis (6 distributions + K-S)
-                          plus the Grubbs-Beck outlier test (Bulletin 17B),
-                          always reported, never auto-applied. aykiri_disla=True
-                          reruns without the outliers and returns it alongside
-                          under `aykirisiz`; the primary result is untouched.
-                          17B keeps high outliers unless proven erroneous —
-                          dropping them biases the design flood LOW, which is
-                          the unsafe direction. Removing outliers does not even
-                          reliably lower the answer: on D24A029 censoring one
-                          low outlier RAISES Q100 from 1301 to 1481.
-  btfa.py               — BTFA: regional index-flood + Dalrymple homogeneity test
-  mmy.py                — MMY: Hershfield probable maximum precipitation (PMP)
-  su.py                 — Water potential: basin → nearby gauges → record gaps →
-                          regression gap-filling → area-ratio transfer to the outlet
-  agi.py                — AGİ annual-peak database (SQLite R*Tree, bbox/polygon query).
-                          SCREENS OUT CORRUPT PEAKS BY DEFAULT (seri_denetimli).
-                          The yearbook PDFs were extracted with a leading digit
-                          glued onto some values in the 1979-1986 volumes:
-                          D24A029 reads 9500 m3/s for 1981 where every other
-                          year is 68-1033, and that one value pushed Q100 from
-                          1301 to 7314. 118 such records exist. Two independent
-                          tests, either sufficient: the Creager C=100 world
-                          envelope (skipped when area is the 1.0 placeholder —
-                          there the AREA is wrong, and those rows are canals and
-                          springs anyway), and outlier-flagged AND above 5x the
-                          station's second largest. Neither alone works: 53 of
-                          130 flagged records are physically plausible, and real
-                          record floods reach 3-4x. Excluded rows are RETURNED,
-                          not dropped silently — /api/tfa reports elenen_kayitlar.
-  mgm.py                — MGM weather-station database (1290 stations, every
-                          observation sheet). Supplies P2…P100 for step 5 by
-                          running tfa.py on each station's annual maximum daily
-                          rainfall — same six distributions, same K-S choice,
-                          rainfall in mm instead of discharge.
-                          data/tables/mgm_plv_2020.json IS NO LONGER A P24
-                          SOURCE; /api/mgm-stations deliberately strips its P24
-                          field and serves only pluviograph (PLV) ratios. Two
-                          parallel rainfall sources made it unknowable which one
-                          a project actually used.
-                          The step-4 Thiessen set IS this database, so step-5
-                          matching is by `kod` — identity, not search. Coordinate
-                          matching survives only for uploaded KMZs and
-                          hand-placed points; there it prefers a ≥25-year record
-                          inside the radius over a nearer short one (Lüleburgaz
-                          has a 10-year gauge at 5.7 km, a 74-year one at 6.3).
-frontend/             — 3 files: index.html, app.js (all logic), style.css
-data/tables/          — 16 JSON tables (Excel-extracted; corine_c.json is a
-                        CORINE class → rational C range matrix)
-data/regions/         — YZD_ALANLAR.kmz (A/B/C polygons)
-data/raster/          — uploaded raster basemaps + .json sidecars (gitignored)
-data/akarsu/          — akarsu.sqlite, DSİ river network at 1/100k–1/500k
-                        (405k lines, 68 MB, committed). Geometry is delta+varint
-                        +zlib (see `akarsu.kodla`): raw float32 pairs made the
-                        file 105 MB, over GitHub's 100 MB limit, so the layer
-                        never reached the deployed instance. Old float32 files
-                        still decode — `meta.geometri` selects the format.
-data/agi/             — agi.sqlite, DSİ+EİE annual peak flows 1935–2020
-                        (2732 stations / 36.5k station-years, 3.8 MB)
-data/su/              — su.sqlite, daily flows 1934–2015 (2909 stations,
-                        8.9M days). Built from the 1.68 GB Data.db; each
-                        station's series is one zlib'd float32 blob (NaN =
-                        missing day), which is why it fits in 11.5 MB and why
-                        a whole station reads in one row.
+backend/main.py    — FastAPI app, 64 routes (30 GET, 33 POST, 1 DELETE), Pydantic models, HTTP Basic auth
+backend/core/      — Computation engine (no framework dependency)
+  engine.py        — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff (BH2 UH, 7×7 KABULET matrix)
+  snyder.py        — Snyder synthetic UH (Ct·(L·Lc)^0.30; volume-balanced hydrograph)
+  rational.py      — Rasyonel (A ≤ 1 km²)
+  reservoir.py     — Storage-Indication / Modified Puls + controlled gate peak-shaving
+  routing.py       — Multi-basin (ara havza) routing: Q_mansap(t) = Q_ara(t) + Σ Q_memba(t − Tc_ara)
+  gis.py           — Delineation, DEM, 10 m two-stage, snapping, kenetleme (~1400 lines)
+  tables.py        — data layer: `load()` JSON loader (lru_cache) + interpolators
+  corine.py        — CORINE → CN mapping + rational C derivation (same pass)
+  corine_online.py — EEA CLC2018 WMS downloader
+  thiessen.py      — Voronoi/Thiessen weights from points
+  snowmelt.py      — Degree-day snowmelt (KAR1)
+  zemin.py         — Soil group A/B/C/D (see "most consequential input", formulas)
+  yzd_region.py    — YZD region (A/B/C) from basin polygon
+  report.py        — Word (.docx) flood report
+  dilekce.py       — MGM petition (.docx/.pdf)
+  _delineate_subprocess.py / _multi_delineate_subprocess.py / _import_basin_subprocess.py
+                    — subprocess entry points (python -m backend.core…)
+  vektor.py        — KML/KMZ/GeoJSON parser for basin import
+  kmz_export.py    — KMZ *writer* (basin + streams + return-period peaks)
+  raster.py        — Georeferenced rasters → XYZ tiles (reprojects to EPSG:3857)
+  akarsu.py        — DSİ river layer (SQLite R*Tree). Geometry is delta+varint
+                      +zlib (`kodla`): raw float32 pairs were 105 MB > GitHub's
+                      100 MB cap. Old formats still decode — `meta.geometri` selects.
+  yagis.py         — Climate layers (CHELSA v2.1): P, PET, net. Net is a MONTHLY
+                     Thornthwaite-Matter + snowfall degree-day budget (budget code
+                     SHARED with the calibrator: tools/su_butcesi.py), NOT P−PET.
+                     Calibrated vs 41 natural gauges (NSE +0.72, 5-fold cv +0.58;
+                     weak in Aegean/Marmara, +44% Aras — known, open). Nodata is
+                     65535, NOT 0: zero runoff is legit (closed Konya basin). Any
+                     masking MUST compare against src.nodata.
+  tfa.py          — NTFA: 6 distributions, K-S accept, Grubbs-Beck (outliers
+                     reported, never auto-applied). Also the engine for step-5
+                     rainfall P2…P100 per station. See golden quirks below.
+  btfa.py         — BTFA regional index-flood + Dalrymple homogeneity (formulas)
+  mmy.py          — MMY Hershfield PMP, regional Km envelope (formulas)
+  su.py           — Water potential: gauge → regression gap-fill → area-ratio transfer
+  agi.py          — AGİ peak DB (SQLite R*Tree). SCREENS OUT CORRUPT PEAKS BY
+                     DEFAULT (seri_denetimli): the 1979–1986 yearbook extraction
+                     glued a leading digit onto 118 records (D24A029 reads
+                     9500 m³/s for 1981 vs 68–1033 in every other year, which
+                     moved Q100 from 1301 to 7314). Two tests, either sufficient:
+                     Creager C=100 envelope (skipped when catchment area is the
+                     1.0 placeholder; those rows are springs/canals anyway) and
+                     outlier-flagged AND >5× second-largest. Excluded rows are
+                     RETURNED, never dropped (elenen_kayitlar).
+  mgm.py          — MGM weather DB: supplies step-5 P2…P100 by running tfa.py
+                     on each station's annual maximum daily rainfall — same six
+                     distributions. data/tables/mgm_plv_2020.json is NOT a P24
+                     source anymore; /api/mgm-stations deliberately strips its
+                     P24 field (two parallel sources made it unknowable which one
+                     a project used). Step-4 Thiessen set IS this DB, so step-5
+                     matching is by `kod` identity; only uploaded KMZs/hand
+                     points match by coordinate (prefer ≥25-yr record inside the
+                     radius over a nearer short one — Lüleburgaz has 10-yr at
+                     5.7 km, 74-yr at 6.3).
+frontend/           — 3 files: index.html, app.js (all state in `S` singleton), style.scss
 ```
-- **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue
-- Mounted at `/static/`; `index.html` served at `/` via `FileResponse` with `Cache-Control: no-cache`
-- Leaflet + Chart.js from CDNs (unpkg, cdn.jsdelivr)
+
+- **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue. Public `/static/`; `index.html` at `/` with `Cache-Control: no-cache`. Leaflet + Chart.js from CDNs.
+- Frontend table/UH data lives in `data/` JSON: `data/tables/*.json` (16 Excel-extracted lookup tables; do NOT edit by hand, regenerate with `tools/extract_tables.py`)
+
+## Data
+
+```
+data/regions/YZD_ALANLAR.kmz  YZD A/B/C polygons
+data/corine/                 local CORINE 2018 (else EEA WMS → data/corine/cache/)
+data/dem/ + data/dem/cache/  local 30 m DEMs & Copernicus GLO-30 tiles (merged pool)
+data/dem10/                  repo-carried 10 m clips (tool: tools/dem10_kes.py)
+data/yagis/                  — yagis/pet/net GeoTIFFs (CHELSA v2.1, ~1 km), plus awc*_tr.tif from SoilGrids
+data/zemin/                  — hsg_tr.tif (soil group A/B/C/D, ~1 km)
+data/akarsu/akarsu.sqlite    — DSİ river network (405k lines, 68 MB, committed)
+data/agi/agi.sqlite          — DSİ+EİE annual peaks 1935–2020 (2732 stations / 36.5k st-yrs, 3.8 MB)
+data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB; per-station
+                                zlib'd float32 blob, NaN = missing day)
+data/mgm/mgm.sqlite          — 1290 stations, 45k station-years (13 MB); 1184 (≥10 yr) = the Thiessen set
+data/stations/bir_cikti.kml  — legacy 2315-station layer, NO LONGER auto-loaded (no station
+                                numbers → can't join measurement DBs; cells borrowed rain
+                                from neighbours). Uploadable manually.
+data/raster/ (uploaded rasters, gitignored), data/projects/ (saved projects, gitignored)
+```
 
 ## External data
 
 | Data | Source | Trigger |
 |---|---|---|
-| DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (~50-100 MB) |
+| DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (current cache ~3.4 GB) |
 | CORINE (CLC2018) | EEA WMS → `data/corine/cache/` | First CN computation |
 
-## Key data files
-
-```
-data/tables/*.json          — 16 Excel-extracted lookup tables (do not edit by hand)
-data/regions/YZD_ALANLAR.kmz — A/B/C flood region polygons
-data/stations/bir_cikti.kml  — legacy 2315-station network, NO LONGER auto-loaded.
-                               It carries no station number, so it cannot be
-                               joined to the measurement DB by identity and its
-                               cells borrowed rainfall from a neighbour. Kept on
-                               disk; still uploadable through /api/stations.
-data/mgm/mgm.sqlite          — MGM observation sheets, 1290 stations (13 MB).
-                               1184 of them (≥10 yr) ARE the step-4 Thiessen set.
-data/akarsu/akarsu.sqlite    — DSİ river network (405k lines, 68 MB, committed)
-data/agi/agi.sqlite          — DSİ+EİE annual peak flows (2732 stations, 3.8 MB)
-data/su/su.sqlite            — daily flows 1934–2015 (2909 stations, 11.5 MB)
-```
-
-## API endpoints (63 total)
+## API endpoints (64 total)
 
 | Endpoint | Notes |
 |---|---|
-| `POST /api/delineate` | Basin delineation from outlet click (subprocess, locked) |
-| `POST /api/multi-delineate` | Multi-basin (ara havza) delineation |
-| `POST /api/import-basin` | Upload basin polygon from KML/KMZ/GeoJSON |
-| `POST /api/basin-from-geometry` | Same as import-basin but input is GeoJSON, not a file — used after on-map editing |
-| `POST /api/kmz-export` | Basin + streams + selected method's Q2–Q10000 → .kmz |
-| `POST /api/raster-add` | Upload georeferenced raster basemap (`?crs=EPSG:…` if the file has none) |
-| `GET /api/raster-converter` | Whether a MrSID→GeoTIFF converter is installed (UI shows the right warning for .sid uploads) |
-| `POST /api/raster-delete` | Remove a raster basemap |
-| `POST /api/bilgi-katmani` | Non-computation map layer import (any vector format) |
-| `GET /api/raster-layers` | List raster basemaps |
-| `GET /api/akarsu` | DSİ river network for a bbox (`bati/guney/dogu/kuzey`, `olcek` 100/250/500) — context only, not used in computation |
-| `GET /api/akarsu-bilgi` | Whether the river layer is installed and how many lines per scale |
-| `GET /api/yagis-bilgi` | Installed climate layers + colour-ramp legends |
-| `GET /api/yagis/{katman}/{z}/{x}/{y}.png` | XYZ tiles per layer (`yagis`/`pet`/`net`; 204 out of coverage) |
-| `GET /api/yagis-nokta` | P, PET, AET and net precipitation at a point (mm/yr) |
-| `POST /api/yagis-havza` | Areal means over a basin + derived AET and runoff coefficient |
-| `GET /api/mgm-bilgi` | Whether the MGM weather database is installed; how many stations are long enough for frequency analysis |
-| `GET /api/mgm` | MGM stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`) |
-| `GET /api/mgm-seri` | A station's annual-maximum series, or any observation type (`tur`) |
-| `POST /api/mgm-frekans` | Rainfall frequency analysis for one station → P2…P100 (`P24`) |
-| `POST /api/mgm-eslestir` | Match Thiessen stations to MGM stations and compute their P2…P100 |
-| `GET /api/agi-bilgi` | Whether the AGİ peak-flow database is installed; station/record counts |
-| `GET /api/agi` | AGİ stations in a bbox (`bati/guney/dogu/kuzey`, `en_az_yil`, `kurum`) |
-| `POST /api/agi-havza` | AGİ stations inside/around a basin polygon (`tampon_derece`) |
-| `GET /api/agi-seri` | One station's annual peak series (`kod`, year range, confidence filter) |
-| `POST /api/tfa` | NTFA — at-site frequency analysis from a station code or a raw series |
-| `POST /api/btfa` | BTFA — regional index-flood from several station codes + basin area |
-| `GET /api/mmy-bolgeler` | Regions that have a Km envelope curve (for MMY) |
-| `POST /api/mmy` | MMY — Hershfield PMP from an annual max daily rainfall series |
-| `GET /api/su-bilgi` | Whether the daily-flow (water potential) database is installed |
-| `GET /api/su-istasyon` | Daily-flow stations in a bbox (`en_az_yil` filters short records) |
-| `POST /api/su` | Water potential: Qort, monthly split, annual volume, FDC, supply reliability |
-| `POST /api/su-havza` | Daily-flow stations inside/around a basin polygon (`tampon_derece`) |
-| `POST /api/su-periyot` | Station × water-year record status (tam/eksik/yok) + pairwise regressions |
-| `POST /api/su-tamamla` | Fill a station's missing years by regression, then transfer to the outlet |
-| `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service (reprojects to EPSG:3857; 204 when out of coverage) |
-| `POST /api/compute` | All flood methods (DSİ, Mockus, +optional rational/snyder/snowmelt) |
-| `POST /api/cn` | CORINE CN from basin polygon + soil group |
-| `POST /api/thiessen` | Thiessen weights from basin + stations |
-| `POST /api/stations` | Upload custom station KMZ/KML |
-| `POST /api/route` | Multi-basin hydrograph routing |
-| `POST /api/reservoir-route` | Storage-Indication routing |
-| `POST /api/reservoir-controlled` | Gated spillway optimization (peak-shaving) |
-| `POST /api/report` | Generate .docx flood report |
-| `POST /api/dilekce` | Generate MGM petition (.docx/.pdf) |
-| `POST /api/yil-ara` | Return period from Q/Q10/Q100 (analytical inverse) |
-| `POST /api/rainfall/parse` | Parse pasted rainfall table |
-| `POST /api/zemin-grubu` | Hydrologic soil group (A/B/C/D) for a basin, with its reasoning |
-| `POST /api/yzd-region` | YZD region (A/B/C) from basin |
-| `GET /api/stations/default` | Default Thiessen set: MGM stations with ≥`en_az_yil` of rainfall record |
-| `GET /api/mgm-stations` | MGM 2020 PLV (236 stations) |
-| `GET /api/dplv` | DPLV station list |
-| `GET /api/geocode` | OSM Nominatim (Turkey) |
-| `GET /api/snyder-ctcp` | Snyder Ct-Cp abacus |
-| `GET /api/abak2` | ABAK2 areal reduction table |
-| `GET /api/reservoir-defaults` | Söylemez reservoir defaults |
-| `GET /api/reservoir-controlled-defaults` | Gated spillway defaults |
-| `GET /api/dilekce-defaults` | Petition default contact/signature info |
-| `GET /api/dilekce-imza` | Default signature/stamp image preview |
-| `POST /api/project/save` | Project CRUD — all state as JSON in `data/projects/` (gitignored) |
-| `GET /api/project/list` | |
-| `GET /api/project/load/{ad}` | |
-| `DELETE /api/project/{ad}` | |
+| `POST /api/delineate` | Basin delineation from a single outlet (subprocess, locked) |
+| `POST /api/multi-delineate` | Multi-basin (ara havza) one-pass delineation |
+| `POST /api/import-basin` | Basin polygon from KML/KMZ/GeoJSON file |
+| `POST /api/basin-from-geometry` | Same, GeoJSON body — used after on-map editing |
+| `POST /api/kmz-export` | kmz writer: basin + streams + selected Q2–Q10000 |
+| `POST /api/raster-add` | Add a georeferenced raster basemap (`?crs=` if missing) |
+| `GET /api/raster-converter` | MrSID→GeoTIFF converter installed? (UI warns for .sid) |
+| `POST /api/raster-delete` / `GET /api/raster-layers` | Manage uploads |
+| `POST /api/bilgi-katmani` | Non-computation map layer import |
+| `GET /api/akarsu` (`bati/guney/dogu/kuzey`, `olcek`) / `GET /api/akarsu-bilgi` | DSİ river layer (bbox, 100/250/500 k) — context only |
+| `GET /api/yagis-bilgi` / `GET /api/yagis/{katman}/{z}/{x}/{y}.png` | climate tiles (`yagis`/`pet`/`net`, 204 outside coverage) |
+| `GET /api/yagis-nokta` / `POST /api/yagis-havza` | point / areal-mean climate queries |
+| `GET /api/mgm-bilgi` / `GET /api/mgm` / `GET /api/mgm-seri` | MGM weather stations; series by `tur` |
+| `POST /api/mgm-frekans` / `POST /api/mgm-eslestir` | P2–P100 per station / Thiessen-set match |
+| `GET /api/agi-bilgi` / `GET /api/agi` / `POST /api/agi-havza` / `GET /api/agi-seri` | AG peak-flow stations (bbox/polygon, seri filtering) |
+| `POST /api/tfa` | NTFA — at-site frequency from station code or raw series |
+| `POST /api/btfa` | BTFA — regional index-flood (station codes + area) |
+| `GET /api/mmy-bolgeler` / `POST /api/mmy` | MMY regions + Hershfield PMP |
+| `GET /api/su-bilgi` / `GET /api/su-istasyon` | Water-potential DB installed? / stations in bbox (`en_az_yil`) |
+| `POST /api/su` / `POST /api/su-havza` | single-station metrics (Qort, monthly split, FDC, reliability) / stations near basin (`tampon_derece`) |
+| `POST /api/su-periyot` / `POST /api/su-tamamla` | station×water-year record matrix + regressions / gap-fill + transfer to outlet |
+| `GET /api/raster/{ad}/{z}/{x}/{y}.png` | XYZ tile service for uploaded basemaps (204 out of coverage) |
+| `POST /api/compute` | All flood methods (DSİ, Mockus, optional rational/snyder/snowmelt) |
+| `POST /api/cn` | CORINE → CN + rational C |
+| `POST /api/thiessen` | Voronoi weights from basin + stations set |
+| `POST /api/route` / `POST /api/reservoir-route` / `POST /api/reservoir-controlled` | routing (formulas § below) |
+| `POST /api/report` / `POST /api/dilekce` | .docx report / MGM petition |
+| `POST /api/yil-ara` | Return period given Q, Q10, Q100 (inverse) |
+| `POST /api/rainfall/parse` | parse pasted rainfall tables |
+| `POST /api/zemin-grubu` / `POST /api/yzd-region` | soil group / region, with reasoning |
+| `GET /api/stations/default` / `GET /api/mgm-stations` | default Thiessen set / PLV stations |
+| `GET /api/dplv` / `GET /api/geocode` / `GET /api/snyder-ctcp` / `GET /api/abak2` | static data |
+| `GET /api/reservoir-defaults` / `GET /api/reservoir-controlled-defaults` | Söylemez/ gated defaults |
+| `GET /api/dilekce-defaults` / `GET /api/dilekce-imza` | petition defaults |
+| `POST /api/project/save` · `GET /api/project/list` · `GET /api/project/load/{ad}` · `DELETE /api/project/{ad}` | project CRUD (JSON in `data/projects/`) |
 
 ## Core computation formulas
 
 - **Harmonic slope**: S = (10 / Σ(1/√(ℓ/Δh)))², ℓ = L/10
-- **Kirpich Tc** (metric): Tc = 0.0003245 × L⁰·⁷⁷ / S⁰·³⁸⁵ (hours)
-- **DSİ Qp**: qp = 414 × A⁻⁰·²²⁵ × (L·Lc/√S)⁻⁰·¹⁶ (L/s/km²/mm)
+- **Kirpich Tc (metric)**: Tc = 0.0003245 × L⁰·⁷⁷ / S⁰·³⁸⁵ (hours)
+- **DSİ peak runoff coefficient**: qp = 414 · A⁻⁰·²²⁵ · (L·Lc/√S)⁻⁰·¹⁶ (L/s/km²/mm) — BH2 dimensionless unit hydrograph sampled at 0.5 h; storms 2/4/6/8/12/18/24 h sliced into 2 h blocks with the YZD curve and superposed through SCS incremental runoff → KABULET 7×7 matrix (= the 49 golden checks)
+- **Mockus**: D = 2√Tc, K1/K2/K3 triangular UH — NOT superposed (only DSİ/Snyder superpose)
 - **SCS runoff**: Q = (P − 0.2S)²/(P + 0.8S), S = (1000/CN − 10) × 25.4
-- **Extrapolation**: Q500/1000/10000 = Q10 + k·(Q100−Q10), k=[1.692, 1.99, 2.98]
-- **Return period inverse**: T = 10^((x+0.98)/0.99), x = (Q−Q10)/(Q100−Q10)
-- **Reservoir**: Storage-Indication (2S/Δt+O)₁ = (I₀+I₁) + (2S/Δt−O)₀
-- **Multi-basin**: Q_mansap(t) = Q_ara(t) + Σ Q_memba_i(t − Tc_ara)
-- **NTFA** (`tfa.py`): moment fits for Normal / Log-Normal 2P & 3P / Pearson-3 /
-  Log-Pearson-3 / Gumbel; plotting position m/(N+1); the distribution with the
-  smallest Smirnov-Kolmogorov Dmax is the accepted one. Golden-matched to
-  `ornek.xlsm`, so three template quirks are reproduced deliberately: the normal
-  tail uses √(44/7) instead of √(2π), its 3rd polynomial coefficient is
-  1.78147937 (literature: 1.781477937), and the Normal Dmax carries a +0.01
-  penalty (`SONUÇLAR!AD27`). Changing any of these can flip which distribution
-  is accepted — see `NORMAL_DMAX_DUZELTME` and `_CDF_B`.
-- **BTFA** (`btfa.py`): index-flood. Each station's accepted at-site fit gives
-  Q2…Q100; the dimensionless ratios QT/Q2 are averaged into a regional growth
-  curve; the basin's index flood comes from Q2 = a·A^b and Q_T = Q2·(QT/Q2).
-  Q500+ reuse the app-wide extrapolation. Golden-matched to
-  `Karamandere NTFA-BTFA.xlsx` (T7.2BTFA). **The exponent in that workbook
-  (0.8968) is not reproducible from its own 15 stations** — least squares gives
-  0.0827·A^1.3146 — so it was entered by hand. The fit is therefore computed and
-  reported, but `us`/`katsayi` let the caller pin the report's number.
-  Homogeneity is Dalrymple (1960): each station's own Q10/Q2 is read back onto
-  the regional curve as an equivalent T, compared against the Gumbel-reduced-
-  variate 95% band `y10 ± 1.96·sqrt(1+1.1396K+1.1K²)/√n`. The band is also
-  returned as an envelope over record length (`homojenlik.zarf`) for plotting.
-  `aykiri_disla=True` reruns the whole analysis without the failing stations and
-  attaches it as `aykirisiz`, so both sets of discharges can be compared.
-- **MMY** (`mmy.py`): Hershfield PMP,
-  `MMY = Port·M1·M2 + Km·S·M1·M2`, Km read from a regional envelope
-  (`data/tables/mmy_km.json`, 9 regions extracted from the source workbook's
-  X-KM sheet) using **Excel LOOKUP step semantics against the ADJUSTED mean** —
-  interpolating instead would not reproduce the workbook. The M1/M2 chart
-  factors are inputs (default 1.0): the source workbooks hold them as
-  macro-written literals, the charts themselves are not in the files, and
-  inventing a curve would silently shift the result. The output feeds the
-  existing `P24_OET` input, which already yields QOET (the PMF).
+- **Inverse/return extrapolation**: Q5…Q10K = Q10 + k·(Q100 − Q10), k = [1.692, 1.99, 2.98]; T = 10^((x+0.98)/0.99) where x = (Q−Q10)/(Q100−Q10)
+- **NTFA** (`tfa.py`): moment estimates for Normal / LN-2P/3P / Pearson-3 / LP-3 / Gumbel; plotting position m/(N+1); smallest Smirnov-Kolmogorov Dmax accepted; golden-matched to `ornek.xlsm` (test_tfa_golden), **three template quirks reproduced deliberately**: normal tail √(44/7) instead of √(2π), 3rd poly coefficient 1.78147937 (lit. 1.781477937 — template dropped a digit), +0.01 penalty on Normal Dmax. Accept-distribution flips if you "fix" them — see `NORMAL_DMAX_DUZELTME` / `_CDF_B`. Grubbs-Beck/Bulletin-17B outliers: reported, never dropped — removing high outliers biases the design flood LOW (D24A029: filtering one LOW outlier raises Q100 1301→1481).
+- **BTFA** (`btfa.py`): index-flood. Q2 = a·A^b from region stations; growth curve = mean (QT/Q2) of each station's at-site accepted one; Q5+ reuse app extrapolation. Excel exponent 0.8968 (Karamandere golden) is **not reproducible by least squares** (auto fit gives 0.0827·A^1.3146); the fit is computed and reported, and `kat say`/`ust` inputs can pin the report's number. Dalrymple homogeneity band `y10 ± 1.96·√(1+1.1396κ+1.1κ²)/√n` returned as `homojenlik.zarf`.
+- **MMY** (`mmy.py`): `MMY = P_ort·M1·M2 + Km·S·M1·M2`. Km from 9-region envelope `data/tables/mmy_km.json` with **Excel LOOKUP semantics against the ADJUSTED mean** (interpolating ≠ workbook). M1/M2 are inputs (default 1.0): the workbooks hold macro-written literals, the charts aren't in the file, inventing a curve silently shifts results. Output feeds `P24_OET` → QOET (PMF).
+- **Reservoir/routing**: Söylemez T28 Storage-Indication `(2S/Δt+O)ₜ₊₁ = (Iₜ+Iₜ₊₁) + (2S/Δt−O)ₜ`; multi-basin lag = ara havza Tc per method; golden-matched (test_reservoir_golden).
+- **Soil group is the most consequential input** (`zemin.py`): Karakurt Q2 spans almost 10× between A and D; drifting from B (6-fold) to C (296→771 m³/s) is just one step. Derived from SoilGrids hill texture via Saxton & Rawls Ksat against NRCS NEH-630 7-1 bands, governed by **least-transmissive layer**; only a lower bound (no depth-to-bedrock). Replaces a hardcoded default of B which fitted only 1.6% of Turkey (92.3% is C). Reasoning is returned with `/api/zemin-grubu`; override is allowed.
+</content>
