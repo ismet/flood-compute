@@ -1736,6 +1736,8 @@ function renderExcluded() {
   if (list.length)
     h += `<div class="small"><b>Çıkarılanlar:</b> ` + list.map(s =>
       `${s.name} <button class="link-btn" data-r="${stKey(s)}" title="Geri al">↺</button>`).join(", ") + `</div>`;
+  if (S.stExclude.size)
+    h += `<div style="margin-top:6px"><button id="btnResetStations" class="small-btn">↺ Çıkarılanları geri al</button></div>`;
   el.innerHTML = h;
   el.querySelectorAll("button[data-r]").forEach(b => b.onclick = () => {
     S.stExclude.delete(b.dataset.r); recomputeThiessen();
@@ -1743,6 +1745,8 @@ function renderExcluded() {
   el.querySelectorAll("button[data-x]").forEach(b => b.onclick = () => {
     S.stExtra.splice(+b.dataset.x, 1); recomputeThiessen();
   });
+  const rb = el.querySelector("#btnResetStations");
+  if (rb) rb.onclick = () => { S.stExclude = new Set(); recomputeThiessen(); };
 }
 
 async function runThiessen(stations, kaynak) {
@@ -1806,18 +1810,7 @@ function removeStation(key) {
   recomputeThiessen();
 }
 
-// haritaya tıklayarak elle istasyon ekle
-$("btnAddStation").onclick = () => {
-  if (!S.havza) return setStatus("thStatus", "Önce havzayı çıkarın (Adım 1)", "err");
-  S.stPlace = true;
-  map.getContainer().style.cursor = "crosshair";
-  setStatus("thStatus", "Yeni istasyonun yerine haritada tıklayın (Esc ile iptal)", "");
-};
-$("btnResetStations").onclick = () => {
-  if (!S.stExclude.size) return;
-  S.stExclude = new Set();
-  recomputeThiessen();
-};
+
 // eşik değişince Thiessen'i yeniden kur
 $("inpMinW").addEventListener("change", () => { if (S.thiessen && S.thiessen.length) recomputeThiessen(); });
 map.on("click", (ev) => {
@@ -1842,18 +1835,7 @@ async function useDefaultStations() {
       `MGM ölçüm ağı — ${r.istasyonlar.length} istasyon (≥${r.en_az_yil} yıl yağış ölçümü)`);
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
-$("btnDefaultSt").onclick = useDefaultStations;
-
-$("kmzFile").onchange = async () => {
-  const f = $("kmzFile").files[0];
-  if (!f) return;
-  setStatus("thStatus", "İstasyonlar okunuyor…", "loading");
-  try {
-    const fd = new FormData(); fd.append("file", f);
-    const r1 = await api("/api/stations", fd, true);
-    await loadStationSet(r1.istasyonlar, f.name);
-  } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
-};
+const _btnDef = $("btnDefaultSt"); if (_btnDef) _btnDef.onclick = useDefaultStations;
 
 /* ---------------- ADIM 4: yağış ---------------- */
 const DPLV_LABELS = ["5dk", "10dk", "15dk", "30dk", "1sa", "2sa", "3sa", "4sa",
