@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
-<link rel="stylesheet" href="/static/style.css?v=54">
+<link rel="stylesheet" href="/static/style.css?v=55">
 </head>
 <body>
 <div id="app">
@@ -32,10 +32,9 @@
     <nav id="steps">
       <button class="step active" data-step="1">1<span>Havza</span></button>
       <button class="step" data-step="2">2<span>Parametre</span></button>
-      <button class="step" data-step="3">3<span>Thiessen</span></button>
-      <button class="step" data-step="4">4<span>Yağış</span></button>
-      <button class="step" data-step="5">5<span>Hesap</span></button>
-      <button class="step" data-step="6">6<span>Frekans</span></button>
+      <button class="step" data-step="3">3<span>Yağış</span></button>
+      <button class="step" data-step="4">4<span>Hesap</span></button>
+      <button class="step" data-step="5">5<span>Frekans</span></button>
     </nav>
 
     <!-- ARA HAVZA MODU -->
@@ -293,7 +292,7 @@
       </details>
     </section>
 
-    <!-- ADIM 3: Thiessen -->
+    <!-- ADIM 3: Yağış (Thiessen + Yağış birleşik) -->
     <section class="page hidden" data-page="3">
       <p class="hint">Varsayılan küme <b>MGM ölçüm ağıdır</b> (<code>data/mgm/mgm.sqlite</code>): en az 10 yıllık günlük maksimum yağış ölçümü olan 1184 istasyon — her Thiessen hücresi <b>kendi ölçtüğü</b> P2–P100’ü taşır; poligonlar havzaya kesilir.</p>
       <button id="btnDefaultSt" class="primary hidden">📡 Varsayılan istasyonları kullan</button>
@@ -306,18 +305,15 @@
         değişiklikte yeniden hesaplanır.</div>
       <div id="thTable"></div>
       <div id="thExcluded"></div>
-    </section>
-
-    <!-- ADIM 4: Yağış -->
-    <section class="page hidden" data-page="4">
+      <hr style="margin:8px 0;border:none;border-top:1px solid #e2ded8">
       <p class="hint"><b>Yinelenmeli Yağışlar (24 Saatlik)</b> ve <b>DPLV oranları</b> tabloları
       ekranın altında, harita üzerinde tam genişlikte açılır. Excel'deki değer bloğunu kopyalayın,
       tabloda başlangıç hücresine tıklayıp <b>Ctrl+V</b> ile yapıştırın; kalan hücreler otomatik
       dolar, ağırlıklı satır anlık hesaplanır.</p>
     </section>
 
-    <!-- ADIM 5: Hesap -->
-    <section class="page hidden" data-page="5">
+    <!-- ADIM 4: Hesap -->
+    <section class="page hidden" data-page="4">
       <details id="rasyonelBox"><summary>Rasyonel yöntem seçenekleri</summary>
         <div class="grid2">
           <label class="chk"><input type="checkbox" id="inpRasyonel"> Rasyonel yöntemi de hesapla</label>
@@ -348,8 +344,8 @@
       <div id="results"></div>
     </section>
 
-    <!-- 6) NOKTASAL TAŞKIN FREKANS ANALİZİ (NTFA) -->
-    <section class="page hidden" data-page="6">
+    <!-- 5) NOKTASAL TAŞKIN FREKANS ANALİZİ (NTFA) -->
+    <section class="page hidden" data-page="5">
       <p class="hint">DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik
       akım veri tabanı (1935–2020) üzerinde <b>noktasal frekans analizi</b>.
       Altı dağılım moment yöntemiyle uydurulur, Simirnov-Kolmogorov testiyle
@@ -412,7 +408,7 @@
       Bir meteoroloji istasyonunun <b>1 günlük yıllık en büyük yağış</b> serisinden
       MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2 hesaplanır; K<sub>m</sub>
       bölgesel zarf eğrisinden düzeltilmiş ortalamaya göre okunur. Çıkan derinlik,
-      4. adımdaki <b>OET</b> yağış satırına yazılarak muhtemel maksimum feyezan
+      3. adımdaki <b>OET</b> yağış satırına yazılarak muhtemel maksimum feyezan
       (Q<sub>OET</sub>) elde edilir.</p>
 
       <div class="rain-tools">
@@ -574,6 +570,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=56"></script>
+<script src="/static/app.js?v=57"></script>
 </body>
 </html>

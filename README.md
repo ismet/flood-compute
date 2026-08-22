@@ -28,14 +28,14 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/regions/` | YZD alansal dağılım bölgeleri (`YZD_ALANLAR.kmz`, A/B/C poligonları). Havza çıkarıldığında bölge (A/B/C) otomatik seçilir (havzayla en çok örtüşen bölge). |
 | `data/tables/mgm_plv_2020.json` | MGM 2020 tablosu — **yalnız 14 plüviyograf (PLV) oranı** için kullanılır. Dosyadaki P2–P500 sütunları duruyor ama `/api/mgm-stations` bunları **bilerek döndürmüyor**: P2–P100 artık `data/mgm/mgm.sqlite`'taki ham ölçümden hesaplanıyor. İki yağış kaynağını paralel tutmak, bir projede hangisinin kullanıldığını belirsiz bırakıyordu. `tools/extract_mgm_plv.py` ile üretilir. |
 | `data/zemin/` | `hsg_tr.tif` — hidrolojik zemin grubu (A/B/C/D), ~1 km, 80 kB. SoilGrids dokusundan Saxton & Rawls Ksat'ı hesaplanıp NRCS NEH-630 Tablo 7-1 sınırlarına vurulur; grup **profildeki en geçirimsiz katmana** göre verilir. Türkiye: %92.3 C, %6.1 D, %1.6 B. Üretmek: `python tools/zemin_grubu_uret.py`. Ana kayaya derinliği içermez, bu yüzden **alt sınırdır** — dağlık havzada gerçek grup bir kademe daha geçirimsiz olabilir. |
-| `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 78 tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 4'teki P2–P100'ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
+| `data/mgm/` | `mgm.sqlite` — 1290 MGM/DSİ rasat istasyonunun **bütün sekmeleri** (yağış, sıcaklık, nem, rüzgâr, buharlaşma, kar… 78 tür, 9614 seri, 1925–2023) + `yillik_maks` tablosu (45 bin istasyon-yıl, yıllık en büyük günlük yağış). Adım 3’teki P2–P100’ün kaynağıdır; 1184 istasyon frekans analizine yetecek uzunlukta. `DMI-tümü/*.xls`'ten üretilir: `python tools/mgm_veritabani_olustur.py` (191 MB → 13 MB; seriler tür başına tek sıkıştırılmış float32 dizisi). |
 | `data/raster/` | Yüklenen raster altlıklar (1/25000 pafta vb.) + `.json` kenar dosyaları (gitignore'lu). |
 | `data/projects/` | Kaydedilen projeler (JSON). |
-| `data/agi/` | ⚠ Eski yıllıkların (1979–1986) çıkarımında **118 pik kaydının başına fazladan bir rakam yapışmış** (D24A029 1981: 9500 m³/s, diğer 29 yıl 68–1033). NTFA/BTFA bunları varsayılan olarak eler ve hangisini neden elediğini sonuçta gösterir. `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 6'daki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
+| `data/agi/` | ⚠ Eski yıllıkların (1979–1986) çıkarımında **118 pik kaydının başına fazladan bir rakam yapışmış** (D24A029 1981: 9500 m³/s, diğer 29 yıl 68–1033). NTFA/BTFA bunları varsayılan olarak eler ve hangisini neden elediğini sonuçta gösterir. `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 5’teki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
 | `data/yagis/` | `yagis_tr.tif` (yağış), `pet_tr.tif` (potansiyel evapotranspirasyon), `net_tr.tif` (net yağış = P − AET) — CHELSA v2.1, 1981–2010 normali, ~1 km piksel, toplam 6.6 MB. Haritada tematik katman; nokta ve havza alansal ortalaması sorgulanır. Yeniden üretmek: `python tools/yagis_haritasi_indir.py`. |
 | `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
-## İş akışı (6 adım)
+## İş akışı (5 adım)
 
 1. **Havza** — Haritada outlet'e tıklanır; pyflwdir ile (pit doldurma → D8 akış
    yönü → birikim → outlet kenetleme) havza sınırı, dere ağı, en uzun akış yolu
@@ -98,7 +98,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    CLC2018 servisinden otomatik indirilir); seçilen hidrolojik zemin grubuna
    (A/B/C/D) göre `data/tables/corine_cn.json` tablosundan alansal ağırlıklı
    CN(II); CN(III) Excel'deki dönüşüm tablosuyla. Aynı kesitten rasyonel
-   yöntemin akış katsayısı C'si de türetilir; seçimi Adım 5'teki **Rasyonel
+   yöntemin akış katsayısı C'si de türetilir; seçimi Adım 4’teki **Rasyonel
    yöntem seçenekleri** kutusundadır.
 
    **Zemin grubu havzanın toprağından otomatik seçilir** (`data/zemin/hsg_tr.tif`,
@@ -112,38 +112,11 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    gerekçesiz bir varsayılan (B) seçili geliyordu ve kullanıcı dokunmazsa
    sonucu sessizce o belirliyordu — oysa üretilen ülke haritasına göre B,
    Türkiye'nin **%1.6**'sına uyuyor (%92.3 C, %6.1 D). O varsayılan kaldırıldı.
-3. **Thiessen** — Varsayılan küme **MGM ölçüm ağıdır**: en az 10 yıllık günlük
-   maksimum yağış ölçümü olan **1184 istasyon** (`data/mgm/mgm.sqlite`). Voronoi
-   hücreleri havzaya kesilerek alan ağırlıkları (DATAGİR H kolonu karşılığı)
-   bulunur; haritada yalnız pay alan istasyonlar çizilir. Kendi KMZ/KML'nizi de
-   yükleyebilirsiniz.
+3. **Yağış — Thiessen + Yağış birleşik** — Üstte **Thiessen**: varsayılan küme **MGM ölçüm ağıdır** — en az 10 yıllık günlük maksimum yağış ölçümü olan **1184 istasyon** (`data/mgm/mgm.sqlite`). Voronoi hücreleri havzaya kesilerek alan ağırlıkları (DATAGİR H kolonu karşılığı) bulunur; haritada yalnız pay alan istasyonlar çizilir. Kendi KMZ/KML’nizi de yükleyebilirsiniz. Küme bilerek ölçümü olan istasyonlarla sınırlı: böylece **her hücre kendi ölçtüğü yağışı taşır** ve alt tablodaki P2–P100 bağlanması **kimlik eşleşmesidir**. Altta **Yağış**: **📊 Ölçümden hesapla** düğmesi Thiessen istasyonlarını MGM ölçüm veritabanına (`data/mgm/mgm.sqlite`) bağlar ve P2–P100’ü her istasyonun **yıllık en büyük günlük yağış** serisinden frekans analiziyle üretir — NTFA ile aynı hesap (altı dağılım, moment yöntemi, Smirnov-Kolmogorov ile kabul). Değerler elle de girilebilir/yapıştırılabilir; OEY her hâlde elle girilir. Tabloda her satırın **kaynağı** görünür: kaç yıllık seri, kabul edilen dağılım, eşleşmenin nasıl kurulduğu. Varsayılan kümede eşleşme **kimlik** eşleşmesidir (`kod`, mesafe 0); yalnız elle yüklenen KMZ veya haritaya konan noktalar koordinatla bağlanır; orada da yarıçap içinde ≥25 yıllık seri varsa daha yakındaki kısa seriye yeğlenir — Lüleburgaz’da 5.7 km’de 10 yıllık, 6.3 km’de 74 yıllık istasyon var. DPLV zaman-dağılım istasyonu ayrıca seçilir (TEKİRDAĞ/ÇORLU/KARTAL, ya da MGM 2020 tablosundan) veya 14 oran elle yapıştırılır.
 
-   Küme bilerek ölçümü olan istasyonlarla sınırlı: böylece **her hücre kendi
-   ölçtüğü yağışı taşır** ve Adım 4'teki P2–P100 bağlanması kimlik eşleşmesidir
-   — koordinat ya da ad üzerinden bulanık eşleştirme yoktur. Bedeli açık olsun:
-   MGM ağının seyrek olduğu bölgelerde hücreler büyür ve havza ortalaması daha
-   az noktadan hesaplanır. Karşılığında hiçbir hücre başka istasyonun yağışını
-   taşımaz.
-4. **Yağış** — **📊 Ölçümden hesapla** düğmesi Thiessen istasyonlarını MGM ölçüm
-   veritabanına (`data/mgm/mgm.sqlite`) bağlar ve P2–P100'ü her istasyonun
-   **yıllık en büyük günlük yağış** serisinden frekans analiziyle üretir — NTFA
-   ile aynı hesap (altı dağılım, moment yöntemi, Smirnov-Kolmogorov ile kabul).
-   Değerler elle de girilebilir/yapıştırılabilir; OEY her hâlde elle girilir.
-   Tabloda her satırın **kaynağı** görünür: kaç yıllık seri, kabul edilen
-   dağılım, eşleşmenin nasıl kurulduğu. Varsayılan kümede istasyon zaten ölçüm
-   veri tabanının kendi kaydı olduğu için eşleşme **kimlik** eşleşmesidir
-   (`kod`, mesafe 0). Yalnız elle yüklenen KMZ veya haritaya konan noktalar
-   koordinatla bağlanır; orada da yarıçap içinde ≥25 yıllık seri varsa daha
-   yakındaki kısa seriye yeğlenir — Lüleburgaz'da 5.7 km'de 10 yıllık, 6.3 km'de
-   74 yıllık istasyon var.
-   DPLV zaman-dağılım istasyonu ayrıca seçilir (TEKİRDAĞ/ÇORLU/KARTAL, ya da
-   MGM 2020 tablosundan) veya 14 oran elle yapıştırılır.
+   ⚠ **P100’e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor: SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl) P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var.
 
-   ⚠ **P100'e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor:
-   komşu iki istasyonda SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl)
-   P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var; aykırı bir değer
-   gördüğünüzde satırdan başka istasyon seçin.
-5. **Hesap** — Tek tıkla:
+4. **Hesap** — Tek tıkla:
    * **DSİ Sentetik**: qp = 414·A⁻⁰·²²⁵·(L·Lc/√S)⁻⁰·¹⁶ → BH2 boyutsuz birim
      hidrograf 0.5 sa adıma örneklenir; 2/4/6/8/12/18/24 saatlik sağanaklar
      2'şer saatlik bloklara (YZD eğrisi) ayrılıp SCS artım akışlarıyla süperpoze
@@ -179,7 +152,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      alınması uygun bulunmuştur” gerekçesi ve tasarım debileri tablosu bu yönteme göre
      yazılır; karşılaştırma tablosunda seçilen yöntem koyu gösterilir. `backend/core/report.py`.
 
-6. **Frekans** — *Noktasal Taşkın Frekans Analizi (NTFA)*. Sentetik yöntemlerden
+5. **Frekans** — *Noktasal Taşkın Frekans Analizi (NTFA)*. Sentetik yöntemlerden
    bağımsız ikinci yol: **gözlenmiş** yıllık pik akımlara dayanır. Havza
    çıkarıldıktan sonra “AGİ'leri haritaya getir” ile havza içindeki ve (tampon
    kadar) çevresindeki Akım Gözlem İstasyonları haritaya ve listeye gelir;
@@ -234,7 +207,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle
    MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2. K<sub>m</sub>, 9
    bölgeye ait zarf eğrilerinden düzeltilmiş ortalamaya göre okunur. Çıkan
-   derinlik 4. adımdaki **OET** yağışına yazılarak muhtemel maksimum feyezan
+   derinlik 3. adımdaki **OET** yağışına yazılarak muhtemel maksimum feyezan
    (Q<sub>OET</sub>) elde edilir. `backend/core/mmy.py`, golden test:
    `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
 
@@ -272,7 +245,7 @@ güvenilir debiler Q50/Q75/Q90/Q95 ve bir talebin karşılanma güvenilirliği) 
 Üst kısımdaki **Ara Havza** düğmesiyle geçilir. Panelde net numaralı sıra izlenir
 (Boztepe Bölüm 4.7 metodolojisi):
 
-1. **Ortak veri** — istasyon (Adım 3) ve yağış (Adım 4) “Tek Havza” modundan paylaşılır;
+1. **Ortak veri** — istasyon ve yağış (Adım 3 — birleşik) “Tek Havza” modundan paylaşılır;
    panel üstünde yüklü/eksik durumu gösterilir.
 2. **Noktalar** — haritada önce **mansap** (çıkış), sonra bir/birkaç **memba** (üst havza çıkışı).
 3. **Ayarlar & yöntemler** — dere eşiği, zemin grubu, mansap baz akımı ve **hesaplanacak
@@ -485,7 +458,7 @@ kot profili yeniden üretilir.
   bloklarla hesaplandığından tek tr kullanan bu uygulamada ~%0.2 sapar; Q2–Q100
   birebirdir. Q500/1000/10000 uygulama genelindeki gibi Q10–Q100'den ekstrapole
   edilir (Excel'in ayrı P500… girdileri yerine).
-* NTFA'da (adım 6) tersi geçerlidir: DSİ frekans şablonuyla **birebir** uyum
+* NTFA'da (adım 5) tersi geçerlidir: DSİ frekans şablonuyla **birebir** uyum
   hedeflendiği için şablonun üç tuhaflığı korunmuştur — normal kuyruk
   yaklaşımında √(2π) yerine √(44/7), polinomun 3. katsayısı 1.78147937
   (literatürde 1.781477937) ve Normal dağılımın D<sub>maks</sub>'ına eklenen

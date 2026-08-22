@@ -11,7 +11,7 @@ tools/mgm_veritabani_olustur.py). İki ayrı iş görür:
      karşılaştırılır, Dmax'ı en küçük olan kabul edilir. Fark yalnız
      büyüklükte — akım yerine yağış (mm).
 
-  2. THIESSEN İSTASYONLARIYLA EŞLEŞTİRME. Adım 3'te havzaya düşen Thiessen
+  2. THIESSEN İSTASYONLARIYLA EŞLEŞTİRME. Adım 3’te (Yağış — birleşik) havzaya düşen Thiessen
      istasyonları bu veri tabanındaki istasyonlara bağlanır ve P2…P100
      doğrudan ölçümden hesaplanır.
 
@@ -103,11 +103,11 @@ def istasyon(kod):
 
 
 def thiessen_kumesi(en_az_yil=EN_AZ_YIL):
-    """Adım 3'ün varsayılan istasyon kümesi — YALNIZ ölçüm veri tabanı.
+    """Adım 3’ün (Yağış — birleşik) varsayılan istasyon kümesi — YALNIZ ölçüm veri tabanı.
 
     Küme, yıllık maksimum serisi frekans analizine yetecek uzunlukta olan
     istasyonlarla sınırlıdır. Böylece her Thiessen hücresi KENDİ ÖLÇTÜĞÜ
-    yağışı taşır ve Adım 4'teki P24 bağlanması arama değil kimlik eşleşmesine
+    yağışı taşır ve Adım 3’teki P24 bağlanması arama değil kimlik eşleşmesine
     iner — koordinat ya da ad üzerinden bulanık eşleştirme kalmaz.
 
     Eski `data/stations/bir_cikti.kml` (2315 istasyon) ARTIK OTOMATİK
@@ -278,8 +278,8 @@ def eslestir(istasyonlar, en_az_yil=EN_AZ_YIL, en_cok_km=25.0,
         kayit = {"ad": ad, "eslesen": None, "yontem": None,
                  "mesafe_km": None, "adaylar": []}
 
-        # İstasyon zaten bu veri tabanından geldiyse (Adım 3'ün varsayılan
-        # kümesi) aramaya gerek yok — kimliği belli. Arama yalnız kullanıcının
+        # İstasyon zaten bu veri tabanından geldiyse (Adım 3’ün varsayılan
+        # birleşik kümesi) aramaya gerek yok — kimliği belli. Arama yalnız kullanıcının
         # yüklediği KMZ ya da haritaya elle koyduğu noktalar için gerekir.
         kod = g.get("kod")
         if kod and kod in ko_gore:

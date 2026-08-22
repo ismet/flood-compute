@@ -166,7 +166,7 @@ document.querySelectorAll(".step").forEach(b => {
     if (dir) {
       e.preventDefault();
       const n = +b.dataset.step + dir;
-      const next = document.querySelector(`.step[data-step="${n < 1 ? 6 : n > 6 ? 1 : n}"]`);
+      const next = document.querySelector(`.step[data-step="${n < 1 ? 5 : n > 5 ? 1 : n}"]`);
       if (next) next.focus();
     }
   };
@@ -174,24 +174,26 @@ document.querySelectorAll(".step").forEach(b => {
 
 function activateStep(n) {
   document.querySelectorAll(".step").forEach(x => x.classList.remove("active"));
-  document.querySelector(`.step[data-step="${n}"]`).classList.add("active");
+  const _active = document.querySelector(`.step[data-step="${n}"]`);
+  if (!_active) return;
+  _active.classList.add("active");
   document.querySelectorAll(".page").forEach(p =>
     p.classList.toggle("hidden", p.dataset.page !== String(n)));
   if (n === 3 && S.havza && !S.thiessen.length) useDefaultStations();
-  $("rainDock").classList.toggle("hidden", n !== 4);
-  if (n === 4) { renderRainTable(); renderDplvGrid(); }
-  if (n === 5 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
+  $("rainDock").classList.toggle("hidden", n !== 3);
+  if (n === 3) { renderRainTable(); renderDplvGrid(); }
+  if (n === 4 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
     $("inpRasyonel").checked = true;
     $("rasyonelBox").open = true;
   }
-  if (n === 5) updateComputeReady();
-  if (n === 6) {
+  if (n === 4) updateComputeReady();
+  if (n === 5) {
     agiKatmanAc();
     // havza çıkarıldıysa alanı BTFA'ya taşı (kullanıcı yine de değiştirebilir)
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
   }
 }
-const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`).classList.add("done");
+const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`)?.classList.add("done");
 const setStatus = (id, msg, cls = "") => {
   const e = $(id); e.textContent = msg; e.className = "status " + cls;
   const loader = $("loader");
@@ -963,7 +965,7 @@ $("btnBtfa").onclick = async () => {
 };
 
 /* ---- MMY: muhtemel maksimum yağış (Hershfield) ----
-   Sonuç, 4. adımdaki OET yağış satırına yazılınca QOET (muhtemel maksimum
+   Sonuç, 3. adımdaki OET yağış satırına yazılınca QOET (muhtemel maksimum
    feyezan) mevcut hesap zinciriyle üretilir.                              */
 (async function mmyBolgeYukle() {
   try {
@@ -1012,14 +1014,14 @@ $("btnMmy").onclick = async () => {
       + `<tr><td><b>MMY</b></td><td style="text-align:right"><b>${fmt(o.mmy, 1)}</b></td>`
       + "<td class='small'>mm</td></tr></table>"
       + '<div class="rain-tools"><button id="btnMmyOet" class="small-btn">'
-      + "↧ Bu değeri 4. adımdaki OET yağışına yaz</button></div>";
+      + "↧ Bu değeri 3. adımdaki OET yağışına yaz</button></div>";
     $("btnMmyOet").onclick = () => {
       const hedef = document.querySelector('[data-rain-oet], #inpP24OET');
       if (hedef) { hedef.value = fmt(o.mmy, 1); setStatus("mmyStatus", "OET yağışı güncellendi.", "ok"); }
       else {
         navigator.clipboard?.writeText(fmt(o.mmy, 1));
         setStatus("mmyStatus", `MMY = ${fmt(o.mmy, 1)} mm panoya kopyalandı — `
-          + "4. adımdaki yağış tablosunda OET satırına yapıştırın.", "ok");
+          + "3. adımdaki yağış tablosunda OET satırına yapıştırın.", "ok");
       }
     };
     setStatus("mmyStatus", `MMY = ${fmt(o.mmy, 1)} mm `
@@ -1515,7 +1517,7 @@ async function applyGeomEdit() {
     updateComputeReady();
     editYedek = null;
     setStatus("delinStatus", $("delinStatus").textContent
-      + "\n⚠ Alan değiştiği için CN (Adım 2) ve Thiessen (Adım 3) yeniden çalıştırılmalı, "
+      + "\n⚠ Alan değiştiği için CN (Adım 2) ve Yağış (Adım 3) yeniden çalıştırılmalı, "
       + "sonra tekrar hesaplayın.", "err");
   } catch (e) {
     setStatus("delinStatus", "Hata: " + e.message + "\nGeometri haritada duruyor; "
@@ -1621,7 +1623,7 @@ $("btnCN").onclick = async () => {
 
 /* CORINE sınıf dökümü + aynı geçişten türetilen rasyonel akış katsayısı C.
    C, CN ile aynı CORINE kesitinden gelir; ayrıca veri indirilmez.
-   Sınıf tablosu bu adımda kalır; C seçim kutusu Adım 5'teki rasyonel
+   Sınıf tablosu bu adımda kalır; C seçim kutusu Adım 4'teki rasyonel
    seçeneklerine taşındı (renderRasyonelC).                              */
 function renderCnSonuc(r) {
   let h = `<table class="tbl"><tr><th></th><th>Kod</th><th>Sınıf</th><th>Oran</th>`
@@ -1646,7 +1648,7 @@ function renderCnSonuc(r) {
 const RASYONEL_C_HINT = `<span class="small">CORINE'den akış katsayısı C türetmek için
   Adım 2'de <b>CN hesapla</b>'yı çalıştırın.</span>`;
 
-/* Adım 5 · "Rasyonel yöntem seçenekleri" içindeki C bloğu.
+/* Adım 4 · "Rasyonel yöntem seçenekleri" içindeki C bloğu.
    Seçim ANINDA uygulanır: değer inpC100'e yazılır, rasyonel işaretlenir.
    Yeniden çizim (yeni CN sonucu, proje yüklemesi) yalnızca gösterimdir;
    girdilere dokunmaz.                                                   */
@@ -1695,7 +1697,7 @@ function renderRasyonelC(r) {
 }
 renderRasyonelC(null);
 
-/* ---------------- ADIM 3: Thiessen ---------------- */
+/* ---------------- ADIM 3: Yağış (Thiessen + Yağış birleşik) ---------------- */
 /* ---- istasyon listesi yönetimi (çıkarma / elle ekleme) ----
    S.stBase   : kaynaktan (KML/KMZ) gelen tam liste
    S.stExclude: kullanıcının çıkardığı istasyon anahtarları
@@ -1796,7 +1798,7 @@ async function runThiessen(stations, kaynak) {
       `${kaynak}: ${stations.length} istasyondan ${aktif.length} tanesi havzada pay alıyor`
       + (nCik ? ` | ${nCik} elle çıkarıldı` : "") + (nEk ? ` | ${nEk} elle eklendi` : "")
       + (nEle ? ` | ${nEle} istasyon küçük pay eşiğinin altında kaldığı için elendi` : ""), "ok");
-    markDone(3);
+    // birleşik adımda done yalnızca ağırlıklı yağış hazır olunca yanar (recalcRain → markDone(3))
     renderRainTable();
   } catch (e) { setStatus("thStatus", "Hata: " + e.message, "err"); }
 }
@@ -1837,7 +1839,7 @@ async function useDefaultStations() {
 }
 const _btnDef = $("btnDefaultSt"); if (_btnDef) _btnDef.onclick = useDefaultStations;
 
-/* ---------------- ADIM 4: yağış ---------------- */
+/* ---------------- ADIM 3: Yağış (birleşik) — yağış tablosu & DPLV ---------------- */
 const DPLV_LABELS = ["5dk", "10dk", "15dk", "30dk", "1sa", "2sa", "3sa", "4sa",
                      "5sa", "6sa", "8sa", "12sa", "18sa", "24sa"];
 
@@ -2426,7 +2428,7 @@ function renderRainTable() {
   const w = activeStations();
   const div = $("rainGrid");
   if (!w.length) {
-    div.innerHTML = `<div class="small">Önce Thiessen ağırlıklarını hesaplayın (Adım 3).</div>`;
+    div.innerHTML = `<div class="small">Önce yukarıdaki Thiessen ağırlıklarını hesaplayın.</div>`;
     return;
   }
   if (!S.rainValues) S.rainValues = {};
@@ -2497,8 +2499,8 @@ async function mgmOtomatikEslestir() {
   setStatus("rainStatus", "MGM istasyonları eşleştiriliyor ve frekans analizi yapılıyor…", "");
   try {
     const d = await api("/api/mgm-eslestir", {
-      // kod varsa istasyon zaten MGM veri tabanından geliyor (Adım 3'ün
-      // varsayılan kümesi) — arama değil kimlik eşleşmesi. Koordinat/ad
+      // kod varsa istasyon zaten MGM veri tabanından geliyor (Yağış adımının
+      // varsayılan Thiessen kümesi) — arama değil kimlik eşleşmesi. Koordinat/ad
       // araması yalnız yüklenen KMZ ve elle konan noktalar için gerekir.
       istasyonlar: w.map(t => ({ ad: t.name, lat: t.lat, lon: t.lon, kod: t.kod })),
       en_az_yil: 10, en_cok_km: 25, hesapla: true,
@@ -2586,7 +2588,7 @@ function recalcRain() {
   if (ok) {
     setStatus("rainStatus", S.OETw == null ?
       "⚠ OEY sütunu boş: OET/QOET hesapları 0 kabul edilir" : "Ağırlıklı yağışlar hazır", S.OETw == null ? "err" : "ok");
-    markDone(4);
+    markDone(3);
   } else if (w.length) {
     setStatus("rainStatus", "Tüm istasyonlar için P2..P100 değerlerini girin", "");
   }
@@ -2603,11 +2605,11 @@ function dplvRatios() {
   return (st || gorunur || S.dplvList.stations[0]).ratios;
 }
 
-/* ---------------- ADIM 5: hesap ---------------- */
+/* ---------------- ADIM 4: hesap ---------------- */
 $("btnCompute").onclick = async () => {
   try {
     if (!$("inpA").value || !$("inpL").value) throw new Error("A ve L girilmedi (Adım 1)");
-    if (!S.P24w) throw new Error("Ağırlıklı yağış yok (Adım 4)");
+    if (!S.P24w) throw new Error("Ağırlıklı yağış yok (Adım 3)");
     const kar = $("karTemps").value.trim() ? {
       daily_tmax: $("karTemps").value.split(/[\s,;]+/).map(x => +x.replace(",", ".")).filter(x => !isNaN(x)),
       a_kar_km2: +$("karA").value, h_kar_m: +$("karH").value, h_ist_m: +$("karHist").value,
@@ -2639,7 +2641,7 @@ $("btnCompute").onclick = async () => {
     });
     renderResults();
     setStatus("compStatus", "Tamamlandı", "ok");
-    markDone(5);
+    markDone(4);
   } catch (e) { setStatus("compStatus", "Hata: " + e.message, "err"); }
 };
 
@@ -3189,7 +3191,7 @@ $("btnDilImzaReset").onclick = () => {
 };
 $("btnDilFromTh").onclick = () => {
   const act = (S.thiessen || []).filter(t => t.agirlik > 0);
-  if (!act.length) return alert("Önce Thiessen hesaplayın (Tek Havza → Adım 3)");
+  if (!act.length) return alert("Önce Yağış adımında Thiessen hesaplayın (Tek Havza → Adım 3)");
   if (!dilStGrid) initDilekce();
   dilStGrid.render(act.map(t => ["", t.name, ""]));
 };
@@ -3222,14 +3224,14 @@ $("btnDilekce").onclick = async () => {
   } catch (e) { setStatus("dilStatus", "Hata: " + e.message, "err"); }
 };
 
-// 1) Ortak veri durumu (istasyon + yağış) — Adım 3-4'ten paylaşılır
+// 1) Ortak veri durumu (istasyon + yağış) — Adım 3'ten (birleşik) paylaşılır
 function updateMultiShared() {
   const nSt = (S.istasyonlar || []).length;
   const nRain = S.rainValues ? Object.values(S.rainValues).filter(v => v && v.slice(0, 6).every(x => x != null)).length : 0;
   const ok = nSt > 0 && nRain > 0;
   $("multiShared").innerHTML = ok
-    ? `✓ İstasyonlar: ${nSt} yüklü — Yağış: ${nRain} istasyon dolu. (Değiştirmek için “Tek Havza” → Adım 3–4.)`
-    : `⚠ Eksik: ${nSt ? "" : "istasyon (Adım 3) "}${nRain ? "" : "yağış (Adım 4)"} — “Tek Havza” moduna geçip Adım 3–4'i doldurun.`;
+    ? `✓ İstasyonlar: ${nSt} yüklü — Yağış: ${nRain} istasyon dolu. (Değiştirmek için “Tek Havza” → Adım 3.)`
+    : `⚠ Eksik: ${nSt ? "" : "istasyon (Adım 3) "}${nRain ? "" : "yağış (Adım 3) "} — “Tek Havza” → Adım 3’ü doldurun.`;
   $("multiShared").className = "small " + (ok ? "" : "err");
 }
 function selectedMethods() {
@@ -3403,7 +3405,7 @@ $("btnSolveCompute").onclick = async () => {
   try {
     if (!S.multiMd) throw new Error("Önce ① Havzaları Çöz");
     if (!S.istasyonlar || !S.istasyonlar.length) throw new Error("İstasyon yok — Tek Havza → Adım 3");
-    if (!S.rainValues || !Object.keys(S.rainValues).length) throw new Error("Yağış yok — Tek Havza → Adım 4");
+    if (!S.rainValues || !Object.keys(S.rainValues).length) throw new Error("Yağış yok — Tek Havza → Adım 3");
     const methods = selectedMethods();
     if (!methods.length) throw new Error("En az bir yöntem seçin");
     const md = S.multiMd, aMansap = md.mansap.alan_km2;
@@ -4276,7 +4278,7 @@ $("projList").onchange = async () => {
   renderKotlar();
   renderRainTable();
   renderDplvGrid();
-  // kayıtta varsa CORINE dökümü ve Adım 5'teki C bloğu geri gelir
+  // kayıtta varsa CORINE dökümü ve Adım 4'teki C bloğu geri gelir
   if (S.cnSonuc) renderCnSonuc(S.cnSonuc);
   updateComputeReady();
   if (S.havza) {

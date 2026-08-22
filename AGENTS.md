@@ -103,8 +103,8 @@ backend/core/      — Computation engine (no framework dependency)
                      65535, NOT 0: zero runoff is legit (closed Konya basin). Any
                      masking MUST compare against src.nodata.
   tfa.py          — NTFA: 6 distributions, K-S accept, Grubbs-Beck (outliers
-                     reported, never auto-applied). Also the engine for step-4
-                     rainfall P2…P100 per station. See golden quirks below.
+                     reported, never auto-applied). Also the engine for step-3
+                     (Yağış — birleşik) rainfall P2…P100 per station. See golden quirks below.
   btfa.py         — BTFA regional index-flood + Dalrymple homogeneity (formulas)
   mmy.py          — MMY Hershfield PMP, regional Km envelope (formulas)
   su.py           — Water potential: gauge → regression gap-fill → area-ratio transfer
@@ -117,13 +117,13 @@ backend/core/      — Computation engine (no framework dependency)
                      1.0 placeholder; those rows are springs/canals anyway) and
                      outlier-flagged AND >5× second-largest. Excluded rows are
                      RETURNED, never dropped (elenen_kayitlar).
-  mgm.py          — MGM weather DB: supplies step-4 P2…P100 by running tfa.py
+  mgm.py          — MGM weather DB: supplies step-3 (Yağış — birleşik) P2…P100 by running tfa.py
                      on each station's annual maximum daily rainfall — same six
                      distributions. data/tables/mgm_plv_2020.json is NOT a P24
                      source anymore; /api/mgm-stations deliberately strips its
                      P24 field (two parallel sources made it unknowable which one
-                     a project used). Step-3 Thiessen set IS this DB, so step-4
-                     matching is by `kod` identity; only uploaded KMZs/hand
+                     a project used). Thiessen set IS this DB (Adım 3 üst kısım), so matching inside
+                     same step is by `kod` identity; only uploaded KMZs/hand
                      points match by coordinate (prefer ≥25-yr record inside the
                      radius over a nearer short one — Lüleburgaz has 10-yr at
                      5.7 km, 74-yr at 6.3).

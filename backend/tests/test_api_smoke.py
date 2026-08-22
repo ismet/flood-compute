@@ -228,7 +228,7 @@ else:
     assert all(s["yil_sayisi"] >= d["en_az_yil"] for s in sts)
     assert all(s.get("lat") is not None and s.get("lon") is not None for s in sts)
 
-    # Varsayılan kümeden gelen istasyon Adım 4'te KİMLİKLE eşleşmeli
+    # Varsayılan kümeden gelen istasyon Adım 3’te (birleşik) KİMLİKLE eşleşmeli
     kodlu = next(s for s in sts if s["yil_sayisi"] >= 25)
     e2 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
         {"ad": kodlu["name"], "lat": kodlu["lat"], "lon": kodlu["lon"],
