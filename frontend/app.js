@@ -184,6 +184,11 @@ function activateStep(n) {
   if (n === 3 && S.havza && !S.thiessen.length) useDefaultStations();
   $("rainDock").classList.toggle("hidden", n !== 3);
   if (n === 3) { renderRainTable(); renderDplvGrid(); if (S.havza && !S.dplvManual && !S.dplvAuto) autoSelectPLV(); }
+  const hd = $("hesapDock");
+  if (hd) {
+    if (n !== 4 || !S.sonuc) hd.classList.add("hidden");
+    else { hd.classList.remove("hidden"); renderHesapDock(); }
+  }
   if (n === 4 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
     $("inpRasyonel").checked = true;
     $("rasyonelBox").open = true;
@@ -1198,6 +1203,12 @@ function applyBasinResult(r, baslik) {
   S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
   S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
   S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
+  // önceki hesap artık geçersiz (alan değişti) — overlay gizlenir
+  S.sonuc = null; S.girdi = null;
+  if ($("results")) $("results").innerHTML = "";
+  if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+  $("hesapDock")?.classList.add("hidden");
+  setStatus("compStatus", "", "");
   // dere/kanal da durumda tutulur: proje kaydında saklansın ve yüklenince geri gelsin
   S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
   $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
@@ -1517,6 +1528,8 @@ async function applyGeomEdit() {
     // geometri değişti → önceki hesap ve alana bağlı adımlar bayat
     S.sonuc = null; S.girdi = null;
     if ($("results")) $("results").innerHTML = "";
+    if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+    $("hesapDock")?.classList.add("hidden");
     setStatus("compStatus", "", "");
     updateComputeReady();
     editYedek = null;
@@ -1558,6 +1571,11 @@ map.on("click", async (ev) => {
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
     S.mgmDbYakin = null; S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
+    S.sonuc = null; S.girdi = null;
+    if ($("results")) $("results").innerHTML = "";
+    if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+    $("hesapDock")?.classList.add("hidden");
+    setStatus("compStatus", "", "");
     S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
     updateSnyderW();
@@ -2708,16 +2726,14 @@ $("btnCompute").onclick = async () => {
 
 const DURS = [2, 4, 6, 8, 12, 18, 24];
 const RPS = ["2", "5", "10", "25", "50", "100", "OET"];
-function renderResults() {
-  const r = S.sonuc, el = $("results");
-  const on = r.dsi_onhesap, m = r.mockus;
-  const repMethods = ["dsi", "mockus", "rasyonel", "snyder"].filter(k =>
-    k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder));
-  let h = `<h3 class="res">DSİ Sentetik — Önhesap</h3>
-    <div class="small">S=${fmt(r.girdi_ozeti.S_harmonik, 5)} | qp=${fmt(on.qp, 2)} l/s/km²/mm |
-    Qp=${fmt(on.Qp, 4)} m³/s/mm | T=${on.T_saat} sa | Tp=${fmt(on.Tp, 2)} sa</div>`;
-
-  h += `<h3 class="res">Pik Debiler — KABULET (m³/s)</h3><table class="tbl"><tr><th>T (yıl)</th>`;
+function buildDsiHtml(r) {
+  const on = r.dsi_onhesap;
+  return `<h3 class="res">DSİ Sentetik — Önhesap</h3>`
+    + `<div class="small">S=${fmt(r.girdi_ozeti.S_harmonik, 5)} | qp=${fmt(on.qp, 2)} l/s/km²/mm |`
+    + ` Qp=${fmt(on.Qp, 4)} m³/s/mm | T=${on.T_saat} sa | Tp=${fmt(on.Tp, 2)} sa</div>`;
+}
+function buildKabuletHtml(r) {
+  let h = `<h3 class="res">Pik Debiler — KABULET (m³/s)</h3><div class="tbl-wrap"><table class="tbl"><tr><th>T (yıl)</th>`;
   DURS.forEach(d => h += `<th>${d} sa</th>`);
   h += `</tr>`;
   RPS.forEach(rp => {
@@ -2729,21 +2745,43 @@ function renderResults() {
   ["500", "1000", "10000"].forEach(rp => {
     h += `<tr><td>Q${rp}</td>` + DURS.map(d => `<td>${fmt(r.kabulet[d][rp], 2)}</td>`).join("") + `</tr>`;
   });
-  h += `</table>
-  <div class="grid2"><label>Proje sağanak süresi
-    <select id="selDur">${DURS.map(d => `<option value="${d}">${d} saat</option>`).join("")}</select>
-  </label><button id="btnChart">📈 Hidrografları göster</button></div>`;
-
-  h += `<h3 class="res">Mockus (süperpozesiz) pik debiler</h3>
-    <div class="small">Tc=${fmt(m.Tc, 3)} sa | D=${m.D} sa | Tp=${fmt(m.Tp, 3)} sa</div>
-    <table class="tbl"><tr><th>K</th><th>qp</th><th>Q2</th><th>Q5</th><th>Q10</th><th>Q25</th><th>Q50</th><th>Q100</th><th>Q500</th><th>Q1000</th><th>QOET</th></tr>`;
+  h += `</table></div>`
+    + `<div class="grid2"><label>Proje sağanak süresi`
+    + `<select id="selDur">${DURS.map(d => `<option value="${d}">${d} saat</option>`).join("")}</select>`
+    + `</label><button id="btnChart">📈 Hidrografları göster</button></div>`;
+  return h;
+}
+function buildMockusHtml(r) {
+  const m = r.mockus;
+  let h = `<h3 class="res">Mockus (süperpozesiz) pik debiler</h3>`
+    + `<div class="small">Tc=${fmt(m.Tc, 3)} sa | D=${m.D} sa | Tp=${fmt(m.Tp, 3)} sa</div>`
+    + `<div class="tbl-wrap"><table class="tbl"><tr><th>K</th><th>qp</th><th>Q2</th><th>Q5</th><th>Q10</th><th>Q25</th><th>Q50</th><th>Q100</th><th>Q500</th><th>Q1000</th><th>QOET</th></tr>`;
   ["K1", "K2", "K3"].forEach(k => {
     const s = m.sonuclar[k];
     h += `<tr><td>${k}=${s.K}</td><td>${fmt(s.qp, 3)}</td>` +
       [2, 5, 10, 25, 50, 100].map(t => `<td>${fmt(s.Q[t], 2)}</td>`).join("") +
       `<td>${fmt(s.Q_ext[500], 2)}</td><td>${fmt(s.Q_ext[1000], 2)}</td><td>${fmt(s.Q_OET, 2)}</td></tr>`;
   });
-  h += `</table>`;
+  h += `</table></div>`;
+  return h;
+}
+function renderHesapDock() {
+  const el = $("hesapDock"), grid = $("hesapGrid");
+  if (!el || !grid) return;
+  if (!S.sonuc) { el.classList.add("hidden"); grid.innerHTML = ""; return; }
+  grid.innerHTML = buildDsiHtml(S.sonuc) + buildKabuletHtml(S.sonuc) + buildMockusHtml(S.sonuc);
+  const btn = grid.querySelector("#btnChart");
+  if (btn) btn.onclick = () => showChart(+grid.querySelector("#selDur").value);
+  const cur = document.querySelector('.step[data-step="4"]');
+  if (cur && cur.classList.contains("active")) el.classList.remove("hidden");
+  else el.classList.add("hidden");
+}
+function renderResults() {
+  const r = S.sonuc, el = $("results");
+  const repMethods = ["dsi", "mockus", "rasyonel", "snyder"].filter(k =>
+    k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder));
+  renderHesapDock();
+  let h = "";
 
   if (r.rasyonel) {
     const ra = r.rasyonel;
@@ -2811,7 +2849,6 @@ function renderResults() {
   // dahil kutuları değişince seçilen-yöntem menüsünü güncel tut
   document.querySelectorAll(".repMethod").forEach(cb => cb.onchange = syncRepSecili);
 
-  $("btnChart").onclick = () => showChart(+$("selDur").value);
   $("btnCompare").onclick = () => openCompare();
   $("btnReservoir").onclick = openReservoir;
   $("btnReport").onclick = downloadReport;
@@ -2952,6 +2989,7 @@ function setMode(mode) {
   $("suMode").classList.toggle("hidden", !suM);
   if (suM) suBaslat(); else layers.su.remove();
   $("rainDock").classList.add("hidden");
+  $("hesapDock")?.classList.add("hidden");
   if (multi) {
     // Mansap noktası varsayılan: tek havzadaki outlet (kullanıcı elle değiştirmediyse hep senkron)
     if (S.outlet && (!S.multi.mansap || S.multi.mansapAuto)) {
@@ -4257,6 +4295,8 @@ function clearSingleBasin() {
   $("inpCN2").value = "75";
   $("yzdInfo").textContent = "";
   ["cnTable", "thTable", "results"].forEach(id => { if ($(id)) $(id).innerHTML = ""; });
+  if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+  $("hesapDock")?.classList.add("hidden");
   renderRasyonelC(null);
   ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus"].forEach(id => { if ($(id)) setStatus(id, "", ""); });
   document.querySelectorAll(".step").forEach(s => s.classList.remove("done"));

@@ -82,6 +82,15 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 12px; background:
             padding: 8px; max-height: 60%; overflow-y: auto;
             box-shadow: 0 4px 18px rgba(0,0,0,.12); }
 #rainDock table.tbl { margin-bottom: 4px; }
+#hesapDock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 999;
+            background: rgba(255,255,255,.98); border: 1px solid #cbc7c0; border-radius: 8px;
+            padding: 8px; max-height: 60%; overflow-y: auto;
+            box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+.hesap-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;
+            border-bottom: 1px solid #e2ded8; padding-bottom: 6px; }
+.hesap-head b { color: #0d5c63; font-size: 15px; }
+#hesapGrid .tbl-wrap { overflow-x: auto; margin-bottom: 6px; }
+#hesapGrid table.tbl { margin-bottom: 4px; }
 /* harita adres arama çubuğu (il/ilçe/mahalle) */
 #mapSearch { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
              z-index: 1000; width: min(380px, 62%); }
@@ -192,6 +201,7 @@ h3.res { font-size: 15px; font-weight: 700; color: #0d5c63; margin-top: 12px; pa
   #panel { width: 100%; max-width: none; min-width: 0; max-height: 50vh; border-right: none; border-bottom: 1px solid #d6d2cc; }
   input, select, textarea, button, body { font-size: 16px; }
   #rainDock { max-height: 40%; }
+  #hesapDock { max-height: 40%; }
   #chartwrap { width: auto; left: 8px; right: 8px; height: 280px; }
 }
 
