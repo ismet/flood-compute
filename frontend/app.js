@@ -2765,13 +2765,41 @@ function buildMockusHtml(r) {
   h += `</table></div>`;
   return h;
 }
+function buildRasyonelHtml(r) {
+  if (!r?.rasyonel) return "";
+  const ra = r.rasyonel;
+  let h = `<h3 class="res">Rasyonel Yöntem</h3>`
+    + `<div class="small">Tc=${fmt(ra.Tc_dk, 1)} dk | S=${fmt(ra.S_dogrusal, 5)} | YADK=${fmt(ra.YADK, 3)} | PLV(Tc)=${fmt(ra.PLV_Tc, 3)} | C100=${ra.C100} | üs=${ra.us} | Tb=${fmt(ra.Tb_saat, 2)} sa</div>`
+    + `<div class="tbl-wrap"><table class="tbl"><tr>` + [2, 5, 10, 25, 50, 100].map(t => `<th>Q${t}</th>`).join("") + `<th>Q500</th><th>Q1000</th><th>Q10000</th></tr><tr>` + [2, 5, 10, 25, 50, 100].map(t => `<td>${fmt(ra.Q[t], 2)}</td>`).join("") + `<td>${fmt(ra.Q_ext["500"], 2)}</td><td>${fmt(ra.Q_ext["1000"], 2)}</td><td>${fmt(ra.Q_ext["10000"], 2)}</td></tr></table></div>`;
+  if (r.girdi_ozeti?.A_km2 > 1) h += `<div class="small">⚠ A > 1 km²: rasyonel yöntem küçük havzalar içindir, karşılaştırma amaçlı gösteriliyor.</div>`;
+  return h;
+}
+function buildSnyderHtml(r) {
+  if (!r?.snyder) return "";
+  const sn = r.snyder, p = sn.parametreler;
+  let h = `<h3 class="res">Snyder Yöntemi</h3>`
+    + `<div class="small">t<sub>p</sub>=${fmt(p.tp, 2)} sa | t<sub>r</sub>=${p.tr} sa | q<sub>p</sub>=${fmt(p.qp, 2)} l/s/km²/cm | Q<sub>p</sub>=${fmt(p.Qp, 3)} m³/s/mm | T<sub>p</sub>=${p.Tp} sa | T<sub>b</sub>=${p.Tb} sa | W50=${fmt(p.W50, 1)} | W75=${fmt(p.W75, 1)} | YALD=${fmt(p.YALD, 3)} | BH hacmi=${fmt(p.hacim_mm, 3)} mm</div>`
+    + `<div class="tbl-wrap"><table class="tbl"><tr>` + ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t => `<th>Q${t}</th>`).join("") + `</tr><tr>` + ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t => `<td>${fmt(sn.pikler[t], 2)}</td>`).join("") + `</tr></table></div>`
+    + `<button id="btnSnyChart">📈 Snyder hidrograflarını göster</button><div class="small">Q500/1000/10000 ekstrapolasyon (Q10–Q100), QOET C<sub>III</sub> ile; 24 sa sağanak ${sn.hidrograflar["2"] ? Math.round(24 / p.tr) : "?"} bloğa bölünüp süperpoze edilmiştir.</div>`;
+  if (sn.yzdo_yad) {
+    const yy = sn.yzdo_yad;
+    h += `<div class="small" style="margin-top:4px"><b>Otomatik çekilen YZDO & YAD</b> — bölge <b>${yy.bolge}</b> | ADK/YALD (24 sa alansal azaltma) = <b>${fmt(yy.YALD, 3)}</b> | MF=${fmt(yy.MF, 2)} | ${yy.n_blok}×${yy.tr} sa blok</div><div class="tbl-wrap"><table class="tbl"><tr><th>Blok</th>` + yy.bloklar.map(b => `<th>${b.sure_sa} sa</th>`).join("") + `</tr><tr><td>T/ΣT</td>` + yy.bloklar.map(b => `<td>${fmt(b.oran, 3)}</td>`).join("") + `</tr><tr><td>YZDO (${yy.bolge})</td>` + yy.bloklar.map(b => `<td>${fmt(b.yzdo, 3)}</td>`).join("") + `</tr></table></div>`;
+  }
+  return h;
+}
+function buildKarHtml(r) {
+  if (!r?.kar) return "";
+  return `<div class="small" style="margin-top:6px">Kar erimesi piki: ${fmt(r.kar.Qkar_pik, 1)} m³/s (OET hidrografına eklendi)</div>`;
+}
 function renderHesapDock() {
   const el = $("hesapDock"), grid = $("hesapGrid");
   if (!el || !grid) return;
   if (!S.sonuc) { el.classList.add("hidden"); grid.innerHTML = ""; return; }
-  grid.innerHTML = buildDsiHtml(S.sonuc) + buildKabuletHtml(S.sonuc) + buildMockusHtml(S.sonuc);
+  grid.innerHTML = buildDsiHtml(S.sonuc) + buildKabuletHtml(S.sonuc) + buildMockusHtml(S.sonuc) + buildRasyonelHtml(S.sonuc) + buildSnyderHtml(S.sonuc) + buildKarHtml(S.sonuc);
   const btn = grid.querySelector("#btnChart");
   if (btn) btn.onclick = () => showChart(+grid.querySelector("#selDur").value);
+  const btnSny = grid.querySelector("#btnSnyChart");
+  if (btnSny) btnSny.onclick = () => showSnyderChart();
   const cur = document.querySelector('.step[data-step="4"]');
   if (cur && cur.classList.contains("active")) el.classList.remove("hidden");
   else el.classList.add("hidden");
@@ -2782,46 +2810,6 @@ function renderResults() {
     k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder));
   renderHesapDock();
   let h = "";
-
-  if (r.rasyonel) {
-    const ra = r.rasyonel;
-    h += `<h3 class="res">Rasyonel Yöntem</h3>
-      <div class="small">Tc=${fmt(ra.Tc_dk, 1)} dk | S=${fmt(ra.S_dogrusal, 5)} | YADK=${fmt(ra.YADK, 3)} |
-      PLV(Tc)=${fmt(ra.PLV_Tc, 3)} | C100=${ra.C100} | üs=${ra.us} | Tb=${fmt(ra.Tb_saat, 2)} sa</div>
-      <table class="tbl"><tr>` +
-      [2, 5, 10, 25, 50, 100].map(t => `<th>Q${t}</th>`).join("") +
-      `<th>Q500</th><th>Q1000</th><th>Q10000</th></tr><tr>` +
-      [2, 5, 10, 25, 50, 100].map(t => `<td>${fmt(ra.Q[t], 2)}</td>`).join("") +
-      `<td>${fmt(ra.Q_ext["500"], 2)}</td><td>${fmt(ra.Q_ext["1000"], 2)}</td><td>${fmt(ra.Q_ext["10000"], 2)}</td></tr></table>` +
-      (S.sonuc.girdi_ozeti.A_km2 > 1 ? `<div class="small">⚠ A > 1 km²: rasyonel yöntem küçük havzalar içindir, karşılaştırma amaçlı gösteriliyor.</div>` : "");
-  }
-  if (r.snyder) {
-    const sn = r.snyder, p = sn.parametreler;
-    h += `<h3 class="res">Snyder Yöntemi</h3>
-      <div class="small">t<sub>p</sub>=${fmt(p.tp, 2)} sa | t<sub>r</sub>=${p.tr} sa |
-      q<sub>p</sub>=${fmt(p.qp, 2)} l/s/km²/cm | Q<sub>p</sub>=${fmt(p.Qp, 3)} m³/s/mm |
-      T<sub>p</sub>=${p.Tp} sa | T<sub>b</sub>=${p.Tb} sa | W50=${fmt(p.W50, 1)} | W75=${fmt(p.W75, 1)} |
-      YALD=${fmt(p.YALD, 3)} | BH hacmi=${fmt(p.hacim_mm, 3)} mm</div>
-      <table class="tbl"><tr>` +
-      ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t => `<th>Q${t}</th>`).join("") +
-      `</tr><tr>` +
-      ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t =>
-        `<td>${fmt(sn.pikler[t], 2)}</td>`).join("") +
-      `</tr></table>
-      <button id="btnSnyChart">📈 Snyder hidrograflarını göster</button>
-      <div class="small">Q500/1000/10000 ekstrapolasyon (Q10–Q100), QOET C<sub>III</sub> ile;
-      24 sa sağanak ${sn.hidrograflar["2"] ? Math.round(24 / p.tr) : "?"} bloğa bölünüp süperpoze edilmiştir.</div>`;
-    if (sn.yzdo_yad) {
-      const yy = sn.yzdo_yad;
-      h += `<div class="small" style="margin-top:4px"><b>Otomatik çekilen YZDO & YAD</b> —
-        bölge <b>${yy.bolge}</b> | ADK/YALD (24 sa alansal azaltma) = <b>${fmt(yy.YALD, 3)}</b> |
-        MF=${fmt(yy.MF, 2)} | ${yy.n_blok}×${yy.tr} sa blok</div>
-        <table class="tbl"><tr><th>Blok</th>` + yy.bloklar.map(b => `<th>${b.sure_sa} sa</th>`).join("") + `</tr>
-        <tr><td>T/ΣT</td>` + yy.bloklar.map(b => `<td>${fmt(b.oran, 3)}</td>`).join("") + `</tr>
-        <tr><td>YZDO (${yy.bolge})</td>` + yy.bloklar.map(b => `<td>${fmt(b.yzdo, 3)}</td>`).join("") + `</tr></table>`;
-    }
-  }
-  if (r.kar) h += `<div class="small">Kar erimesi piki: ${fmt(r.kar.Qkar_pik, 1)} m³/s (OET hidrografına eklendi)</div>`;
 
   h += `<h3 class="res">Tekerrür yılı ara (Yıl_Ara)</h3>
     <div class="grid2"><label>Debi (m³/s)<input id="yilQ" type="number" step="0.1"></label>
@@ -2853,9 +2841,10 @@ function renderResults() {
   $("btnReservoir").onclick = openReservoir;
   $("btnReport").onclick = downloadReport;
   $("btnKmz").onclick = downloadKmz;
-  if (r.snyder) $("btnSnyChart").onclick = () => showSnyderChart();
   $("btnYil").onclick = () => {
-    const d = $("selDur").value, q = +$("yilQ").value;
+    const sel = document.querySelector("#hesapGrid #selDur") || $("selDur");
+    const d = sel?.value, q = +$("yilQ").value;
+    if (!d) return;
     const t = api("/api/yil-ara", { q, q10: r.kabulet[d]["10"], q100: r.kabulet[d]["100"] })
       .then(x => $("yilRes").textContent =
         `T ≈ ${x.tekerrur_yili ? x.tekerrur_yili.toFixed(1) : "—"} yıl (${d} sa hidrografına göre)`);
