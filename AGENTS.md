@@ -51,7 +51,9 @@ docker build -t taskin-hesap .                       # build Docker image
 - **Stateless computation** — client sends full state, server returns results. No session (except project save/load under `data/projects/`).
 - **No database** — `data/tables/*.json` (16 files) loaded via `backend.core.tables.load()` with `@lru_cache`
 - **Error responses** always `{"hata": str(e)}` — use `_err(e)` from `backend.main` (returns `JSONResponse(status_code=400)`)
-- **POST endpoints** accept Pydantic model JSON bodies, except `POST /api/stations` and `POST /api/raster-add` (multipart form).
+- **POST endpoints** accept Pydantic model JSON bodies; the four file-upload endpoints (`/api/stations`, `/api/raster-add`, `/api/import-basin`, `/api/bilgi-katmani`) take multipart `UploadFile`.
+- **Golden tests need no Excel files** — expected values are hardcoded constants (docstrings cite the source workbook for provenance only); they read fixtures from `data/tables/*.json`.
+- **Domain vocabulary lives in `CONTEXT.md`** (repo root) — canonical terms (Adım, Parametre, CN, Thiessen kümesi) with `_Avoid_` synonyms; keep UI/docs wording consistent with it and add new resolved terms there.
 
 ## GIS delineation
 
@@ -63,12 +65,12 @@ Runs in a **subprocess** behind a global `threading.Lock` (delineate, multi-deli
 
 **National 10 m DEM (`DEM_10M`, default `<repo>/10M/tr10clip.img` — override via env; ~23.5 GB, gitignored) is used TWO-STAGE** via `delineate_iki_asamali`: 30 m finds the basin → boundary buffered → 10 m window clipped and reprojected to WGS84 → characteristics recomputed. Stage two targets stage one's area. Area agrees ~1%, but L/Lc come out 18%/43% LONGER at 10 m (channel length is scale-dependent and DSİ's Ct is calibrated to map-measured lengths), which inflates tp ~17% and depresses the peak; results warn to take area/elevations from 10 m, L/Lc from 30 m. Clips travel in `data/dem10/` (`tools/dem10_kes.py`) so the 10 m option works without the 23.5 GB source; `_kesit_bul` prefers a covering clip. Clips carry a **+300 m margin** — the app recomputes its window from its own stage-1 basin and a hand-rounded box misses by metres. They live OUTSIDE `data/dem/`: that pool is a merge and merge imposes the first file's resolution. 10 m only pays below ~5000 km²: MAX_CELLS coarsens above (800 → 10 m, 2000 → 15.8, 7500 → 30.6 m). Source WKT has no TOWGS84; PROJ picks "ED50 to WGS 84 (1)", declared accuracy 10 m — the gain is resolution, not absolute position.
 
-Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, gis.py:59), `HOST`, `PORT`, `APP_PASSWORD`, `DEM_10M`.
+Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, gis.py:59), `SNAP_MAKS_ARAMA_M` (default 2000, gis.py:65), `HOST`, `PORT`, `DEM_10M`, `APP_PASSWORD` — auth is **conditional**: set it and every request needs HTTP Basic (any username, password must match); unset, no auth at all.
 
 ## Architecture
 
 ```
-backend/main.py    — FastAPI app, 64 routes (30 GET, 33 POST, 1 DELETE), Pydantic models, HTTP Basic auth
+backend/main.py    — FastAPI app, 64 routes (30 GET, 33 POST, 1 DELETE), Pydantic models, optional HTTP Basic auth (see env vars below)
 backend/core/      — Computation engine (no framework dependency)
   engine.py        — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff (BH2 UH, 7×7 KABULET matrix)
   snyder.py        — Snyder synthetic UH (Ct·(L·Lc)^0.30; volume-balanced hydrograph)
@@ -101,7 +103,7 @@ backend/core/      — Computation engine (no framework dependency)
                      65535, NOT 0: zero runoff is legit (closed Konya basin). Any
                      masking MUST compare against src.nodata.
   tfa.py          — NTFA: 6 distributions, K-S accept, Grubbs-Beck (outliers
-                     reported, never auto-applied). Also the engine for step-5
+                     reported, never auto-applied). Also the engine for step-4
                      rainfall P2…P100 per station. See golden quirks below.
   btfa.py         — BTFA regional index-flood + Dalrymple homogeneity (formulas)
   mmy.py          — MMY Hershfield PMP, regional Km envelope (formulas)
@@ -115,20 +117,20 @@ backend/core/      — Computation engine (no framework dependency)
                      1.0 placeholder; those rows are springs/canals anyway) and
                      outlier-flagged AND >5× second-largest. Excluded rows are
                      RETURNED, never dropped (elenen_kayitlar).
-  mgm.py          — MGM weather DB: supplies step-5 P2…P100 by running tfa.py
+  mgm.py          — MGM weather DB: supplies step-4 P2…P100 by running tfa.py
                      on each station's annual maximum daily rainfall — same six
                      distributions. data/tables/mgm_plv_2020.json is NOT a P24
                      source anymore; /api/mgm-stations deliberately strips its
                      P24 field (two parallel sources made it unknowable which one
-                     a project used). Step-4 Thiessen set IS this DB, so step-5
+                     a project used). Step-3 Thiessen set IS this DB, so step-4
                      matching is by `kod` identity; only uploaded KMZs/hand
                      points match by coordinate (prefer ≥25-yr record inside the
                      radius over a nearer short one — Lüleburgaz has 10-yr at
                      5.7 km, 74-yr at 6.3).
-frontend/           — 3 files: index.html, app.js (all state in `S` singleton), style.scss
+frontend/           — 3 files: index.html, app.js (all state in `S` singleton), style.css
 ```
 
-- **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue. Public `/static/`; `index.html` at `/` with `Cache-Control: no-cache`. Leaflet + Chart.js from CDNs.
+- **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue. Public `/static/`; `index.html` at `/` with `Cache-Control: no-cache`. Leaflet + Geoman + Chart.js from CDNs. Static assets are cache-busted by hand via `?v=NN` in index.html (`style.css?v=`, `app.js?v=`) — bump it when editing them.
 - Frontend table/UH data lives in `data/` JSON: `data/tables/*.json` (16 Excel-extracted lookup tables; do NOT edit by hand, regenerate with `tools/extract_tables.py`)
 
 ## Data
@@ -138,6 +140,8 @@ data/regions/YZD_ALANLAR.kmz  YZD A/B/C polygons
 data/corine/                 local CORINE 2018 (else EEA WMS → data/corine/cache/)
 data/dem/ + data/dem/cache/  local 30 m DEMs & Copernicus GLO-30 tiles (merged pool)
 data/dem10/                  repo-carried 10 m clips (tool: tools/dem10_kes.py)
+data/dilekce/                petition assets: fonts + imza_kase_default.png
+                                (referenced by core/dilekce.py; deleting breaks /api/dilekce)
 data/yagis/                  — yagis/pet/net GeoTIFFs (CHELSA v2.1, ~1 km), plus awc*_tr.tif from SoilGrids
 data/zemin/                  — hsg_tr.tif (soil group A/B/C/D, ~1 km)
 data/akarsu/akarsu.sqlite    — DSİ river network (405k lines, 68 MB, committed)
@@ -151,11 +155,13 @@ data/stations/bir_cikti.kml  — legacy 2315-station layer, NO LONGER auto-loade
 data/raster/ (uploaded rasters, gitignored), data/projects/ (saved projects, gitignored)
 ```
 
+**Git trap:** `.gitignore` covers `data/dem/aster30m/` in lowercase but the directory is `aster30M` (capital M) — it stays untracked and a blanket `git add -A` would stage ~2.6 GB of ASTER grid. Stage paths explicitly.
+
 ## External data
 
 | Data | Source | Trigger |
 |---|---|---|
-| DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (current cache ~3.4 GB) |
+| DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (cache grows to GBs with use) |
 | CORINE (CLC2018) | EEA WMS → `data/corine/cache/` | First CN computation |
 
 ## API endpoints (64 total)

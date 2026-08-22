@@ -217,7 +217,7 @@ else:
     assert eski and "plv" in eski[0], "PLV oranları kayboldu"
     assert "P24" not in eski[0], "eski tablo hâlâ P24 döndürüyor"
 
-    # Adım 4'ün varsayılan kümesi YALNIZ ölçüm veri tabanıdır. Her istasyonun
+    # Adım 3'ün varsayılan kümesi YALNIZ ölçüm veri tabanıdır. Her istasyonun
     # kendi yağış serisi olmalı — kümede ölçümsüz istasyon bulunması, bir
     # Thiessen hücresinin başka istasyonun yağışını taşıması demektir.
     d = c.get("/api/stations/default").json()
@@ -228,7 +228,7 @@ else:
     assert all(s["yil_sayisi"] >= d["en_az_yil"] for s in sts)
     assert all(s.get("lat") is not None and s.get("lon") is not None for s in sts)
 
-    # Varsayılan kümeden gelen istasyon Adım 5'te KİMLİKLE eşleşmeli
+    # Varsayılan kümeden gelen istasyon Adım 4'te KİMLİKLE eşleşmeli
     kodlu = next(s for s in sts if s["yil_sayisi"] >= 25)
     e2 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
         {"ad": kodlu["name"], "lat": kodlu["lat"], "lon": kodlu["lon"],
