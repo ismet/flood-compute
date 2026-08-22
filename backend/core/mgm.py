@@ -221,13 +221,18 @@ _TR_BUYUK = str.maketrans("abcçdefgğhıijklmnoöprsştuüvyzqwx",
                           "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZQWX")
 
 
-def _norm(ad):
-    """Ada göre eşleştirme anahtarı — Türkçe harf katlar, noktalama atar."""
+def _normalize_base(ad):
     s = str(ad or "").translate(_TR_BUYUK)
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
     s = (s.replace("Ğ", "G").replace("Ş", "S").replace("Ö", "O")
-          .replace("Ü", "U").replace("Ç", "C").replace("İ", "I"))
+         .replace("Ü", "U").replace("Ç", "C").replace("İ", "I"))
+    return s
+
+
+def _norm(ad):
+    """Ada göre eşleştirme anahtarı — Türkçe harf katlar, noktalama atar."""
+    s = _normalize_base(ad)
     s = re.sub(r"\(.*?\)", " ", s)              # "EREĞLİ (KONYA)" -> "EREĞLİ"
     return re.sub(r"[^A-Z0-9]", "", s)
 
@@ -239,6 +244,183 @@ def _mesafe_km(lat1, lon1, lat2, lon2):
 
 
 TERCIH_YIL = 25                 # bu uzunluktaki seri P100 için makul sayılır
+
+
+def _norm_keep_parantez(ad):
+    """_norm varyantı — parantez içini silmez (GEYVE, KARTAL gibi alt adlar için)."""
+    return re.sub(r"[^A-Z0-9]", "", _normalize_base(ad))
+
+
+_plv_haritasi_cache = None
+
+def _plv_haritasi():
+    """MGM PLV 2020 (236) → MGM ölçüm DB koordinat eşleşmesi (küresel en yakın için).
+
+    Dönüş: [{"no","ad","plv","kod","lat","lon","yontem"}] — koordinatsız 3 istasyon elenir
+    (BOZOYÜK/DİDİM/ARAPGİR DB’de karşılığı yok).
+    """
+    global _plv_haritasi_cache
+    if _plv_haritasi_cache is not None:
+        return _plv_haritasi_cache
+    from backend.core import tables
+    try:
+        plv_veri = tables.load("mgm_plv_2020")
+    except Exception:
+        return []
+    plv_list = plv_veri.get("istasyonlar") or []
+    if not var_mi():
+        return []
+    db = _baglanti()
+    # DB’deki koordinatlı istasyonlar
+    hepsi = [dict(r) for r in db.execute(
+        "SELECT kod, ad, lat, lon, maks_yil FROM istasyon WHERE lat IS NOT NULL")]
+    ada_gore = {}
+    ada_gore_keep = {}
+    for s in hepsi:
+        ada_gore.setdefault(_norm(s["ad"]), []).append(s)
+        ada_gore_keep.setdefault(_norm_keep_parantez(s["ad"]), []).append(s)
+    out = []
+    for p in plv_list:
+        ad = p.get("ad") or ""
+        n = _norm(ad)
+        n_keep = _norm_keep_parantez(ad)
+        adaylar = None
+        yontem = None
+        # 1) tam eşleşme (standart norm)
+        aday = ada_gore.get(n)
+        if aday:
+            yontem = "tam"
+            adaylar = aday
+        else:
+            # 1b) tam-keep — parantez içini koruyan norm (KALE-DEMRE → KALEDemre)
+            aday_keep = ada_gore_keep.get(n_keep)
+            if aday_keep:
+                yontem = "tam-keep"
+                adaylar = aday_keep
+            elif len(n) >= 5:
+                # 2) prefix — kısa adlar (KALE gibi 4 harf) yanlış eşleşmesin diye ≥5
+                cand = [v for k, v in ada_gore.items() if k.startswith(n) or n.startswith(k)]
+                flat = [x for lst in cand for x in lst]
+                if flat:
+                    yontem = "prefix"
+                    adaylar = flat
+                else:
+                    # 3) contains — yine ≥5 (AFYON→AFYONKARAHİSAR, GEYVE→ALİ FUAT PAŞA gibi)
+                    cand2 = [v for k, v in ada_gore.items() if n in k or k in n]
+                    flat2 = [x for lst in cand2 for x in lst]
+                    if flat2:
+                        yontem = "contains"
+                        adaylar = flat2
+                    elif len(n_keep) >= 5:
+                        cand3 = [v for k, v in ada_gore_keep.items() if n_keep in k or k in n_keep]
+                        flat3 = [x for lst in cand3 for x in lst]
+                        if flat3:
+                            yontem = "contains-keep"
+                            adaylar = flat3
+            else:
+                # kısa adlarda sadece tam eşleşme denendi
+                pass
+        if not adaylar:
+            continue
+        # aynı norm’a birden fazla kod (KALE×3 vb.) → en uzun seri
+        sec = max(adaylar, key=lambda s: s.get("maks_yil") or 0)
+        out.append({
+            "no": p.get("no"),
+            "ad": ad,
+            "plv": p.get("plv"),
+            "kod": sec["kod"],
+            "lat": sec["lat"],
+            "lon": sec["lon"],
+            "yontem": yontem,
+        })
+    _plv_haritasi_cache = out
+    return out
+
+
+def _havza_centroid_lonlat(havza_geojson):
+    """Havza GeoJSON (Polygon/Feature/FeatureCollection) → (lon, lat) centroid.
+
+    shapely lazy import (AGENTS.md kuralı). En büyük Polygon seçilir.
+    """
+    if not havza_geojson:
+        raise ValueError("Havza geometrisi gerekli")
+    from shapely.geometry import shape
+
+    def geometriler(x):
+        if not isinstance(x, dict):
+            return []
+        t = x.get("type") or ""
+        if t == "FeatureCollection":
+            out = []
+            for f in x.get("features") or []:
+                out += geometriler(f)
+            return out
+        if t == "Feature":
+            return geometriler(x.get("geometry"))
+        if t == "GeometryCollection":
+            out = []
+            for g in x.get("geometries") or []:
+                out += geometriler(g)
+            return out
+        return [x] if t else []
+
+    ham = []
+    for g in geometriler(havza_geojson):
+        try:
+            ham.append(shape(g))
+        except Exception:
+            pass
+    if not ham:
+        # ham Polygon/MultiPolygon değilse doğrudan shape dene (ör. raw Polygon)
+        try:
+            ham = [shape(havza_geojson)]
+        except Exception:
+            raise ValueError("Havza poligonu okunamadı")
+    poligonlar = []
+    for g in ham:
+        if g.geom_type == "Polygon":
+            poligonlar.append(g)
+        elif g.geom_type == "MultiPolygon":
+            poligonlar += list(g.geoms)
+    if not poligonlar:
+        raise ValueError("Havza poligonu bulunamadı")
+    en_buyuk = max(poligonlar, key=lambda p: p.area)
+    c = en_buyuk.centroid
+    return float(c.x), float(c.y)
+
+
+def plv_en_yakin(havza_geojson=None, lat=None, lon=None):
+    """Havzaya en yakın MGM PLV istasyonu (küresel en yakın, limit yok).
+
+    havza_geojson verilirse centroid’i kullanılır; aksi halde lat/lon doğrudan.
+    İkisi birden verilirse havza önceliklidir (lat/lon yok sayılır) — Pydantic katmanında 422 ile reddedilir.
+    Dönüş: {"no","ad","plv","kod","lat","lon","mesafe_km","yontem","centroid":{"lat","lon"}}
+    """
+    if havza_geojson is not None and (lat is not None or lon is not None):
+        raise ValueError("havza_geojson ve lat/lon aynı anda verilemez")
+    if havza_geojson is not None:
+        lon, lat = _havza_centroid_lonlat(havza_geojson)
+    if lat is None or lon is None:
+        raise ValueError("Havza geometrisi veya lat/lon gerekli")
+    lat = float(lat); lon = float(lon)
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise ValueError("Geçersiz lat/lon")
+    lst = _plv_haritasi()
+    if not lst:
+        raise RuntimeError("MGM PLV haritası boş (DB veya PLV tablosu yok)")
+    en = min(lst, key=lambda s: _mesafe_km(lat, lon, s["lat"], s["lon"]))
+    km = round(_mesafe_km(lat, lon, en["lat"], en["lon"]), 2)
+    return {
+        "no": en["no"],
+        "ad": en["ad"],
+        "plv": en["plv"],
+        "kod": en["kod"],
+        "lat": en["lat"],
+        "lon": en["lon"],
+        "mesafe_km": km,
+        "yontem": en["yontem"],
+        "centroid": {"lat": round(lat, 6), "lon": round(lon, 6)},
+    }
 
 
 def eslestir(istasyonlar, en_az_yil=EN_AZ_YIL, en_cok_km=25.0,

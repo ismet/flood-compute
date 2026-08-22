@@ -70,7 +70,7 @@ Env vars: `DELINEATE_MAX_CELLS` (default 8_000_000, gis.py:59), `SNAP_MAKS_ARAMA
 ## Architecture
 
 ```
-backend/main.py    — FastAPI app, 64 routes (30 GET, 33 POST, 1 DELETE), Pydantic models, optional HTTP Basic auth (see env vars below)
+backend/main.py    — FastAPI app, 66 routes (31 GET, 34 POST, 1 DELETE), Pydantic models, optional HTTP Basic auth (see env vars below)
 backend/core/      — Computation engine (no framework dependency)
   engine.py        — DSİ Sentetik + Mockus + Kirpich Tc + SCS runoff (BH2 UH, 7×7 KABULET matrix)
   snyder.py        — Snyder synthetic UH (Ct·(L·Lc)^0.30; volume-balanced hydrograph)
@@ -118,6 +118,7 @@ backend/core/      — Computation engine (no framework dependency)
                      outlier-flagged AND >5× second-largest. Excluded rows are
                      RETURNED, never dropped (elenen_kayitlar).
   mgm.py          — MGM weather DB: supplies step-3 (Yağış — birleşik) P2…P100 by running tfa.py
+                     + DPLV nearest PLV (`plv_en_yakin`, `_plv_haritasi`) for auto-selection
                      on each station's annual maximum daily rainfall — same six
                      distributions. data/tables/mgm_plv_2020.json is NOT a P24
                      source anymore; /api/mgm-stations deliberately strips its
@@ -130,7 +131,7 @@ backend/core/      — Computation engine (no framework dependency)
 frontend/           — 3 files: index.html, app.js (all state in `S` singleton), style.css
 ```
 
-- **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue. Public `/static/`; `index.html` at `/` with `Cache-Control: no-cache`. Leaflet + Geoman + Chart.js from CDNs. Static assets are cache-busted by hand via `?v=NN` in index.html (`style.css?v=`, `app.js?v=`) — bump it when editing them.
+- **`S` singleton** (`frontend/app.js:4`) tracks all app state — no React/Vue. `S.dplvAuto`/`S.dplvManual` hold auto-selected nearest PLV (havza centroid). Public `/static/`; `index.html` at `/` with `Cache-Control: no-cache`. Leaflet + Geoman + Chart.js from CDNs. Static assets are cache-busted by hand via `?v=NN` in index.html (`style.css?v=`, `app.js?v=`) — bump it when editing them.
 - Frontend table/UH data lives in `data/` JSON: `data/tables/*.json` (16 Excel-extracted lookup tables; do NOT edit by hand, regenerate with `tools/extract_tables.py`)
 
 ## Data
@@ -164,7 +165,7 @@ data/raster/ (uploaded rasters, gitignored), data/projects/ (saved projects, git
 | DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (cache grows to GBs with use) |
 | CORINE (CLC2018) | EEA WMS → `data/corine/cache/` | First CN computation |
 
-## API endpoints (64 total)
+## API endpoints (66 total)
 
 | Endpoint | Notes |
 |---|---|
@@ -182,6 +183,7 @@ data/raster/ (uploaded rasters, gitignored), data/projects/ (saved projects, git
 | `GET /api/yagis-nokta` / `POST /api/yagis-havza` | point / areal-mean climate queries |
 | `GET /api/mgm-bilgi` / `GET /api/mgm` / `GET /api/mgm-seri` | MGM weather stations; series by `tur` |
 | `POST /api/mgm-frekans` / `POST /api/mgm-eslestir` | P2–P100 per station / Thiessen-set match |
+| `POST /api/plv-en-yakin` / `GET /api/plv-en-yakin` | DPLV için en yakın MGM PLV (havza centroid, küresel) |
 | `GET /api/agi-bilgi` / `GET /api/agi` / `POST /api/agi-havza` / `GET /api/agi-seri` | AG peak-flow stations (bbox/polygon, seri filtering) |
 | `POST /api/tfa` | NTFA — at-site frequency from station code or raw series |
 | `POST /api/btfa` | BTFA — regional index-flood (station codes + area) |
