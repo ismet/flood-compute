@@ -174,6 +174,40 @@ document.querySelectorAll(".step").forEach(b => {
   };
 });
 
+function updateMapToolbar(){
+  const isWizard = !S.mode || S.mode==="wizard";
+  const activeStep = document.querySelector(".step.active")?.dataset.step;
+  const show = isWizard && activeStep==="1";
+  const bar = $("mapTopBar"), kat = $("mapKatmanPanel"), topList = $("mapTopListeler"), search = $("mapSearch");
+  if(bar) bar.classList.toggle("hidden", !show);
+  if(kat) kat.classList.toggle("hidden", !show);
+  if(topList){
+    // listeler popover'ı barda değil, ayrı; sadece Harita adımında ve içerik varsa göster
+    const hasContent = (bar && !bar.classList.contains("hidden")) && (
+      ($("infoLayers") && $("infoLayers").innerHTML.trim()) ||
+      ($("rasterLayers") && $("rasterLayers").innerHTML.trim()) ||
+      ($("yagisLejant") && $("yagisLejant").innerHTML.trim()) ||
+      ($("crsWrap") && !$("crsWrap").classList.contains("hidden"))
+    );
+    // popover bar içinde değil, ayrı — sadece içerik varsa ve bar görünürse göster
+    // Varsayılan gizli, render fonksiyonları gerekirse açar
+    if(!show) topList.classList.add("hidden");
+  }
+  if(!show) $("mapDropOverlay")?.classList.add("hidden");
+  updateSearchTop();
+}
+function updateSearchTop(){
+  const bar=$("mapTopBar"), search=$("mapSearch");
+  if(!bar || !search) return;
+  if(bar.classList.contains("hidden")){
+    search.style.top="10px";
+  } else {
+    const h=bar.offsetHeight || 48;
+    search.style.top=(h+8)+"px";
+    // Leaflet top offset de bar yüksekliğine göre
+    document.documentElement.style.setProperty("--map-topbar-h", h+"px");
+  }
+}
 function activateStep(n) {
   document.querySelectorAll(".step").forEach(x => x.classList.remove("active"));
   const _active = document.querySelector(`.step[data-step="${n}"]`);
@@ -199,6 +233,7 @@ function activateStep(n) {
     // havza çıkarıldıysa alanı BTFA'ya taşı (kullanıcı yine de değiştirebilir)
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
   }
+  updateMapToolbar();
 }
 const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`)?.classList.add("done");
 const setStatus = (id, msg, cls = "") => {
@@ -261,6 +296,12 @@ function renderInfoLayers() {
     S.infoLayers.splice(i, 1);
     renderInfoLayers();
   });
+  // popover listeler: içerik varsa göster
+  const pop=$("mapTopListeler");
+  if(pop && S.infoLayers.length) { pop.classList.remove("hidden"); updateSearchTop(); }
+  else if(pop && !S.infoLayers.length && !$("rasterLayers")?.innerHTML.trim() && !$("crsWrap")?.classList.contains("hidden")==false) {
+    // keep hidden if no other content
+  }
 }
 $("infoFile").onchange = async () => {
   const dosyalar = Array.from($("infoFile").files || []);
@@ -332,6 +373,8 @@ function renderRasterLayers() {
     S.rasterLayers.splice(i, 1);
     renderRasterLayers();
   });
+  const pop2=$("mapTopListeler");
+  if(pop2 && S.rasterLayers.length) { pop2.classList.remove("hidden"); updateSearchTop(); }
 }
 
 /* Meta bilgisinden Leaflet karo katmanı kurar (haritaya ekler). */
@@ -373,7 +416,42 @@ function sidUyar(dosyalar) {
   return true;
 }
 
-$("rasterFile").onchange = () => sidUyar(Array.from($("rasterFile").files || []));
+// S3: CRS alanı gizli başlar, gerekirse otomatik açılır
+function crsGosterGerekli(dosyalar){
+  if(!dosyalar.length) return false;
+  const hasPrj = dosyalar.some(f=>/\.prj$/i.test(f.name));
+  if(hasPrj) return false;
+  const hasWorld = dosyalar.some(f=>/\.(sdw|tfw|wld)$/i.test(f.name));
+  const hasSid = dosyalar.some(f=>/\.(sid|ecw)$/i.test(f.name));
+  // world dosyası var ama prj yok → CRS gerekir; sid + world yok → CRS gerekir
+  if(hasWorld) return true;
+  if(hasSid) return true;
+  return false;
+}
+function rasterCrsOtomatik(dosyalar){
+  const wrap=$("crsWrap"), hint=$("rasterCrsHint");
+  if(!wrap) return;
+  const need = crsGosterGerekli(dosyalar);
+  const crsVal = $("rasterCrs")?.value.trim();
+  if(need && !crsVal){
+    wrap.classList.remove("hidden"); wrap.style.display="";
+    if(hint) hint.classList.add("hidden");
+  }
+}
+$("rasterFile").onchange = () => {
+  const dosyalar = Array.from($("rasterFile").files || []);
+  const info=$("rasterFileInfo");
+  if(info) info.textContent = dosyalar.length ? dosyalar.map(f=>f.name).join(", ") : "";
+  if(!dosyalar.length){
+    const w=$("crsWrap"); if(w){ w.classList.add("hidden"); }
+    const h=$("rasterCrsHint"); if(h) h.classList.remove("hidden");
+    sidUyar([]);
+    return;
+  }
+  // MrSID yoksa uyar, ama CRS otomatik de göster
+  sidUyar(dosyalar);
+  rasterCrsOtomatik(dosyalar);
+};
 
 $("btnRasterAdd").onclick = async () => {
   const dosyalar = Array.from($("rasterFile").files || []);
@@ -404,6 +482,111 @@ $("btnRasterAdd").onclick = async () => {
     setStatus("delinStatus", "Altlık eklenemedi: " + e.message, "err");
   }
 };
+
+// Harita toolbar butonları → gizli file input'ları tetikler (a11y: label for yerine button→click)
+(function(){
+  const bH=$("mapBtnHavza"), bD=$("mapBtnDere"), bB=$("mapBtnBilgi"), bR=$("mapBtnRaster");
+  if(bH) bH.addEventListener("click", ()=> $("basinFile")?.click());
+  if(bD) bD.addEventListener("click", ()=> $("riverFile")?.click());
+  if(bB) bB.addEventListener("click", ()=> $("infoFile")?.click());
+  if(bR) bR.addEventListener("click", ()=> $("rasterFile")?.click());
+  // info/raster file info
+  const inf=$("infoFile");
+  if(inf) inf.addEventListener("change", ()=>{
+    const arr=Array.from(inf.files||[]); const el=$("bilgiFileInfo")||$("infoLayers");
+    // bilgiFileInfo yoksa infoLayers zaten renderInfoLayers ile dolacak, sadece kısa bilgi
+    const bf=$("bilgiFileInfo"); if(bf) bf.textContent = arr.length ? arr.map(f=>f.name).join(", ") : "";
+  });
+  // CRS manuel linkler
+  const link=$("linkCrsGoster"), btnK=$("btnCrsKapat"), wrap=$("crsWrap"), hint=$("rasterCrsHint");
+  if(link) link.addEventListener("click", (e)=>{ e.preventDefault(); if(wrap){ wrap.classList.remove("hidden"); wrap.style.display=""; } if(hint) hint.classList.add("hidden"); $("rasterCrs")?.focus(); });
+  if(btnK) btnK.addEventListener("click", ()=>{ if(wrap){ wrap.classList.add("hidden"); } if(hint) hint.classList.remove("hidden"); });
+  // katman panel toggle
+  const tgl=$("btnKatmanToggle"), gov=$("katmanGovde");
+  if(tgl && gov){
+    tgl.addEventListener("click", ()=>{
+      const ac = gov.classList.contains("hidden");
+      gov.classList.toggle("hidden", !ac);
+      tgl.setAttribute("aria-expanded", ac ? "true":"false");
+      tgl.textContent = ac ? "☰ Katmanlar ▴" : "☰ Katmanlar ▾";
+    });
+    // başlangıçta kapalı, ama katman açıksa göster
+    gov.classList.add("hidden");
+  }
+  // drop overlay — havza/dere için hafif (best-practice WCAG: button fallback korunur)
+  const dropEl=$("mapDropOverlay");
+  const mapEl=document.getElementById("map");
+  if(dropEl && mapEl){
+    let counter=0;
+    const isWizardStep1=()=>{ const isW=!S.mode||S.mode==="wizard"; const st=document.querySelector(".step.active")?.dataset.step; return isW && st==="1"; };
+    const showDrop=()=>{ if(!isWizardStep1()) return; dropEl.classList.remove("hidden"); };
+    const hideDrop=()=>{ if(counter<=0) dropEl.classList.add("hidden"); };
+    ["dragenter","dragover"].forEach(ev=>{
+      mapEl.addEventListener(ev, (e)=>{
+        e.preventDefault();
+        if(!isWizardStep1()) return;
+        const hasFiles=[... (e.dataTransfer?.types||[])].includes("Files");
+        if(!hasFiles) return;
+        counter++;
+        showDrop();
+      });
+    });
+    ["dragleave","drop"].forEach(ev=>{
+      mapEl.addEventListener(ev, (e)=>{
+        e.preventDefault();
+        counter=Math.max(0,counter-1);
+        if(ev==="drop"){
+          counter=0;
+          hideDrop();
+          if(!isWizardStep1()) return;
+          const files=[... (e.dataTransfer?.files||[])];
+          if(!files.length) return;
+          // havza/dere: kml/kmz/geojson/zip/gpkg
+          const havzaExt=/\.(kml|kmz|geojson|json|zip|gpkg)$/i;
+          const rasterExt=/\.(tif|tiff|vrt|img|sid|png|jpg|jpeg|ecw|sdw|tfw|wld|prj|xml)$/i;
+          const infoExt=/\.(kml|kmz|geojson|json|zip|gpkg)$/i;
+          const havzaFiles=files.filter(f=>havzaExt.test(f.name));
+          const rasterFiles=files.filter(f=>rasterExt.test(f.name));
+          // öncelik: havza/dere
+          if(havzaFiles.length){
+            // DataTransfer ile input'lara koy
+            try{
+              const dt1=new DataTransfer(); dt1.items.add(havzaFiles[0]); $("basinFile").files=dt1.files;
+              const hi=$("havzaFileInfo"); if(hi) hi.textContent=`📁 ${havzaFiles[0].name}`;
+              if(havzaFiles.length>1){
+                const dt2=new DataTransfer(); dt2.items.add(havzaFiles[1]); $("riverFile").files=dt2.files;
+                if(hi) hi.textContent+=` + ${havzaFiles[1].name}`;
+              }
+              scheduleHavzaImport();
+            }catch(err){ /* Safari DataTransfer fallback yoksa sessiz */ }
+          } else if(rasterFiles.length){
+            try{
+              const dt=new DataTransfer(); rasterFiles.forEach(f=>dt.items.add(f)); $("rasterFile").files=dt.files;
+              const ri=$("rasterFileInfo"); if(ri) ri.textContent=rasterFiles.map(f=>f.name).join(", ");
+              rasterCrsOtomatik(rasterFiles);
+              sidUyar(rasterFiles);
+            }catch(err){}
+          }
+        } else {
+          hideDrop();
+        }
+      });
+    });
+  }
+  // a11y: Leaflet kontrol propagation — harita tıklaması toolbar'a gitmesin
+  const bar=$("mapTopBar"), kat=$("mapKatmanPanel"), dropList=$("mapTopListeler"), searchEl=$("mapSearch");
+  [bar,kat,dropList,searchEl].forEach(el=>{
+    if(!el || !window.L) return;
+    L.DomEvent.disableClickPropagation(el);
+    L.DomEvent.disableScrollPropagation(el);
+  });
+  // ilk yüklemede toolbar durumunu ayarla + bar yüksekliği değişince search'ü güncelle
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", ()=>{ updateMapToolbar(); updateSearchTop(); });
+  else { setTimeout(()=>{ updateMapToolbar(); updateSearchTop(); }, 0); }
+  window.addEventListener("resize", updateSearchTop);
+  // crsWrap açılıp kapanınca da bar yüksekliği değişir
+  new MutationObserver(updateSearchTop).observe(document.getElementById("mapTopBar")||document.body, {attributes:true, childList:true, subtree:true});
+})();
 
 /* ---- DSİ kaynak akarsu ağı (bağlam katmanı — hesaba GİRMEZ) ----
    Türkiye geneli üç ölçekte ~405.000 çizgi; tamamı gönderilemez, bu yüzden
@@ -1191,12 +1374,29 @@ async function importBasinFiles() {
     const q = `?river_km2=${+$("inpRivThr").value || 1}&dem_source=${encodeURIComponent($("inpDem").value)}`;
     const r = await api("/api/import-basin" + q, fd, true);
     applyBasinResult(r, `İçe aktarıldı: ${f.name}${fd2 ? " + " + fd2.name : ""}`);
+    // auto-import sonrası aynı dosyayı tekrar seçebilmek için temizle
+    try{ $("basinFile").value=""; $("riverFile").value=""; const hi=$("havzaFileInfo"); if(hi) hi.textContent=""; }catch(e){}
   } catch (e) {
     setStatus("delinStatus", "Hata: " + e.message, "err");
   }
 }
-$("btnImport").onclick = importBasinFiles;
-$("basinFile").onchange = () => { if (!$("riverFile").files[0]) importBasinFiles(); };
+let _havzaImportTimer=null;
+function scheduleHavzaImport(){
+  clearTimeout(_havzaImportTimer);
+  _havzaImportTimer=setTimeout(()=>{ _havzaImportTimer=null; importBasinFiles(); },600);
+}
+$("basinFile").onchange = () => {
+  const f=$("basinFile").files[0], fd2=$("riverFile").files[0];
+  const info=$("havzaFileInfo");
+  if(info) info.textContent = f ? `📁 ${f.name}${fd2 ? " + "+fd2.name : ""}` : "";
+  scheduleHavzaImport();
+};
+$("riverFile").onchange = () => {
+  const f=$("basinFile").files[0], fd2=$("riverFile").files[0];
+  const info=$("havzaFileInfo");
+  if(info) info.textContent = f ? `📁 ${f.name}${fd2 ? " + "+fd2.name : ""}` : (fd2 ? `📁 ${fd2.name} (dere)` : "");
+  scheduleHavzaImport();
+};
 
 // delineate / import sonucunu arayüze uygular (ikisi de aynı biçimde döner)
 function applyBasinResult(r, baslik) {
@@ -2996,6 +3196,7 @@ function setMode(mode) {
     if (wiz) document.querySelector('.step[data-step="1"]').click();
   }
   if (dil) initDilekce();
+  updateMapToolbar();
 }
 $("modeWizard").onclick = () => setMode("wizard");
 $("modeMulti").onclick = () => setMode("multi");
