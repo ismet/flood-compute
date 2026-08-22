@@ -184,6 +184,11 @@ function activateStep(n) {
   if (n === 3 && S.havza && !S.thiessen.length) useDefaultStations();
   $("rainDock").classList.toggle("hidden", n !== 3);
   if (n === 3) { renderRainTable(); renderDplvGrid(); if (S.havza && !S.dplvManual && !S.dplvAuto) autoSelectPLV(); }
+  const hd = $("hesapDock");
+  if (hd) {
+    if (n !== 4 || !S.sonuc) hd.classList.add("hidden");
+    else { hd.classList.remove("hidden"); renderHesapDock(); }
+  }
   if (n === 4 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
     $("inpRasyonel").checked = true;
     $("rasyonelBox").open = true;
@@ -1198,6 +1203,12 @@ function applyBasinResult(r, baslik) {
   S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
   S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
   S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
+  // önceki hesap artık geçersiz (alan değişti) — overlay gizlenir
+  S.sonuc = null; S.girdi = null;
+  if ($("results")) $("results").innerHTML = "";
+  if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+  $("hesapDock")?.classList.add("hidden");
+  setStatus("compStatus", "", "");
   // dere/kanal da durumda tutulur: proje kaydında saklansın ve yüklenince geri gelsin
   S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
   $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
@@ -1517,6 +1528,8 @@ async function applyGeomEdit() {
     // geometri değişti → önceki hesap ve alana bağlı adımlar bayat
     S.sonuc = null; S.girdi = null;
     if ($("results")) $("results").innerHTML = "";
+    if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+    $("hesapDock")?.classList.add("hidden");
     setStatus("compStatus", "", "");
     updateComputeReady();
     editYedek = null;
@@ -1558,6 +1571,11 @@ map.on("click", async (ev) => {
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
     S.mgmDbYakin = null; S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
+    S.sonuc = null; S.girdi = null;
+    if ($("results")) $("results").innerHTML = "";
+    if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+    $("hesapDock")?.classList.add("hidden");
+    setStatus("compStatus", "", "");
     S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
     updateSnyderW();
@@ -2708,16 +2726,14 @@ $("btnCompute").onclick = async () => {
 
 const DURS = [2, 4, 6, 8, 12, 18, 24];
 const RPS = ["2", "5", "10", "25", "50", "100", "OET"];
-function renderResults() {
-  const r = S.sonuc, el = $("results");
-  const on = r.dsi_onhesap, m = r.mockus;
-  const repMethods = ["dsi", "mockus", "rasyonel", "snyder"].filter(k =>
-    k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder));
-  let h = `<h3 class="res">DSİ Sentetik — Önhesap</h3>
-    <div class="small">S=${fmt(r.girdi_ozeti.S_harmonik, 5)} | qp=${fmt(on.qp, 2)} l/s/km²/mm |
-    Qp=${fmt(on.Qp, 4)} m³/s/mm | T=${on.T_saat} sa | Tp=${fmt(on.Tp, 2)} sa</div>`;
-
-  h += `<h3 class="res">Pik Debiler — KABULET (m³/s)</h3><table class="tbl"><tr><th>T (yıl)</th>`;
+function buildDsiHtml(r) {
+  const on = r.dsi_onhesap;
+  return `<h3 class="res">DSİ Sentetik — Önhesap</h3>`
+    + `<div class="small">S=${fmt(r.girdi_ozeti.S_harmonik, 5)} | qp=${fmt(on.qp, 2)} l/s/km²/mm |`
+    + ` Qp=${fmt(on.Qp, 4)} m³/s/mm | T=${on.T_saat} sa | Tp=${fmt(on.Tp, 2)} sa</div>`;
+}
+function buildKabuletHtml(r) {
+  let h = `<h3 class="res">Pik Debiler — KABULET (m³/s)</h3><div class="tbl-wrap"><table class="tbl"><tr><th>T (yıl)</th>`;
   DURS.forEach(d => h += `<th>${d} sa</th>`);
   h += `</tr>`;
   RPS.forEach(rp => {
@@ -2729,61 +2745,71 @@ function renderResults() {
   ["500", "1000", "10000"].forEach(rp => {
     h += `<tr><td>Q${rp}</td>` + DURS.map(d => `<td>${fmt(r.kabulet[d][rp], 2)}</td>`).join("") + `</tr>`;
   });
-  h += `</table>
-  <div class="grid2"><label>Proje sağanak süresi
-    <select id="selDur">${DURS.map(d => `<option value="${d}">${d} saat</option>`).join("")}</select>
-  </label><button id="btnChart">📈 Hidrografları göster</button></div>`;
-
-  h += `<h3 class="res">Mockus (süperpozesiz) pik debiler</h3>
-    <div class="small">Tc=${fmt(m.Tc, 3)} sa | D=${m.D} sa | Tp=${fmt(m.Tp, 3)} sa</div>
-    <table class="tbl"><tr><th>K</th><th>qp</th><th>Q2</th><th>Q5</th><th>Q10</th><th>Q25</th><th>Q50</th><th>Q100</th><th>Q500</th><th>Q1000</th><th>QOET</th></tr>`;
+  h += `</table></div>`
+    + `<div class="grid2"><label>Proje sağanak süresi`
+    + `<select id="selDur">${DURS.map(d => `<option value="${d}">${d} saat</option>`).join("")}</select>`
+    + `</label><button id="btnChart">📈 Hidrografları göster</button></div>`;
+  return h;
+}
+function buildMockusHtml(r) {
+  const m = r.mockus;
+  let h = `<h3 class="res">Mockus (süperpozesiz) pik debiler</h3>`
+    + `<div class="small">Tc=${fmt(m.Tc, 3)} sa | D=${m.D} sa | Tp=${fmt(m.Tp, 3)} sa</div>`
+    + `<div class="tbl-wrap"><table class="tbl"><tr><th>K</th><th>qp</th><th>Q2</th><th>Q5</th><th>Q10</th><th>Q25</th><th>Q50</th><th>Q100</th><th>Q500</th><th>Q1000</th><th>QOET</th></tr>`;
   ["K1", "K2", "K3"].forEach(k => {
     const s = m.sonuclar[k];
     h += `<tr><td>${k}=${s.K}</td><td>${fmt(s.qp, 3)}</td>` +
       [2, 5, 10, 25, 50, 100].map(t => `<td>${fmt(s.Q[t], 2)}</td>`).join("") +
       `<td>${fmt(s.Q_ext[500], 2)}</td><td>${fmt(s.Q_ext[1000], 2)}</td><td>${fmt(s.Q_OET, 2)}</td></tr>`;
   });
-  h += `</table>`;
-
-  if (r.rasyonel) {
-    const ra = r.rasyonel;
-    h += `<h3 class="res">Rasyonel Yöntem</h3>
-      <div class="small">Tc=${fmt(ra.Tc_dk, 1)} dk | S=${fmt(ra.S_dogrusal, 5)} | YADK=${fmt(ra.YADK, 3)} |
-      PLV(Tc)=${fmt(ra.PLV_Tc, 3)} | C100=${ra.C100} | üs=${ra.us} | Tb=${fmt(ra.Tb_saat, 2)} sa</div>
-      <table class="tbl"><tr>` +
-      [2, 5, 10, 25, 50, 100].map(t => `<th>Q${t}</th>`).join("") +
-      `<th>Q500</th><th>Q1000</th><th>Q10000</th></tr><tr>` +
-      [2, 5, 10, 25, 50, 100].map(t => `<td>${fmt(ra.Q[t], 2)}</td>`).join("") +
-      `<td>${fmt(ra.Q_ext["500"], 2)}</td><td>${fmt(ra.Q_ext["1000"], 2)}</td><td>${fmt(ra.Q_ext["10000"], 2)}</td></tr></table>` +
-      (S.sonuc.girdi_ozeti.A_km2 > 1 ? `<div class="small">⚠ A > 1 km²: rasyonel yöntem küçük havzalar içindir, karşılaştırma amaçlı gösteriliyor.</div>` : "");
+  h += `</table></div>`;
+  return h;
+}
+function buildRasyonelHtml(r) {
+  if (!r?.rasyonel) return "";
+  const ra = r.rasyonel;
+  let h = `<h3 class="res">Rasyonel Yöntem</h3>`
+    + `<div class="small">Tc=${fmt(ra.Tc_dk, 1)} dk | S=${fmt(ra.S_dogrusal, 5)} | YADK=${fmt(ra.YADK, 3)} | PLV(Tc)=${fmt(ra.PLV_Tc, 3)} | C100=${ra.C100} | üs=${ra.us} | Tb=${fmt(ra.Tb_saat, 2)} sa</div>`
+    + `<div class="tbl-wrap"><table class="tbl"><tr>` + [2, 5, 10, 25, 50, 100].map(t => `<th>Q${t}</th>`).join("") + `<th>Q500</th><th>Q1000</th><th>Q10000</th></tr><tr>` + [2, 5, 10, 25, 50, 100].map(t => `<td>${fmt(ra.Q[t], 2)}</td>`).join("") + `<td>${fmt(ra.Q_ext["500"], 2)}</td><td>${fmt(ra.Q_ext["1000"], 2)}</td><td>${fmt(ra.Q_ext["10000"], 2)}</td></tr></table></div>`;
+  if (r.girdi_ozeti?.A_km2 > 1) h += `<div class="small">⚠ A > 1 km²: rasyonel yöntem küçük havzalar içindir, karşılaştırma amaçlı gösteriliyor.</div>`;
+  return h;
+}
+function buildSnyderHtml(r) {
+  if (!r?.snyder) return "";
+  const sn = r.snyder, p = sn.parametreler;
+  let h = `<h3 class="res">Snyder Yöntemi</h3>`
+    + `<div class="small">t<sub>p</sub>=${fmt(p.tp, 2)} sa | t<sub>r</sub>=${p.tr} sa | q<sub>p</sub>=${fmt(p.qp, 2)} l/s/km²/cm | Q<sub>p</sub>=${fmt(p.Qp, 3)} m³/s/mm | T<sub>p</sub>=${p.Tp} sa | T<sub>b</sub>=${p.Tb} sa | W50=${fmt(p.W50, 1)} | W75=${fmt(p.W75, 1)} | YALD=${fmt(p.YALD, 3)} | BH hacmi=${fmt(p.hacim_mm, 3)} mm</div>`
+    + `<div class="tbl-wrap"><table class="tbl"><tr>` + ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t => `<th>Q${t}</th>`).join("") + `</tr><tr>` + ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t => `<td>${fmt(sn.pikler[t], 2)}</td>`).join("") + `</tr></table></div>`
+    + `<button id="btnSnyChart">📈 Snyder hidrograflarını göster</button><div class="small">Q500/1000/10000 ekstrapolasyon (Q10–Q100), QOET C<sub>III</sub> ile; 24 sa sağanak ${sn.hidrograflar["2"] ? Math.round(24 / p.tr) : "?"} bloğa bölünüp süperpoze edilmiştir.</div>`;
+  if (sn.yzdo_yad) {
+    const yy = sn.yzdo_yad;
+    h += `<div class="small" style="margin-top:4px"><b>Otomatik çekilen YZDO & YAD</b> — bölge <b>${yy.bolge}</b> | ADK/YALD (24 sa alansal azaltma) = <b>${fmt(yy.YALD, 3)}</b> | MF=${fmt(yy.MF, 2)} | ${yy.n_blok}×${yy.tr} sa blok</div><div class="tbl-wrap"><table class="tbl"><tr><th>Blok</th>` + yy.bloklar.map(b => `<th>${b.sure_sa} sa</th>`).join("") + `</tr><tr><td>T/ΣT</td>` + yy.bloklar.map(b => `<td>${fmt(b.oran, 3)}</td>`).join("") + `</tr><tr><td>YZDO (${yy.bolge})</td>` + yy.bloklar.map(b => `<td>${fmt(b.yzdo, 3)}</td>`).join("") + `</tr></table></div>`;
   }
-  if (r.snyder) {
-    const sn = r.snyder, p = sn.parametreler;
-    h += `<h3 class="res">Snyder Yöntemi</h3>
-      <div class="small">t<sub>p</sub>=${fmt(p.tp, 2)} sa | t<sub>r</sub>=${p.tr} sa |
-      q<sub>p</sub>=${fmt(p.qp, 2)} l/s/km²/cm | Q<sub>p</sub>=${fmt(p.Qp, 3)} m³/s/mm |
-      T<sub>p</sub>=${p.Tp} sa | T<sub>b</sub>=${p.Tb} sa | W50=${fmt(p.W50, 1)} | W75=${fmt(p.W75, 1)} |
-      YALD=${fmt(p.YALD, 3)} | BH hacmi=${fmt(p.hacim_mm, 3)} mm</div>
-      <table class="tbl"><tr>` +
-      ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t => `<th>Q${t}</th>`).join("") +
-      `</tr><tr>` +
-      ["2", "5", "10", "25", "50", "100", "500", "1000", "10000", "OET"].map(t =>
-        `<td>${fmt(sn.pikler[t], 2)}</td>`).join("") +
-      `</tr></table>
-      <button id="btnSnyChart">📈 Snyder hidrograflarını göster</button>
-      <div class="small">Q500/1000/10000 ekstrapolasyon (Q10–Q100), QOET C<sub>III</sub> ile;
-      24 sa sağanak ${sn.hidrograflar["2"] ? Math.round(24 / p.tr) : "?"} bloğa bölünüp süperpoze edilmiştir.</div>`;
-    if (sn.yzdo_yad) {
-      const yy = sn.yzdo_yad;
-      h += `<div class="small" style="margin-top:4px"><b>Otomatik çekilen YZDO & YAD</b> —
-        bölge <b>${yy.bolge}</b> | ADK/YALD (24 sa alansal azaltma) = <b>${fmt(yy.YALD, 3)}</b> |
-        MF=${fmt(yy.MF, 2)} | ${yy.n_blok}×${yy.tr} sa blok</div>
-        <table class="tbl"><tr><th>Blok</th>` + yy.bloklar.map(b => `<th>${b.sure_sa} sa</th>`).join("") + `</tr>
-        <tr><td>T/ΣT</td>` + yy.bloklar.map(b => `<td>${fmt(b.oran, 3)}</td>`).join("") + `</tr>
-        <tr><td>YZDO (${yy.bolge})</td>` + yy.bloklar.map(b => `<td>${fmt(b.yzdo, 3)}</td>`).join("") + `</tr></table>`;
-    }
-  }
-  if (r.kar) h += `<div class="small">Kar erimesi piki: ${fmt(r.kar.Qkar_pik, 1)} m³/s (OET hidrografına eklendi)</div>`;
+  return h;
+}
+function buildKarHtml(r) {
+  if (!r?.kar) return "";
+  return `<div class="small" style="margin-top:6px">Kar erimesi piki: ${fmt(r.kar.Qkar_pik, 1)} m³/s (OET hidrografına eklendi)</div>`;
+}
+function renderHesapDock() {
+  const el = $("hesapDock"), grid = $("hesapGrid");
+  if (!el || !grid) return;
+  if (!S.sonuc) { el.classList.add("hidden"); grid.innerHTML = ""; return; }
+  grid.innerHTML = buildDsiHtml(S.sonuc) + buildKabuletHtml(S.sonuc) + buildMockusHtml(S.sonuc) + buildRasyonelHtml(S.sonuc) + buildSnyderHtml(S.sonuc) + buildKarHtml(S.sonuc);
+  const btn = grid.querySelector("#btnChart");
+  if (btn) btn.onclick = () => showChart(+grid.querySelector("#selDur").value);
+  const btnSny = grid.querySelector("#btnSnyChart");
+  if (btnSny) btnSny.onclick = () => showSnyderChart();
+  const cur = document.querySelector('.step[data-step="4"]');
+  if (cur && cur.classList.contains("active")) el.classList.remove("hidden");
+  else el.classList.add("hidden");
+}
+function renderResults() {
+  const r = S.sonuc, el = $("results");
+  const repMethods = ["dsi", "mockus", "rasyonel", "snyder"].filter(k =>
+    k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder));
+  renderHesapDock();
+  let h = "";
 
   h += `<h3 class="res">Tekerrür yılı ara (Yıl_Ara)</h3>
     <div class="grid2"><label>Debi (m³/s)<input id="yilQ" type="number" step="0.1"></label>
@@ -2811,14 +2837,14 @@ function renderResults() {
   // dahil kutuları değişince seçilen-yöntem menüsünü güncel tut
   document.querySelectorAll(".repMethod").forEach(cb => cb.onchange = syncRepSecili);
 
-  $("btnChart").onclick = () => showChart(+$("selDur").value);
   $("btnCompare").onclick = () => openCompare();
   $("btnReservoir").onclick = openReservoir;
   $("btnReport").onclick = downloadReport;
   $("btnKmz").onclick = downloadKmz;
-  if (r.snyder) $("btnSnyChart").onclick = () => showSnyderChart();
   $("btnYil").onclick = () => {
-    const d = $("selDur").value, q = +$("yilQ").value;
+    const sel = document.querySelector("#hesapGrid #selDur") || $("selDur");
+    const d = sel?.value, q = +$("yilQ").value;
+    if (!d) return;
     const t = api("/api/yil-ara", { q, q10: r.kabulet[d]["10"], q100: r.kabulet[d]["100"] })
       .then(x => $("yilRes").textContent =
         `T ≈ ${x.tekerrur_yili ? x.tekerrur_yili.toFixed(1) : "—"} yıl (${d} sa hidrografına göre)`);
@@ -2952,6 +2978,7 @@ function setMode(mode) {
   $("suMode").classList.toggle("hidden", !suM);
   if (suM) suBaslat(); else layers.su.remove();
   $("rainDock").classList.add("hidden");
+  $("hesapDock")?.classList.add("hidden");
   if (multi) {
     // Mansap noktası varsayılan: tek havzadaki outlet (kullanıcı elle değiştirmediyse hep senkron)
     if (S.outlet && (!S.multi.mansap || S.multi.mansapAuto)) {
@@ -4257,6 +4284,8 @@ function clearSingleBasin() {
   $("inpCN2").value = "75";
   $("yzdInfo").textContent = "";
   ["cnTable", "thTable", "results"].forEach(id => { if ($(id)) $(id).innerHTML = ""; });
+  if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
+  $("hesapDock")?.classList.add("hidden");
   renderRasyonelC(null);
   ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus"].forEach(id => { if ($(id)) setStatus(id, "", ""); });
   document.querySelectorAll(".step").forEach(s => s.classList.remove("done"));
