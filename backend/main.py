@@ -9,7 +9,7 @@ import traceback
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 # Heavy GIS modules (pyflwdir→numba, rasterio) are
 # imported lazily inside endpoints to keep startup memory low.
@@ -963,6 +963,49 @@ def api_mgm_eslestir(g: MgmEslesGirdi):
                         onbellek[kod] = {"hata": str(hata)}
                 k["frekans"] = onbellek[kod]
         return {"eslesme": out}
+    except Exception as e:
+        return _err(e)
+
+
+class PlvEnYakinGirdi(BaseModel):
+    havza_geojson: dict | None = None       # Polygon/Feature/FeatureCollection
+    lat: float | None = None
+    lon: float | None = None
+
+    @model_validator(mode="after")
+    def _validate(self):
+        has_hj = self.havza_geojson is not None
+        has_ll = self.lat is not None or self.lon is not None
+        has_both_ll = self.lat is not None and self.lon is not None
+        if has_hj and has_ll:
+            raise ValueError("havza_geojson ve lat/lon aynı anda verilemez")
+        if not has_hj and not has_ll:
+            raise ValueError("havza_geojson veya lat/lon gerekli")
+        if has_ll and not has_both_ll:
+            raise ValueError("lat ve lon birlikte verilmeli")
+        return self
+
+
+@app.post("/api/plv-en-yakin")
+def api_plv_en_yakin(g: PlvEnYakinGirdi):
+    """Havzaya en yakın MGM PLV istasyonu (DPLV oranı için).
+
+    Havza verilirse centroid’i üzerinden, yoksa lat/lon doğrudan kullanılır.
+    Küresel en yakın — yarıçap limiti yok, mesafe _mesafe_km ile.
+    """
+    from backend.core import mgm
+    try:
+        return mgm.plv_en_yakin(havza_geojson=g.havza_geojson, lat=g.lat, lon=g.lon)
+    except Exception as e:
+        return _err(e)
+
+
+@app.get("/api/plv-en-yakin")
+def api_plv_en_yakin_get(lat: float, lon: float):
+    """GET varyantı — havza yokken nokta için en yakın PLV."""
+    from backend.core import mgm
+    try:
+        return mgm.plv_en_yakin(lat=lat, lon=lon)
     except Exception as e:
         return _err(e)
 

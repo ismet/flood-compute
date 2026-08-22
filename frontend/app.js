@@ -4,6 +4,7 @@
 const S = {
   outlet: null, havza: null, kotlar: Array(11).fill(""),
   istasyonlar: [], thiessen: [], yagis: [], dplvList: null, sonuc: null,
+  dplvManual: false, dplvAuto: null,
 };
 const $ = (id) => document.getElementById(id);
 const api = async (url, body, isForm) => {
@@ -16,6 +17,7 @@ const api = async (url, body, isForm) => {
   return j;
 };
 const fmt = (x, d = 2) => (x === null || x === undefined || isNaN(x)) ? "—" : (+x).toFixed(d);
+const _esc = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#x27;");
 // istasyon kurumuna göre renk (DMİ/MGM vs DSİ)
 const kurumColor = (k) => k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0"
   : k === "Elle" ? "#2e7d32" : "#7d6e4f";
@@ -181,7 +183,7 @@ function activateStep(n) {
     p.classList.toggle("hidden", p.dataset.page !== String(n)));
   if (n === 3 && S.havza && !S.thiessen.length) useDefaultStations();
   $("rainDock").classList.toggle("hidden", n !== 3);
-  if (n === 3) { renderRainTable(); renderDplvGrid(); }
+  if (n === 3) { renderRainTable(); renderDplvGrid(); if (S.havza && !S.dplvManual && !S.dplvAuto) autoSelectPLV(); }
   if (n === 4 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
     $("inpRasyonel").checked = true;
     $("rasyonelBox").open = true;
@@ -1195,6 +1197,7 @@ $("basinFile").onchange = () => { if (!$("riverFile").files[0]) importBasinFiles
 function applyBasinResult(r, baslik) {
   S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
   S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
+  S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
   // dere/kanal da durumda tutulur: proje kaydında saklansın ve yüklenince geri gelsin
   S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
   $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
@@ -1228,6 +1231,7 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
   markDone(1);
   renderAdayKanallar(r);
   updateComputeReady();
+  autoSelectPLV();
 }
 
 /* Tıklama çevresindeki rakip akarsu kolları.
@@ -1553,7 +1557,7 @@ map.on("click", async (ev) => {
       tampon_m: +$("inpTampon").value || 500,
     });
     S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
-  S.mgmDbYakin = null;   // yakın MGM listesi havzaya bağlı, yeniden kurulsun
+    S.mgmDbYakin = null; S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
     S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
     $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
     updateSnyderW();
@@ -1589,6 +1593,7 @@ map.on("click", async (ev) => {
     markDone(1);
     renderAdayKanallar(r);
     updateComputeReady();
+    autoSelectPLV();
     if (S.mode === "su") suHavzaGuncelle();   // su akışı 1. adımı havzayla başlıyor
   } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
 });
@@ -1849,28 +1854,40 @@ const DPLV_LABELS = ["5dk", "10dk", "15dk", "30dk", "1sa", "2sa", "3sa", "4sa",
    Seçenek value'ları özgün dizi indeksi kalır → kayıtlı projelerde kayma olmaz. */
 const DPLV_GIZLI = ["TEKİRDAĞ"];
 
+let _loadDplvPromise = null;
+let _autoPlvPromise = null;
 async function loadDplv() {
-  const d = await api("/api/dplv");
-  S.dplvList = d;
-  const sel = $("inpDplv");
-  let ilk = null;
-  d.stations.forEach((s, i) => {
-    if (DPLV_GIZLI.includes(s.name)) return;
-    if (ilk === null) ilk = i;
-    const o = document.createElement("option"); o.value = i; o.textContent = s.name;
-    sel.appendChild(o);
-  });
-  sel.onchange = () => {
-    S.dplvValues = S.dplvList.stations[+sel.value].ratios.slice();
+  if (S.dplvList) return S.dplvList;
+  if (_loadDplvPromise) return _loadDplvPromise;
+  _loadDplvPromise = (async () => {
+    const d = await api("/api/dplv");
+    S.dplvList = d;
+    const sel = $("inpDplv");
+    sel.innerHTML = "";
+    let ilk = null;
+    d.stations.forEach((s, i) => {
+      if (DPLV_GIZLI.includes(s.name)) return;
+      if (ilk === null) ilk = i;
+      const o = document.createElement("option"); o.value = i; o.textContent = s.name;
+      sel.appendChild(o);
+    });
+    sel.onchange = () => {
+      S.dplvManual = true;
+      S.dplvValues = S.dplvList.stations[+sel.value].ratios.slice();
+      renderDplvGrid();
+      updatePlvAutoInfo();
+    };
+    if (ilk !== null) {
+      sel.value = ilk;
+      if (!S.dplvValues && !S.dplvAuto && !S.dplvManual) S.dplvValues = d.stations[ilk].ratios.slice();
+    }
     renderDplvGrid();
-  };
-  if (ilk !== null) {
-    sel.value = ilk;
-    if (!S.dplvValues) S.dplvValues = d.stations[ilk].ratios.slice();
-  }
-  renderDplvGrid();
+    updatePlvAutoInfo();
+    return d;
+  })();
+  try { return await _loadDplvPromise; } finally { _loadDplvPromise = null; }
 }
-loadDplv();
+loadDplv().catch(()=>{});
 
 /* ---- Hidrolojik zemin grubunu havzanın toprağından seç ----
    Bu parametre taşkın hesabının sonucunu en çok değiştiren girdidir: Karakurt
@@ -1923,11 +1940,54 @@ async function loadMgm() {
     const md = $("mgmDplv");
     if (md) md.onchange = () => {
       const st = mgmFind(md.value);
-      if (st) { md.value = st.ad; S.dplvValues = st.plv.slice(); renderDplvGrid(); }
+      if (st) { S.dplvManual = true; md.value = st.ad; S.dplvValues = st.plv.slice(); renderDplvGrid(); updatePlvAutoInfo(); }
     };
   } catch (e) { S.mgm = []; }
 }
 loadMgm();
+
+/* ---- DPLV en yakın MGM PLV otomatik seçimi ----
+   Havza çıkınca 236 MGM-PLV içinden havza centroid’ine en yakın olanı
+   seçer (küresel en yakın, yarıçap limiti yok). Elle seçim galip gelir. */
+function updatePlvAutoInfo() {
+  const el = $("plvAutoInfo");
+  if (!el) return;
+  const a = S.dplvAuto;
+  if (!a) { el.innerHTML = ""; return; }
+  const manual = S.dplvManual ? ' · <span class="warn">elle değiştirildi</span> <button id="btnPlvAutoReset" class="link-btn" title="Otomatik seçime dön">↺ Otomatik’e dön</button>' : "";
+  el.innerHTML = `🌧 Otomatik: <b>${_esc(a.ad)}</b> (${_esc(a.kod)}) — ${(+a.mesafe_km).toFixed(1)} km${manual}`;
+  const btn = $("btnPlvAutoReset");
+  if (btn) btn.onclick = () => { S.dplvManual = false; autoSelectPLV({ force: true }); };
+}
+
+async function autoSelectPLV({ force = false } = {}) {
+  if (!S.havza) return;
+  if (!force && S.dplvManual) return;
+  if (_autoPlvPromise) return _autoPlvPromise;
+  _autoPlvPromise = (async () => {
+    // S.dplvList hazır değilse bekle (loadDplv fire-and-forget)
+    if (!S.dplvList) {
+      try { await loadDplv(); } catch (e) { /* sessiz */ }
+      if (!S.dplvList) return;
+    }
+    const curHavza = S.havza;
+    try {
+      const r = await api("/api/plv-en-yakin", { havza_geojson: curHavza });
+      if (curHavza !== S.havza) return; // havza değişti, eski sonuç atılır
+      if (!r || !r.plv) return;
+      S.dplvValues = r.plv.slice();
+      S.dplvAuto = r;
+      const md = $("mgmDplv");
+      if (md) md.value = r.ad;
+      // inpDplv dokunulmaz (3’lü), dplvRatios S.dplvValues öncelikli
+      renderDplvGrid();
+      updatePlvAutoInfo();
+    } catch (e) {
+      // sessiz fallback: statik ÇORLU davranışı korunur
+    }
+  })();
+  try { return await _autoPlvPromise; } finally { _autoPlvPromise = null; }
+}
 
 /* ---- MGM ölçüm veritabanı — P2–P100'ün kaynağı ----
    1290 istasyonun yıllık en büyük günlük yağışı. P24 değerleri NTFA ile aynı
@@ -2397,7 +2457,7 @@ function renderDplvGrid() {
     `</tr></table>`;
   div.innerHTML = h;
   div.querySelectorAll(".dplv-cell").forEach(inp => {
-    inp.addEventListener("input", readDplvGrid);
+    inp.addEventListener("input", () => { S.dplvManual = true; readDplvGrid(); updatePlvAutoInfo(); });
     inp.addEventListener("paste", (e) => {
       const text = (e.clipboardData || window.clipboardData).getData("text");
       if (!text || (!text.includes("\t") && !text.includes("\n"))) return;
@@ -2408,9 +2468,10 @@ function renderDplvGrid() {
         const cell = document.querySelector(`.dplv-cell[data-c="${c0 + dc}"]`);
         if (cell) cell.value = val;
       });
-      readDplvGrid();
+      S.dplvManual = true; readDplvGrid(); updatePlvAutoInfo();
     });
   });
+  updatePlvAutoInfo();
 }
 
 function readDplvGrid() {
@@ -4186,7 +4247,7 @@ function clearSingleBasin() {
   // CORINE dökümü ve ondan türeyen rasyonel C havzaya bağlıdır; havza gidince
   // onlar da gider (C tercihleri S.cSecim'de kalır).
   S.cnSonuc = null; S.rasyonelCKaynak = null;
-  S.sonuc = null; S.girdi = null; S.dplvList = null;
+  S.sonuc = null; S.girdi = null; S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
   S.resPoints = null; S.resSonuc = null;
   if (S.resMarker) { S.resMarker.remove(); S.resMarker = null; }
   // harita katmanları
@@ -4254,7 +4315,7 @@ $("btnSave").onclick = async () => {
   // infoLayers/rasterLayers içinde Leaflet katman nesneleri var; bunlar haritaya
   // geri başvurduğu için JSON.stringify "circular structure" ile patlar. Raster
   // altlıklar zaten sunucuda duruyor ve açılışta /api/raster-layers ile geliyor.
-  const durumS = { ...S, sonuc: null, dplvList: null, infoLayers: [], rasterLayers: [] };
+  const durumS = { ...S, sonuc: null, infoLayers: [], rasterLayers: [] };
   await api("/api/project/save", { ad, durum: { S: durumS, fields } });
   loadProjects();
   alert("Kaydedildi");
@@ -4275,9 +4336,17 @@ $("projList").onchange = async () => {
   S.infoLayers = infoY; S.rasterLayers = rasterY;
   Object.entries(d.fields).forEach(([id, v]) => { if ($(id)) $(id).value = v; });
   $("projName").value = ad;
+  if (S.dplvManual === undefined) {
+    const hasOldPlv = !!(d.S && d.S.dplvValues) || !!(d.fields && d.fields.inpDplv != null && String(d.fields.inpDplv) !== "");
+    S.dplvManual = hasOldPlv ? true : false;
+  }
+  if (S.dplvAuto === undefined) S.dplvAuto = null;
+  if (S.dplvValues === undefined) S.dplvValues = null;
+  if (!S.dplvList) { try { await loadDplv(); } catch (e) {} }
   renderKotlar();
   renderRainTable();
   renderDplvGrid();
+  updatePlvAutoInfo();
   // kayıtta varsa CORINE dökümü ve Adım 4'teki C bloğu geri gelir
   if (S.cnSonuc) renderCnSonuc(S.cnSonuc);
   updateComputeReady();
