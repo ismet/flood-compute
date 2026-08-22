@@ -117,13 +117,13 @@ backend/core/      — Computation engine (no framework dependency)
                      1.0 placeholder; those rows are springs/canals anyway) and
                      outlier-flagged AND >5× second-largest. Excluded rows are
                      RETURNED, never dropped (elenen_kayitlar).
-  mgm.py          — MGM weather DB: supplies step-4 P2…P100 by running tfa.py
+  mgm.py          — MGM weather DB: supplies step-3 (Yağış — birleşik) P2…P100 by running tfa.py
                      on each station's annual maximum daily rainfall — same six
                      distributions. data/tables/mgm_plv_2020.json is NOT a P24
                      source anymore; /api/mgm-stations deliberately strips its
                      P24 field (two parallel sources made it unknowable which one
-                     a project used). Step-3 Thiessen set IS this DB, so step-4
-                     matching is by `kod` identity; only uploaded KMZs/hand
+                     a project used). Thiessen set IS this DB (Adım 3 üst kısım), so matching inside
+                     same step is by `kod` identity; only uploaded KMZs/hand
                      points match by coordinate (prefer ≥25-yr record inside the
                      radius over a nearer short one — Lüleburgaz has 10-yr at
                      5.7 km, 74-yr at 6.3).
