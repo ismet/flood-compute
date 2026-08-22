@@ -53,7 +53,7 @@ docker build -t taskin-hesap .                       # build Docker image
 - **Error responses** always `{"hata": str(e)}` — use `_err(e)` from `backend.main` (returns `JSONResponse(status_code=400)`)
 - **POST endpoints** accept Pydantic model JSON bodies; the four file-upload endpoints (`/api/stations`, `/api/raster-add`, `/api/import-basin`, `/api/bilgi-katmani`) take multipart `UploadFile`.
 - **Golden tests need no Excel files** — expected values are hardcoded constants (docstrings cite the source workbook for provenance only); they read fixtures from `data/tables/*.json`.
-- **Domain vocabulary lives in `CONTEXT.md`** (repo root) — canonical terms (Adım, Parametre, CN, Thiessen kümesi) with `_Avoid_` synonyms; keep UI/docs wording consistent with it and add new resolved terms there.
+- **Domain vocabulary lives in `CONTEXT.md`** (repo root) — canonical terms (Adım, Parametre, CN, Akış katsayısı C/C100, Thiessen kümesi) with `_Avoid_` synonyms; keep UI/docs wording consistent with it and add new resolved terms there.
 
 ## GIS delineation
 
