@@ -2814,9 +2814,6 @@ function renderResults() {
   h += `<h3 class="res">Tekerrür yılı ara (Yıl_Ara)</h3>
     <div class="grid2"><label>Debi (m³/s)<input id="yilQ" type="number" step="0.1"></label>
     <button id="btnYil">Ara</button></div><div id="yilRes" class="status"></div>
-    <div class="export-row"><button id="btnCompare" class="primary">⚖ Yöntemleri Karşılaştır</button>
-      <button id="btnReservoir" class="primary">🏞 Rezervuar Ötelemesi</button>
-      <button id="btnCSV">⬇ CSV</button><button id="btnJSON">⬇ JSON</button></div>
     <div class="export-row" style="align-items:center;flex-wrap:wrap">
       <span class="small">Rapora dahil yöntemler:</span>
       ${repMethods.map(m => `<label style="flex-direction:row;align-items:center;gap:3px">
@@ -2832,7 +2829,10 @@ function renderResults() {
       <button id="btnReport" class="primary">📄 Word Raporu (Bölüm) indir</button>
       <button id="btnKmz">🌍 KMZ indir (havza + dere + debiler)</button>
       <span id="repStatus" class="small"></span>
-    </div>`;
+    </div>
+    <div class="export-row"><button id="btnCompare" class="primary">⚖ Yöntemleri Karşılaştır</button>
+      <button id="btnReservoir" class="primary">🏞 Rezervuar Ötelemesi</button>
+      <button id="btnCSV">⬇ CSV</button><button id="btnJSON">⬇ JSON</button></div>`;
   el.innerHTML = h;
   // dahil kutuları değişince seçilen-yöntem menüsünü güncel tut
   document.querySelectorAll(".repMethod").forEach(cb => cb.onchange = syncRepSecili);
