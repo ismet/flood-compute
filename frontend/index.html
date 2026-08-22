@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
-<link rel="stylesheet" href="/static/style.css?v=53">
+<link rel="stylesheet" href="/static/style.css?v=54">
 </head>
 <body>
 <div id="app">
@@ -295,19 +295,10 @@
 
     <!-- ADIM 3: Thiessen -->
     <section class="page hidden" data-page="3">
-      <p class="hint">Varsayılan küme <b>MGM ölçüm ağıdır</b>
-      (<code>data/mgm/mgm.sqlite</code>): en az 10 yıllık günlük maksimum yağış
-      ölçümü olan 1184 istasyon. Böylece her Thiessen hücresi <b>kendi ölçtüğü</b>
-      yağışı taşır ve Adım 4'teki P2–P100 doğrudan o istasyonun serisinden
-      hesaplanır. İsterseniz kendi KMZ/KML'nizi yükleyin — o istasyonlar ölçüm
-      taşımadığı için yağışları en yakın uygun MGM istasyonundan gelir. Thiessen
-      poligonları havzaya kesilerek alan ağırlıkları bulunur.</p>
-      <button id="btnDefaultSt" class="primary">📡 Varsayılan istasyonları kullan</button>
-      <input type="file" id="kmzFile" accept=".kmz,.kml">
+      <p class="hint">Varsayılan küme <b>MGM ölçüm ağıdır</b> (<code>data/mgm/mgm.sqlite</code>): en az 10 yıllık günlük maksimum yağış ölçümü olan 1184 istasyon — her Thiessen hücresi <b>kendi ölçtüğü</b> P2–P100’ü taşır; poligonlar havzaya kesilir.</p>
+      <button id="btnDefaultSt" class="primary hidden">📡 Varsayılan istasyonları kullan</button>
       <div id="thStatus" class="status"></div>
       <div class="rain-tools">
-        <button id="btnAddStation" class="small-btn">➕ Haritadan istasyon ekle</button>
-        <button id="btnResetStations" class="small-btn">↺ Çıkarılanları geri al</button>
         <label class="inline" title="Havza payı bu yüzdenin altında kalan istasyonlar elenir ve alanları komşularına dağıtılır (Thiessen yeniden kurulur). 0 = eleme yok.">Küçük pay eşiği (%)
           <input id="inpMinW" type="number" step="1" min="0" max="50" value="5" style="width:55px"></label>
       </div>
@@ -583,6 +574,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=55"></script>
+<script src="/static/app.js?v=56"></script>
 </body>
 </html>
