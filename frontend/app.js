@@ -174,7 +174,9 @@ document.querySelectorAll(".step").forEach(b => {
 
 function activateStep(n) {
   document.querySelectorAll(".step").forEach(x => x.classList.remove("active"));
-  document.querySelector(`.step[data-step="${n}"]`).classList.add("active");
+  const _active = document.querySelector(`.step[data-step="${n}"]`);
+  if (!_active) return;
+  _active.classList.add("active");
   document.querySelectorAll(".page").forEach(p =>
     p.classList.toggle("hidden", p.dataset.page !== String(n)));
   if (n === 3 && S.havza && !S.thiessen.length) useDefaultStations();
@@ -191,7 +193,7 @@ function activateStep(n) {
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
   }
 }
-const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`).classList.add("done");
+const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`)?.classList.add("done");
 const setStatus = (id, msg, cls = "") => {
   const e = $(id); e.textContent = msg; e.className = "status " + cls;
   const loader = $("loader");

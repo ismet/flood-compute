@@ -103,8 +103,8 @@ backend/core/      — Computation engine (no framework dependency)
                      65535, NOT 0: zero runoff is legit (closed Konya basin). Any
                      masking MUST compare against src.nodata.
   tfa.py          — NTFA: 6 distributions, K-S accept, Grubbs-Beck (outliers
-                     reported, never auto-applied). Also the engine for step-4
-                     rainfall P2…P100 per station. See golden quirks below.
+                     reported, never auto-applied). Also the engine for step-3
+                     (Yağış — birleşik) rainfall P2…P100 per station. See golden quirks below.
   btfa.py         — BTFA regional index-flood + Dalrymple homogeneity (formulas)
   mmy.py          — MMY Hershfield PMP, regional Km envelope (formulas)
   su.py           — Water potential: gauge → regression gap-fill → area-ratio transfer
