@@ -526,7 +526,7 @@ def api_stations_default(en_az_yil: int = 10):
     """Thiessen'in varsayılan istasyon kümesi — yalnız MGM ölçüm veri tabanı.
 
     Yıllık maksimum serisi `en_az_yil` uzunluğunda olan istasyonlar döner, yani
-    her Thiessen hücresi kendi ölçtüğü yağışı taşır ve Adım 5'teki P24
+    her Thiessen hücresi kendi ölçtüğü yağışı taşır ve Adım 4'teki P24
     bağlanması kimlik eşleşmesidir.
 
     Eski `data/stations/bir_cikti.kml` artık otomatik yüklenmiyor; dosya
@@ -919,7 +919,7 @@ class MgmFrekansGirdi(BaseModel):
 @app.post("/api/mgm-frekans")
 def api_mgm_frekans(g: MgmFrekansGirdi):
     """Yağış frekans analizi — NTFA ile aynı hesap, girdi yıllık en büyük
-    günlük yağış (mm). Sonuçtaki `P24`, Adım 5 tablosunun P2…P100 sütunları."""
+    günlük yağış (mm). Sonuçtaki `P24`, Adım 4 tablosunun P2…P100 sütunları."""
     from backend.core import mgm
     try:
         return mgm.frekans(g.kod, g.ilk_yil or None, g.son_yil or None)
