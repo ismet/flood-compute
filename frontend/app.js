@@ -1620,7 +1620,9 @@ $("btnCN").onclick = async () => {
 };
 
 /* CORINE sınıf dökümü + aynı geçişten türetilen rasyonel akış katsayısı C.
-   C, CN ile aynı CORINE kesitinden gelir; ayrıca veri indirilmez.        */
+   C, CN ile aynı CORINE kesitinden gelir; ayrıca veri indirilmez.
+   Sınıf tablosu bu adımda kalır; C seçim kutusu Adım 5'teki rasyonel
+   seçeneklerine taşındı (renderRasyonelC).                              */
 function renderCnSonuc(r) {
   let h = `<table class="tbl"><tr><th></th><th>Kod</th><th>Sınıf</th><th>Oran</th>`
     + `<th>CN</th><th>C</th><th>C aralığı</th></tr>`;
@@ -1637,44 +1639,61 @@ function renderCnSonuc(r) {
       + `<td>${cOrt}</td><td>${aralik}</td></tr>`;
   });
   h += `</table>`;
-
-  const c = r.rasyonel_C;
-  if (c) {
-    const turetilmis = c.turetilmis_orani > 0
-      ? `<div class="small">* Alanın %${(c.turetilmis_orani * 100).toFixed(1)}'i eşleştirme
-           matrisinde yer almayan CORINE sınıfı; en yakın sınıftan türetildi.</div>` : "";
-    h += `<div style="margin-top:6px;padding:6px;border:1px solid #d8d3cc;border-radius:4px">
-      <b>Rasyonel yöntem akış katsayısı C</b> <span class="small">(CORINE'den alansal ağırlıklı)</span>
-      <div style="margin:3px 0">alt <b>${c.C_min.toFixed(3)}</b> ·
-        <span title="Tablodaki 'önerilen ortalama' değerlerin alansal ağırlıklı ortalaması — aralığın orta noktası değildir">önerilen
-        <b>${c.C_orta.toFixed(3)}</b></span> · üst <b>${c.C_max.toFixed(3)}</b></div>
-      <label class="inline">Kullanılacak
-        <select id="cSecim">
-          <option value="C_min">alt — ${c.C_min.toFixed(3)}</option>
-          <option value="C_orta" selected>önerilen — ${c.C_orta.toFixed(3)}</option>
-          <option value="C_max">üst — ${c.C_max.toFixed(3)}</option>
-        </select></label>
-      <button id="btnCToRational" class="small-btn">→ Rasyonel C100 alanına aktar</button>
-      <span id="cAktarInfo" class="small"></span>
-      ${turetilmis}
-      <div class="small">⚠ Tablo değerleri <b>genel</b> rasyonel C'dir; Adım 5'teki alan ise
-        <b>C100</b> (T=100 katsayısı) olup küçük tekerrürlere C<sub>T</sub>=C100·(T/100)<sup>üs</sup>
-        ile ölçeklenir. Aktarılan değeri mühendislik kararınızla gözden geçirin.</div>
-    </div>`;
-  }
   $("cnTable").innerHTML = h;
+  renderRasyonelC(r);
+}
 
-  if (c) $("btnCToRational").onclick = () => {
+const RASYONEL_C_HINT = `<span class="small">CORINE'den akış katsayısı C türetmek için
+  Adım 2'de <b>CN hesapla</b>'yı çalıştırın.</span>`;
+
+/* Adım 5 · "Rasyonel yöntem seçenekleri" içindeki C bloğu.
+   Seçim ANINDA uygulanır: değer inpC100'e yazılır, rasyonel işaretlenir.
+   Yeniden çizim (yeni CN sonucu, proje yüklemesi) yalnızca gösterimdir;
+   girdilere dokunmaz.                                                   */
+function renderRasyonelC(r) {
+  const el = $("rasyonelCBox");
+  if (!el) return;
+  const c = r && r.rasyonel_C;
+  if (!c) {
+    // rasyonel_C, havzadaki hiçbir sınıf C matrisiyle eşleşmezse null gelir
+    el.innerHTML = r
+      ? `<span class="small">Bu havzadaki CORINE sınıfları C eşleştirme matrisiyle
+           eşleşmedi; akış katsayısı türetilemedi — C100 girdisiyle hesaplanır.</span>`
+      : RASYONEL_C_HINT;
+    return;
+  }
+  const turetilmis = c.turetilmis_orani > 0
+    ? `<div class="small">* Alanın %${(c.turetilmis_orani * 100).toFixed(1)}'i eşleştirme
+         matrisinde yer almayan CORINE sınıfı; en yakın sınıftan türetildi.</div>` : "";
+  el.innerHTML = `<div style="margin-top:6px;padding:6px;border:1px solid #d8d3cc;border-radius:4px">
+    <b>Rasyonel yöntem akış katsayısı C</b> <span class="small">(CORINE'den alansal ağırlıklı)</span>
+    <div style="margin:3px 0">alt <b>${c.C_min.toFixed(3)}</b> ·
+      <span title="Tablodaki 'önerilen ortalama' değerlerin alansal ağırlıklı ortalaması — aralığın orta noktası değildir">önerilen
+      <b>${c.C_orta.toFixed(3)}</b></span> · üst <b>${c.C_max.toFixed(3)}</b></div>
+    <label class="inline">Kullanılacak
+      <select id="cSecim">
+        <option value="C_min">alt — ${c.C_min.toFixed(3)}</option>
+        <option value="C_orta">önerilen — ${c.C_orta.toFixed(3)}</option>
+        <option value="C_max">üst — ${c.C_max.toFixed(3)}</option>
+      </select></label>
+    ${turetilmis}
+    <div class="small">⚠ Tablo değerleri <b>genel</b> rasyonel C'dir; seçtiğiniz değer
+      yukarıdaki <b>C100</b> alanına yazılır (T=100 katsayısı) ve küçük tekerrürlere
+      C<sub>T</sub>=C100·(T/100)<sup>üs</sup> ile ölçeklenir. Değeri mühendislik kararınızla gözden geçirin.</div>
+  </div>`;
+  // kaydedilmiş tercih geri gelir; programatik atama change tetiklemez → yazma yok
+  $("cSecim").value = (S.cSecim && c[S.cSecim] != null) ? S.cSecim : "C_orta";
+  $("cSecim").onchange = () => {
     const anahtar = $("cSecim").value;
     const deger = c[anahtar];
     $("inpC100").value = deger.toFixed(3);
     $("inpRasyonel").checked = true;
-    if ($("rasyonelBox")) $("rasyonelBox").open = true;
+    S.cSecim = anahtar;
     S.rasyonelCKaynak = { deger, secim: anahtar, kaynak: r.kaynak };
-    $("cAktarInfo").textContent = `✓ C100 = ${deger.toFixed(3)} yazıldı, rasyonel yöntem işaretlendi.`;
     updateComputeReady();
   };
 }
+renderRasyonelC(null);
 
 /* ---------------- ADIM 3: Thiessen ---------------- */
 /* ---- istasyon listesi yönetimi (çıkarma / elle ekleme) ----
@@ -4180,6 +4199,9 @@ function clearSingleBasin() {
   // MGM eşleşmeleri ve yakın istasyon listesi havzaya bağlıdır; yeni havzada
   // eskisinin listesiyle eşleştirmek yanlış istasyonu getirir.
   S.rainMeta = {}; S.mgmDbYakin = null;
+  // CORINE dökümü ve ondan türeyen rasyonel C havzaya bağlıdır; havza gidince
+  // onlar da gider (C tercihleri S.cSecim'de kalır).
+  S.cnSonuc = null; S.rasyonelCKaynak = null;
   S.sonuc = null; S.girdi = null; S.dplvList = null;
   S.resPoints = null; S.resSonuc = null;
   if (S.resMarker) { S.resMarker.remove(); S.resMarker = null; }
@@ -4190,6 +4212,7 @@ function clearSingleBasin() {
   $("inpCN2").value = "75";
   $("yzdInfo").textContent = "";
   ["cnTable", "thTable", "results"].forEach(id => { if ($(id)) $(id).innerHTML = ""; });
+  renderRasyonelC(null);
   ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus"].forEach(id => { if ($(id)) setStatus(id, "", ""); });
   document.querySelectorAll(".step").forEach(s => s.classList.remove("done"));
   renderKotlar(); renderRainTable(); renderDplvGrid(); updateComputeReady();
@@ -4271,6 +4294,8 @@ $("projList").onchange = async () => {
   renderKotlar();
   renderRainTable();
   renderDplvGrid();
+  // kayıtta varsa CORINE dökümü ve Adım 5'teki C bloğu geri gelir
+  if (S.cnSonuc) renderCnSonuc(S.cnSonuc);
   updateComputeReady();
   if (S.havza) {
     layers.havza.clearLayers(); layers.havza.addData(S.havza);

@@ -97,7 +97,9 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    **CN de bu adımdadır** — CORINE rasteri havza ile kesilir (yerel yoksa EEA
    CLC2018 servisinden otomatik indirilir); seçilen hidrolojik zemin grubuna
    (A/B/C/D) göre `data/tables/corine_cn.json` tablosundan alansal ağırlıklı
-   CN(II); CN(III) Excel'deki dönüşüm tablosuyla.
+   CN(II); CN(III) Excel'deki dönüşüm tablosuyla. Aynı kesitten rasyonel
+   yöntemin akış katsayısı C'si de türetilir; seçimi Adım 5'teki **Rasyonel
+   yöntem seçenekleri** kutusundadır.
 
    **Zemin grubu havzanın toprağından otomatik seçilir** (`data/zemin/hsg_tr.tif`,
    `/api/zemin-grubu`) ve gerekçesi ekranda yazar: hangi grubun havzanın yüzde
@@ -148,6 +150,9 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      edilir → KABULET pik matrisi (+ Q500/1000/10000 ekstrapolasyonu).
    * **Mockus** (süperpozesiz): Tc (Kirpich-metrik), D=2√Tc, Tp; K1/K2/K3.
    * **Rasyonel** (A ≤ 1 km² ise): Tc'de PLV eğrisinden şiddet, C_T = C100·(T/100)^0.2.
+     C100 elle girilir; CN hesaplandıysa CORINE'den türeyen alansal ağırlıklı
+     akış katsayısı C'nin alt/önerilen/üst değerleri aynı kutuda seçilebilir —
+     seçim C100 alanına yazılır ve rasyonel yöntemi işaretler.
    * **Snyder** (opsiyonel, `SNYDER V7.xlsm`): tp=Ct·(L·Lc)^0.30, tr=tp/5.5,
      qp=2760·Cp/tp, Qp=A·qp·10⁻³/10, Tp=tr/2+tp, Tb=(3+3tp/24)·24. W50/W75
      genişlik noktalarıyla kurulan, hacmi 1 mm'ye dengelenmiş birim hidrograf;
