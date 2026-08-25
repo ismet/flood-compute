@@ -80,7 +80,7 @@ export async function loadMgm() {
       dl.id = "mgmList";
       document.body.appendChild(dl);
     }
-    dl.innerHTML = S.mgm.map((s) => `<option value="${s.ad}"></option>`).join("");
+    dl.innerHTML = S.mgm.map((s) => `<option value="${_esc(s.ad)}"></option>`).join("");
     const md = $("mgmDplv");
     if (md)
       md.onchange = () => {

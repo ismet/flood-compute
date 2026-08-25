@@ -9,7 +9,7 @@
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { mgmNorm } from "../core/format.js";
+import { _esc, mgmNorm } from "../core/format.js";
 import { map, layers } from "../map/init.js";
 import { markDone, updateComputeReady } from "./steps.js";
 
@@ -116,13 +116,13 @@ export function renderRainTable() {
     // dağılım, eşleşme koordinatla mı adla mı kuruldu. Eşleşme sessiz olursa
     // 30 km ötedeki bir istasyonun yağışı fark edilmeden havzaya girer.
     const kaynak = m
-      ? `<span class="small" title="${m.dagilim || ""}${m.mesafe_km != null ? " · " + m.mesafe_km + " km" : ""}">` +
-        `${m.yil_sayisi} yıl · ${(m.dagilim || "").split(" ")[0]}` +
+      ? `<span class="small" title="${_esc(m.dagilim || "")}${m.mesafe_km != null ? " · " + m.mesafe_km + " km" : ""}">` +
+        `${m.yil_sayisi} yıl · ${_esc((m.dagilim || "").split(" ")[0])}` +
         (m.yontem === "ad" ? " ⚠ad" : "") +
         `</span>`
       : `<span class="small">—</span>`;
-    h += `<tr><td>${t.name} (${(t.agirlik * 100).toFixed(0)}%)</td>
-      <td><input class="mgm-pick" list="mgmDbList" data-r="${r}" placeholder="MGM ara…" value="${t._mgmAd || ""}"></td>
+    h += `<tr><td>${_esc(t.name)} (${(t.agirlik * 100).toFixed(0)}%)</td>
+      <td><input class="mgm-pick" list="mgmDbList" data-r="${r}" placeholder="MGM ara…" value="${_esc(t._mgmAd || "")}"></td>
       <td>${kaynak}</td>`;
     for (let c = 0; c < 7; c++) {
       const v = vals[c] ?? "";
@@ -314,7 +314,7 @@ export async function mgmDbListesi() {
     document.body.appendChild(dl);
   }
   dl.innerHTML = S.mgmDbYakin
-    .map((s) => `<option value="${s.ad} (${s.kod})">${s.il} · ${s.yil_sayisi} yıl</option>`)
+    .map((s) => `<option value="${_esc(s.ad)} (${_esc(s.kod)})">${_esc(s.il)} · ${s.yil_sayisi} yıl</option>`)
     .join("");
   return S.mgmDbYakin;
 }

@@ -7,6 +7,7 @@
  */
 
 import { S } from "../core/state.js";
+import { _esc } from "../core/format.js";
 import { markDone, updateComputeReady } from "./steps.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
@@ -50,12 +51,12 @@ export function renderCnSonuc(r) {
     `<th>CN</th><th>C</th><th>C aralığı</th></tr>`;
   r.dokum.forEach((d) => {
     const kutu = d.c_renk
-      ? `<span style="display:inline-block;width:11px;height:11px;border:1px solid #b5b0a8;background:${d.c_renk}"></span>`
+      ? `<span style="display:inline-block;width:11px;height:11px;border:1px solid #b5b0a8;background:${_esc(d.c_renk)}"></span>`
       : "";
     const cOrt = d.c_ort == null ? "—" : `<b>${d.c_ort.toFixed(2)}</b>${d.c_tablo ? "" : " *"}`;
     const aralik = d.c_min == null ? "—" : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}`;
     h +=
-      `<tr><td>${kutu}</td><td>${d.kod}</td><td>${d.ad}</td>` +
+      `<tr><td>${kutu}</td><td>${_esc(d.kod)}</td><td>${_esc(d.ad)}</td>` +
       `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td>` +
       `<td>${cOrt}</td><td>${aralik}</td></tr>`;
   });
@@ -118,7 +119,7 @@ export async function zeminGrubunuBelirle() {
     const r = await api("/api/zemin-grubu", { havza_geojson: S.havza });
     if (!r.var) {
       el.innerHTML = `<span class="warn">⚠ Zemin grubu katmanı kurulu değil — grup topraktan
-        belirlenemedi, listede <b>${$("inpSoil").value}</b> duruyor (varsayılan). Elle kontrol edin.
+        belirlenemedi, listede <b>${_esc($("inpSoil").value)}</b> duruyor (varsayılan). Elle kontrol edin.
         (<code>python tools/zemin_grubu_uret.py</code>)</span>`;
       return;
     }
@@ -126,17 +127,17 @@ export async function zeminGrubunuBelirle() {
     $("inpSoil").value = r.grup;
     const d = Object.entries(r.dagilim)
       .filter(([, v]) => v > 0)
-      .map(([k, v]) => `${k}=%${v}`)
+      .map(([k, v]) => `${_esc(k)}=%${v}`)
       .join(" · ");
     el.innerHTML =
-      `🌍 Otomatik: <b>${r.grup}</b> (havzanın %${r.pay_yuzde}'si) — ${d}` +
-      `<br><span class="small">${r.yontem}; Ksat ${r.ksat_araligi_mm_sa} mm/sa` +
+      `🌍 Otomatik: <b>${_esc(r.grup)}</b> (havzanın %${r.pay_yuzde}'si) — ${d}` +
+      `<br><span class="small">${_esc(r.yontem)}; Ksat ${_esc(r.ksat_araligi_mm_sa)} mm/sa` +
       (r.kararsiz ? ` · <span class="warn">⚠ baskın grup zayıf, havza karışık — elle kontrol edin</span>` : "") +
-      `<br>⚠ ${r.uyari}</span>`;
+      `<br>⚠ ${_esc(r.uyari)}</span>`;
   } catch (e) {
     // Sessizce varsayılana düşmek, bu parametrede kabul edilemez: hangi grubun
     // kullanıldığı ve topraktan mı geldiği her hâlde yazılmalı.
-    el.innerHTML = `<span class="warn">⚠ Zemin grubu belirlenemedi (${e.message}) —
-      listede <b>${$("inpSoil").value}</b> duruyor (varsayılan, ölçümden gelmiyor). Elle kontrol edin.</span>`;
+    el.innerHTML = `<span class="warn">⚠ Zemin grubu belirlenemedi (${_esc(e.message)}) —
+      listede <b>${_esc($("inpSoil").value)}</b> duruyor (varsayılan, ölçümden gelmiyor). Elle kontrol edin.</span>`;
   }
 }

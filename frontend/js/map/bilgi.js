@@ -7,6 +7,7 @@
  */
 
 import { S } from "../core/state.js";
+import { _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map } from "./init.js";
@@ -30,8 +31,8 @@ function renderInfoLayers() {
         (k, i) =>
           `<label class="inline" style="gap:4px">
        <input type="checkbox" class="info-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto">
-       <span style="color:${k.renk};font-weight:700">■</span> ${k.ad}
-       <span style="color:#8a857e">(${k.sayi})</span>
+       <span style="color:${_esc(k.renk)};font-weight:700">■</span> ${_esc(k.ad)}
+       <span style="color:#8a857e">(${_esc(k.sayi)})</span>
        <button class="link-btn" data-del="${i}" title="Kaldır">✕</button>
      </label>`,
       )
@@ -59,7 +60,7 @@ $("infoFile").onchange = async () => {
   const dosyalar = Array.from($("infoFile").files || []);
   if (!dosyalar.length) return;
   for (const f of dosyalar) {
-    setStatus("delinStatus", `“${f.name}” bilgi katmanı olarak okunuyor…`, "loading");
+    setStatus("delinStatus", `“${_esc(f.name)}” bilgi katmanı olarak okunuyor…`, "loading");
     try {
       const fd = new FormData();
       fd.append("file", f);
@@ -70,21 +71,21 @@ $("infoFile").onchange = async () => {
         pointToLayer: (f2, ll) => L.circleMarker(ll, { radius: 5, color: renk, fillColor: renk, fillOpacity: 0.85 }),
         onEachFeature: (f2, lyr) => {
           const ad = f2.properties && f2.properties.ad;
-          if (ad) lyr.bindTooltip(ad, { sticky: true });
+          if (ad) lyr.bindTooltip(_esc(ad), { sticky: true });
         },
       }).addTo(map);
       S.infoLayers.push({ ad: r.ad || f.name, layer, renk, gorunur: true, sayi: r.sayi });
       renderInfoLayers();
       const tur = Object.entries(r.turler || {})
-        .map(([k, v]) => `${v} ${k}`)
+        .map(([k, v]) => `${_esc(v)} ${_esc(k)}`)
         .join(", ");
       setStatus(
         "delinStatus",
-        `Bilgi katmanı eklendi: ${r.ad} — ${r.sayi} geometri (${tur}). ` + `Hesaba girmez, yalnız haritada gösterilir.`,
+        `Bilgi katmanı eklendi: ${_esc(r.ad)} — ${_esc(r.sayi)} geometri (${tur}). ` + `Hesaba girmez, yalnız haritada gösterilir.`,
         "ok",
       );
     } catch (e) {
-      setStatus("delinStatus", `“${f.name}” eklenemedi: ${e.message}`, "err");
+      setStatus("delinStatus", `“${_esc(f.name)}” eklenemedi: ${e.message}`, "err");
     }
   }
   $("infoFile").value = "";

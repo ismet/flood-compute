@@ -13,6 +13,7 @@
  */
 
 import { S, _notifyHavzaChanged } from "../core/state.js";
+import { _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers, getOnHavzaClick } from "../map/init.js";
@@ -70,7 +71,7 @@ export async function importBasinFiles() {
   const fd2 = $("riverFile").files[0];
   setStatus(
     "delinStatus",
-    `“${f.name}”${fd2 ? " + “" + fd2.name + "”" : ""} okunuyor, parametreler üretiliyor…`,
+    `“${_esc(f.name)}”${fd2 ? " + “" + _esc(fd2.name) + "”" : ""} okunuyor, parametreler üretiliyor…`,
     "loading",
   );
   try {
@@ -79,7 +80,7 @@ export async function importBasinFiles() {
     if (fd2) fd.append("dere_file", fd2);
     const q = `?river_km2=${+$("inpRivThr").value || 1}&dem_source=${encodeURIComponent($("inpDem").value)}`;
     const r = await api("/api/import-basin" + q, fd, true);
-    applyBasinResult(r, `İçe aktarıldı: ${f.name}${fd2 ? " + " + fd2.name : ""}`);
+    applyBasinResult(r, `İçe aktarıldı: ${_esc(f.name)}${fd2 ? " + " + _esc(fd2.name) : ""}`);
   } catch (e) {
     setStatus("delinStatus", "Hata: " + e.message, "err");
   }
@@ -132,8 +133,8 @@ export function applyBasinResult(r, baslik) {
   if (r.yzd_bolge && r.yzd_bolge.bolge) {
     S.yzdBolge = r.yzd_bolge;
     $("inpRegion").value = r.yzd_bolge.bolge;
-    yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem}) — otomatik seçildi`;
-    $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})`;
+    yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${_esc(r.yzd_bolge.yontem)}) — otomatik seçildi`;
+    $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${_esc(r.yzd_bolge.yontem)})`;
   }
   zeminGrubunuBelirle(); // zemin grubunu da havzadan seç (sessiz varsayılan yok)
   const ia = r.ice_aktarim;
@@ -269,7 +270,7 @@ map.on("click", async (ev) => {
     if (r.yzd_bolge && r.yzd_bolge.bolge) {
       S.yzdBolge = r.yzd_bolge;
       $("inpRegion").value = r.yzd_bolge.bolge;
-      yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem}) — otomatik seçildi`;
+      yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${_esc(r.yzd_bolge.yontem)}) — otomatik seçildi`;
       const ov = r.yzd_bolge.ortusme;
       const ovTxt = ov
         ? " | örtüşme: " +
@@ -277,7 +278,7 @@ map.on("click", async (ev) => {
             .map(([k, v]) => `${k}=${(v * 100).toFixed(0)}%`)
             .join(" ")
         : "";
-      $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})${ovTxt}`;
+      $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${_esc(r.yzd_bolge.yontem)})${ovTxt}`;
     }
     zeminGrubunuBelirle(); // zemin grubunu da havzadan seç (sessiz varsayılan yok)
     // teşhis: çözünürlük + kenetleme mesafesi (havza beklenenden küçükse ipucu)

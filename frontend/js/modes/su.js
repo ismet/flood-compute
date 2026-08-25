@@ -10,7 +10,7 @@
 
 import { S, onHavzaChanged } from "../core/state.js";
 import { api } from "../core/api.js";
-import { fmt } from "../core/format.js";
+import { fmt, _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
 

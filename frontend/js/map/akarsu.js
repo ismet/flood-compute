@@ -7,6 +7,7 @@
  */
 
 import { $ } from "../ui/dom.js";
+import { _esc } from "../core/format.js";
 import { api } from "../core/api.js";
 import { map, layers } from "./init.js";
 
@@ -20,7 +21,7 @@ layers.akarsu = L.geoJSON(null, {
     const p = f.properties || {};
     const ad = p.ad || p.tip || "akarsu";
     const km = p.uzunluk_m ? ` — ${(p.uzunluk_m / 1000).toFixed(2)} km` : "";
-    l.bindTooltip(ad + km, { sticky: true });
+    l.bindTooltip(_esc(ad) + km, { sticky: true });
   },
 });
 const AKARSU_MIN_ZOOM = 9;

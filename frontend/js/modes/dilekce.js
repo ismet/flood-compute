@@ -10,7 +10,7 @@
 
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
-import { fmt } from "../core/format.js"; // eslint-disable-line no-unused-vars -- local shadow in dilekçe handler intentionally per MIGRATION §3.1 trap, keep import for format.js cohesion
+import { fmt, _esc } from "../core/format.js"; // eslint-disable-line no-unused-vars -- local shadow in dilekçe handler intentionally per MIGRATION §3.1 trap, keep import for format.js cohesion
 import { $, setStatus } from "../ui/dom.js";
 import { makePasteGrid } from "../ui/paste-grid.js";
 

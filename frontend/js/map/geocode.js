@@ -7,6 +7,7 @@
  */
 
 import { $ } from "../ui/dom.js";
+import { _esc } from "../core/format.js";
 import { api } from "../core/api.js";
 import { map } from "./init.js";
 
@@ -34,7 +35,7 @@ import { map } from "./init.js";
       .map(
         (it, i) =>
           `<div class="geo-item${i === active ? " active" : ""}" data-i="${i}">
-         <span class="geo-type">${it.tur || ""}</span> ${it.ad}</div>`,
+         <span class="geo-type">${_esc(it.tur || "")}</span> ${_esc(it.ad)}</div>`,
       )
       .join("");
     box.classList.remove("hidden");
@@ -56,7 +57,7 @@ import { map } from "./init.js";
       );
     else map.setView([it.lat, it.lon], 13);
     if (geoMarker) geoMarker.remove();
-    geoMarker = L.marker([it.lat, it.lon]).addTo(map).bindTooltip(it.ad, { direction: "top" }).openTooltip();
+    geoMarker = L.marker([it.lat, it.lon]).addTo(map).bindTooltip(_esc(it.ad), { direction: "top" }).openTooltip();
   }
   async function run(q) {
     const my = ++seq;

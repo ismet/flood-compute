@@ -26,7 +26,7 @@
 
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
-import { fmt } from "../core/format.js";
+import { fmt, _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
 
@@ -69,7 +69,7 @@ function agiIsaretle() {
     '<option value="">yok</option>' +
     S.agiListe
       .filter((s) => S.agiBolgesel.has(s.kod))
-      .map((s) => `<option value="${s.kod}">${s.kod} — ${s.ad || ""}</option>`)
+      .map((s) => `<option value="${_esc(s.kod)}">${_esc(s.kod)} — ${_esc(s.ad || "")}</option>`)
       .join("");
   sec.value = S.agiBolgesel.has(onceki) ? onceki : "";
 }
@@ -84,7 +84,7 @@ function agiSec(s) {
   S.agiSecili = s;
   agiIsaretle();
   $("agiInfo").innerHTML =
-    `<b>${s.kod}</b> ${s.ad || ""} — ${s.kurum} · ${s.yil_sayisi} yıl ` +
+    `<b>${_esc(s.kod)}</b> ${_esc(s.ad || "")} — ${_esc(s.kurum)} · ${s.yil_sayisi} yıl ` +
     `(${s.ilk_yil}–${s.son_yil})` +
     (s.yagis_alani ? ` · yağış alanı ${fmt(s.yagis_alani, 1)} km²` : "");
   $("tfaSonuc").innerHTML = "";
@@ -98,11 +98,11 @@ function agiListele(ist) {
   // Yağış alanı bilinmeyen istasyon bölgesel analize giremez (indeks debi
   // bağıntısı alana dayanıyor); kutusu kapalı gösterilir.
   const sat = (s) =>
-    `<tr data-kod="${s.kod}" class="agi-sat">` +
-    `<td><input type="checkbox" class="agi-bol" data-kod="${s.kod}"` +
+    `<tr data-kod="${_esc(s.kod)}" class="agi-sat">` +
+    `<td><input type="checkbox" class="agi-bol" data-kod="${_esc(s.kod)}"` +
     `${S.agiBolgesel.has(s.kod) ? " checked" : ""}` +
     `${s.yagis_alani ? "" : " disabled title='yağış alanı bilinmiyor'"}></td>` +
-    `<td>${s.kod}</td><td>${s.ad || ""}</td><td>${s.kurum}</td>` +
+    `<td>${_esc(s.kod)}</td><td>${_esc(s.ad || "")}</td><td>${_esc(s.kurum)}</td>` +
     `<td style="text-align:right">${s.yil_sayisi}</td>` +
     `<td style="text-align:right">${s.ilk_yil}–${s.son_yil}</td>` +
     `<td style="text-align:right">${s.yagis_alani ? fmt(s.yagis_alani, 1) : "—"}</td></tr>`;
@@ -190,7 +190,7 @@ async function agiYukle() {
       if (s.enlem == null || s.boylam == null) return;
       const m = L.circleMarker([s.enlem, s.boylam], { radius: 5 });
       m.agi = s;
-      m.bindTooltip(`${s.kod} — ${s.ad || ""} (${s.yil_sayisi} yıl)`, { sticky: true });
+      m.bindTooltip(`${_esc(s.kod)} — ${_esc(s.ad || "")} (${s.yil_sayisi} yıl)`, { sticky: true });
       m.on("click", () => agiSec(s));
       m.addTo(layers.agi);
     });
@@ -236,7 +236,7 @@ $("btnAgiHavza").onclick = agiYukle;
 function tfaAykiriBlok(o) {
   const a = o.aykiri;
   if (!a) return "";
-  if (!a.uygulanabilir) return `<p class="small">Aykırı değer testi (Grubbs-Beck) uygulanamadı: ${a.neden}</p>`;
+  if (!a.uygulanabilir) return `<p class="small">Aykırı değer testi (Grubbs-Beck) uygulanamadı: ${_esc(a.neden)}</p>`;
   const y = a.yuksek || [],
     d = a.dusuk || [];
   let h =
@@ -249,7 +249,7 @@ function tfaAykiriBlok(o) {
     (y.length ? `<b>Yüksek aykırı:</b> ${y.map((v) => fmt(v, 1)).join(", ")} m³/s. ` : "") +
     (d.length ? `<b>Düşük aykırı:</b> ${d.map((v) => fmt(v, 1)).join(", ")} m³/s. ` : "") +
     `</p>`;
-  if (y.length) h += `<div class="warn small">⚠ ${a.uyari}</div>`;
+  if (y.length) h += `<div class="warn small">⚠ ${_esc(a.uyari)}</div>`;
 
   const ay = o.aykirisiz;
   if (o.aykirisiz_hata) return h + `<p class="small">${o.aykirisiz_hata}</p>`;
@@ -291,7 +291,7 @@ function tfaAykiriBlok(o) {
 function tfaCiz(o) {
   const T = o.tekerrur;
   const bas = (h) => `<th style="text-align:right">${h}</th>`;
-  let h = `<h3 class="small">${o.istasyon}</h3>`;
+  let h = `<h3 class="small">${_esc(o.istasyon)}</h3>`;
 
   // Elenen kayıtlar sonucun EN BAŞINDA gösterilir. Sessizce elemek, sessizce
   // dahil etmek kadar kötü olurdu: D24A029'un bozuk 1981 kaydı Q100'ü 1301
@@ -301,7 +301,7 @@ function tfaCiz(o) {
     h +=
       `<div class="warn small"><b>⚠ ${el.length} kayıt analiz dışı bırakıldı</b>` +
       ` — fiziksel olarak olanaksız bulundu (eski yıllıkların çıkarımında bozulmuş):<ul>` +
-      el.map((k) => `<li><b>${k.yil}: ${fmt(k.q, 1)} m³/s</b> — ${k.sebep}</li>`).join("") +
+      el.map((k) => `<li><b>${k.yil}: ${fmt(k.q, 1)} m³/s</b> — ${_esc(k.sebep)}</li>`).join("") +
       `</ul>Analize dahil etmek isterseniz "olanaksız kayıtları at" kutusunu kaldırın;` +
       ` sonuç büyük olasılıkla aşırı yüksek çıkar.</div>`;
   }
@@ -356,7 +356,7 @@ function tfaCiz(o) {
       "</tr>";
   });
   h += "</table>";
-  h += `<p class="small"><b>NOT:</b> ${o.kabul_edilen_adi} dağılımı uygundur.</p>`;
+  h += `<p class="small"><b>NOT:</b> ${_esc(o.kabul_edilen_adi)} dağılımı uygundur.</p>`;
   $("tfaSonuc").innerHTML = h;
 }
 
@@ -398,7 +398,7 @@ function btfaHomojenCiz(hm) {
   }
   kutu.classList.remove("hidden");
   if (btfaHomChart) btfaHomChart.destroy();
-  const nokta = (f) => hm.istasyonlar.filter(f).map((s) => ({ x: s.yil_sayisi, y: s.t_esdeger, kod: s.kod }));
+  const nokta = (f) => hm.istasyonlar.filter(f).map((s) => ({ x: s.yil_sayisi, y: s.t_esdeger, kod: _esc(s.kod) }));
   btfaHomChart = new Chart($("btfaHomojenGrafik"), {
     type: "line",
     data: {
@@ -525,10 +525,10 @@ function btfaCiz(o) {
   o.istasyonlar.forEach((s) => {
     const disi = !s.kullanildi;
     h +=
-      `<tr${disi ? ' style="opacity:.5"' : ""}><td>${s.kod}</td><td>${s.ad || ""}</td>` +
+      `<tr${disi ? ' style="opacity:.5"' : ""}><td>${_esc(s.kod)}</td><td>${_esc(s.ad || "")}</td>` +
       sag(s.alan, 1) +
       `<td style="text-align:right">${s.yil_sayisi ?? "—"}</td>` +
-      `<td>${disi ? s.hata || "dışarıda" : (s.dagilim || "").toUpperCase()}</td>` +
+      `<td>${_esc(disi ? s.hata || "dışarıda" : (s.dagilim || "").toUpperCase())}</td>` +
       (s.q || []).map((v) => sag(v)).join("") +
       sag(s.gozlem_maks) +
       "</tr>";
@@ -539,7 +539,7 @@ function btfaCiz(o) {
   if (hm) {
     btfaHomojenCiz(hm);
     h +=
-      `<p class="small"><b>Homojenlik testi</b> — ${hm.yontem}. ` +
+      `<p class="small"><b>Homojenlik testi</b> — ${_esc(hm.yontem)}. ` +
       (hm.homojen
         ? "Bölge <b>homojen</b>: tüm istasyonlar %95 bandının içinde."
         : `<b>${hm.aykiri.length} istasyon banda sığmıyor</b> (${hm.aykiri.join(", ")}) — ` +
@@ -550,7 +550,7 @@ function btfaCiz(o) {
       const durum = s.homojen === null ? "sınanmadı" : s.homojen ? "homojen" : "aykırı";
       h +=
         `<tr${s.homojen === false ? ' style="color:#b71c1c;font-weight:600"' : ""}>` +
-        `<td>${s.kod}</td><td style="text-align:right">${s.yil_sayisi}</td>` +
+        `<td>${_esc(s.kod)}</td><td style="text-align:right">${s.yil_sayisi}</td>` +
         `<td style="text-align:right">${fmt(s.oran_q10_q2, 3)}</td>` +
         `<td style="text-align:right">${fmt(s.t_esdeger, 1)}</td>` +
         `<td style="text-align:right">${s.t_alt == null ? "—" : fmt(s.t_alt, 1) + " – " + fmt(s.t_ust, 1)}</td>` +
@@ -649,7 +649,7 @@ $("btnBtfa").onclick = async () => {
 (async function mmyBolgeYukle() {
   try {
     const r = await api("/api/mmy-bolgeler");
-    $("mmyBolge").innerHTML = r.bolgeler.map((b) => `<option value="${b.no}">${b.no}. ${b.ad}</option>`).join("");
+    $("mmyBolge").innerHTML = r.bolgeler.map((b) => `<option value="${_esc(b.no)}">${_esc(b.no)}. ${_esc(b.ad)}</option>`).join("");
   } catch (e) {
     /* uç yoksa sessiz geç */
   }
@@ -679,7 +679,7 @@ $("btnMmy").onclick = async () => {
       `<td style="text-align:right">${typeof v === "number" ? fmt(v, 4) : v}</td>` +
       `<td class="small">${br}</td></tr>`;
     $("mmySonuc").innerHTML =
-      (o.istasyon ? `<h3 class="small">${o.istasyon}</h3>` : "") +
+      (o.istasyon ? `<h3 class="small">${_esc(o.istasyon)}</h3>` : "") +
       '<table class="tbl small">' +
       sat("N", o.yil_sayisi, "yıl") +
       sat("P<sub>maks</sub>", o.pmax, "mm") +
@@ -699,7 +699,7 @@ $("btnMmy").onclick = async () => {
       sat("M1<sub>s</sub> · M2<sub>s</sub>", o.m1_s * o.m2_s, "girilen") +
       sat("düzeltilmiş P<sub>ort</sub>", o.duzeltilmis_ortalama, "mm") +
       sat("düzeltilmiş S", o.duzeltilmis_standart_sapma, "mm") +
-      sat("K<sub>m</sub>", o.km, `${o.bolge_no}. ${o.bolge_adi}`) +
+      sat("K<sub>m</sub>", o.km, `${_esc(o.bolge_no)}. ${_esc(o.bolge_adi)}`) +
       (o.gun_katsayisi !== 1 ? sat("gün katsayısı", o.gun_katsayisi, "sabit saat → 24 saat") : "") +
       `<tr><td><b>MMY</b></td><td style="text-align:right"><b>${fmt(o.mmy, 1)}</b></td>` +
       "<td class='small'>mm</td></tr></table>" +

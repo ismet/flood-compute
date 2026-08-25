@@ -7,7 +7,7 @@
  */
 
 import { S } from "../core/state.js";
-import { fmt } from "../core/format.js";
+import { fmt, _esc } from "../core/format.js";
 import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers } from "./init.js";
@@ -29,7 +29,7 @@ function yagisLejantCiz(k) {
   let onceki = 0;
   const koyu = k === "pet" ? 1150 : k === "net" ? 250 : 500;
   $("yagisLejant").innerHTML =
-    `<b>${b.kisa} (mm/yıl)</b> ` +
+    `<b>${_esc(b.kisa)} (mm/yıl)</b> ` +
     b.lejant
       .map((l) => {
         const et = l.deger >= 10000 ? `${onceki}+` : `${onceki}–${l.deger}`;
@@ -57,7 +57,7 @@ function yagisKatmanUygula() {
   const b = yagisKatmanBilgi(k);
   if (b) {
     $("yagisInfo").innerHTML =
-      `<b>${b.ad}</b> — ${b.kaynak} · ${b.donem} · ` +
+      `<b>${_esc(b.ad)}</b> — ${_esc(b.kaynak)} · ${_esc(b.donem)} · ` +
       `~${b.cozunurluk_m} m piksel · ${b.lisans}` +
       (b.yontem ? ` · ${b.yontem}` : "");
   }

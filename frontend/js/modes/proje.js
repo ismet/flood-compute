@@ -11,6 +11,7 @@
  */
 
 import { S } from "../core/state.js";
+import { _esc } from "../core/format.js";
 import { api } from "../core/api.js";
 import { $ } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
@@ -71,7 +72,7 @@ $("btnSave").onclick = async () => {
 async function loadProjects() {
   const r = await api("/api/project/list");
   const sel = $("projList");
-  sel.innerHTML = `<option value="">— yükle —</option>` + r.projeler.map((p) => `<option>${p}</option>`).join("");
+  sel.innerHTML = `<option value="">— yükle —</option>` + r.projeler.map((p) => `<option>${_esc(p)}</option>`).join("");
 }
 $("projList").onchange = async () => {
   const ad = $("projList").value;

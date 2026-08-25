@@ -7,6 +7,7 @@
  */
 
 import { S } from "../core/state.js";
+import { _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map } from "./init.js";
@@ -30,7 +31,7 @@ function renderRasterLayers() {
         (k, i) =>
           `<label class="inline" style="gap:4px">
        <input type="checkbox" class="ras-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto">
-       🗺 ${k.meta.baslik || k.meta.ad}
+       🗺 ${_esc(k.meta.baslik || k.meta.ad)}
        <input type="range" class="ras-op" data-i="${i}" min="10" max="100" value="${Math.round(k.saydam * 100)}"
               title="Saydamlık" style="width:80px">
        <button class="link-btn" data-zoom="${i}" title="Katmana git">⌖</button>
@@ -67,7 +68,7 @@ function renderRasterLayers() {
       (b.onclick = async () => {
         const i = +b.dataset.del,
           k = S.rasterLayers[i];
-        if (!confirm(`“${k.meta.baslik || k.meta.ad}” altlığı sunucudan silinsin mi?`)) return;
+        if (!confirm(`“${_esc(k.meta.baslik || k.meta.ad)}” altlığı sunucudan silinsin mi?`)) return;
         try {
           await api("/api/raster-delete", { ad: k.meta.ad });
         } catch (e) {}
@@ -148,7 +149,7 @@ $("btnRasterAdd").onclick = async () => {
   }
   setStatus(
     "delinStatus",
-    `${dosyalar.map((f) => "“" + f.name + "”").join(", ")} yükleniyor…` +
+    `${dosyalar.map((f) => "“" + _esc(f.name) + "”").join(", ")} yükleniyor…` +
       (sid ? " (.sid → GeoTIFF dönüşümü sürebilir)" : ""),
     "loading",
   );

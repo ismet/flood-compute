@@ -9,7 +9,7 @@
  */
 
 import { S } from "../core/state.js";
-import { fmt } from "../core/format.js";
+import { fmt, _esc } from "../core/format.js";
 import { $, download } from "../ui/dom.js";
 import { M_LABEL } from "../core/constants.js";
 import { cmpInterp } from "../wizard/grafik.js";

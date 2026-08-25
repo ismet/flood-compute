@@ -17,6 +17,7 @@
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
+import { _esc } from "../core/format.js";
 import { map, layers } from "../map/init.js";
 import { recolorThiessen, renderRainTable } from "./rain.js";
 
@@ -51,17 +52,17 @@ export function renderExcluded() {
   if (elenen.length)
     h +=
       `<div class="small"><b>Küçük pay eşiğinin altında elenenler:</b> ` +
-      elenen.map((x) => `${x.name} (%${(x.agirlik * 100).toFixed(1)})`).join(", ") +
+      elenen.map((x) => `${_esc(x.name)} (%${(x.agirlik * 100).toFixed(1)})`).join(", ") +
       ` — alanları komşu istasyonlara dağıtıldı.</div>`;
   if (S.stExtra.length)
     h +=
       `<div class="small"><b>Elle eklenenler:</b> ` +
-      S.stExtra.map((s, i) => `${s.name} <button class="link-btn" data-x="${i}" title="Kaldır">✕</button>`).join(", ") +
+      S.stExtra.map((s, i) => `${_esc(s.name)} <button class="link-btn" data-x="${i}" title="Kaldır">✕</button>`).join(", ") +
       `</div>`;
   if (list.length)
     h +=
       `<div class="small"><b>Çıkarılanlar:</b> ` +
-      list.map((s) => `${s.name} <button class="link-btn" data-r="${stKey(s)}" title="Geri al">↺</button>`).join(", ") +
+      list.map((s) => `${_esc(s.name)} <button class="link-btn" data-r="${_esc(stKey(s))}" title="Geri al">↺</button>`).join(", ") +
       `</div>`;
   if (S.stExclude.size)
     h += `<div style="margin-top:6px"><button id="btnResetStations" class="small-btn">↺ Çıkarılanları geri al</button></div>`;
@@ -114,7 +115,7 @@ export async function runThiessen(stations, kaynak) {
       const mk = L.circleMarker([t.lat, t.lon], { radius: 6, color: col, fillColor: col, fillOpacity: 0.8 })
         .addTo(layers.markers)
         .bindPopup(
-          `${t.name}${t.kurum ? " [" + t.kurum + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)` +
+          `${_esc(t.name)}${t.kurum ? " [" + _esc(t.kurum) + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)` +
             `<br><button class="link-btn" data-pop-del="1">✕ Bu istasyonu çıkar</button>`,
         );
       const key = stKey(t);
@@ -123,8 +124,8 @@ export async function runThiessen(stations, kaynak) {
         if (btn) btn.onclick = () => removeStation(key);
       });
       h +=
-        `<tr class="sel"><td>${t.name}</td><td>${t.kurum || "—"}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td>` +
-        `<td><button class="link-btn" data-del="${stKey(t)}" title="Bu istasyonu çıkar">✕</button></td></tr>`;
+        `<tr class="sel"><td>${_esc(t.name)}</td><td>${_esc(t.kurum || "—")}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td>` +
+        `<td><button class="link-btn" data-del="${_esc(stKey(t))}" title="Bu istasyonu çıkar">✕</button></td></tr>`;
     });
     $("thTable").innerHTML = h + "</table>";
     $("thTable")
