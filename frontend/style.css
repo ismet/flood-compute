@@ -103,6 +103,7 @@ button.big:disabled { opacity: 0.5; }
 button.picking { background: var(--hata) !important; border-color: var(--hata) !important; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+.grid2 > label { min-width: 0; }
 .kot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .kot-grid label { font-size: 11px; font-weight: 600; }
 
@@ -169,6 +170,7 @@ label:has(> #inpHedefAlan),   /* Beklenen alan (km², ops.) */
 #akarsuInfo {                 /* DSİ akarsu ölçek sayım/ipucu satırı */
   display: none !important;
 }
+.info-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--kenar-hafif); color: var(--metin-orta); font-size: 11px; font-weight: 700; cursor: help; flex: none; }
 .small-btn { padding: 3px 8px; font-size: 12px; background: var(--vurgu); color: var(--beyaz); border: none; border-radius: 5px; cursor: pointer; }
 table.rain.st td:nth-child(2) { width: 130px; }
 .mgm-pick { width: 100%; min-width: 0; border: 1px solid var(--kenar-cok-acik); border-radius: 3px; padding: 3px 4px; font-size: 11.5px; }
