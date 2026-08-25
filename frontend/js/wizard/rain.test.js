@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { S } from "../core/state.js";
-import { rainRange } from "./rain.js";
+import { rainRange, oetSec } from "./rain.js";
 
 describe("rainRange", () => {
   beforeEach(() => {
@@ -64,5 +64,19 @@ describe("rainRange", () => {
     const r = rainRange();
     expect(r.min).toBe(0);
     expect(r.max).toBe(0);
+  });
+});
+
+describe("oetSec", () => {
+  it("elle boş ise ağırlıklı döner", () => {
+    expect(oetSec("", 123.45)).toBe(123.45);
+    expect(oetSec("", null)).toBe(null);
+  });
+  it("elle dolu ise elle değer döner (string)", () => {
+    expect(oetSec("200", 123.45)).toBe(200);
+    expect(oetSec(" 200 ", 123.45)).toBe(200);
+  });
+  it("elle 0 ise 0 döner (ağırlıklı değil)", () => {
+    expect(oetSec("0", 100)).toBe(0);
   });
 });

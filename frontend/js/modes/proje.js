@@ -78,21 +78,27 @@ $("btnSave").onclick = async () => {
     "inpW50",
     "inpW75",
     "inpYald",
+    "inpOetElle",
   ].forEach((id) => (fields[id] = $(id).value));
   // infoLayers/rasterLayers içinde Leaflet katman nesneleri var; bunlar haritaya
   // geri başvurduğu için JSON.stringify "circular structure" ile patlar. Raster
   // altlıklar zaten sunucuda duruyor ve açılışta /api/raster-layers ile geliyor.
   const durumS = { ...S, sonuc: null, infoLayers: [], rasterLayers: [] };
-  const body = JSON.stringify({ ad, durum: { S: durumS, fields } }, setReplacer);
-  const r = await fetch("/api/project/save", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
-  const j = await r.json();
-  if (!r.ok || j.hata) throw new Error(j.hata || r.statusText);
-  loadProjects();
-  alert("Kaydedildi");
+  try {
+    const body = JSON.stringify({ ad, durum: { S: durumS, fields } }, setReplacer);
+    const r = await fetch("/api/project/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    const j = await r.json();
+    if (!r.ok || j.hata) throw new Error(j.hata || r.statusText);
+    await loadProjects();
+    alert("Kaydedildi");
+  } catch (e) {
+    alert("Kaydedilemedi: " + e.message);
+    console.error(e);
+  }
 };
 async function loadProjects() {
   const r = await api("/api/project/list");
@@ -102,56 +108,91 @@ async function loadProjects() {
 $("projList").onchange = async () => {
   const ad = $("projList").value;
   if (!ad) return;
-  const resp = await fetch("/api/project/load/" + encodeURIComponent(ad));
-  const text = await resp.text();
-  if (!resp.ok) {
-    let msg = resp.statusText;
-    try {
-      msg = JSON.parse(text).hata || msg;
-    } catch (e) {}
-    throw new Error(msg);
-  }
-  const d = JSON.parse(text, setReviver);
-  // haritada duran canlı katman nesneleri kayda girmez; yüklemede korunmalı
-  const infoY = S.infoLayers,
-    rasterY = S.rasterLayers;
-  Object.assign(S, d.S);
-  reviveSets(S);
-  S.infoLayers = infoY;
-  S.rasterLayers = rasterY;
-  Object.entries(d.fields).forEach(([id, v]) => {
-    if ($(id)) $(id).value = v;
-  });
-  $("projName").value = ad;
-  if (S.dplvManual === undefined) {
-    const hasOldPlv =
-      !!(d.S && d.S.dplvValues) || !!(d.fields && d.fields.inpDplv != null && String(d.fields.inpDplv) !== "");
-    S.dplvManual = hasOldPlv ? true : false;
-  }
-  if (S.dplvAuto === undefined) S.dplvAuto = null;
-  if (S.dplvValues === undefined) S.dplvValues = null;
-  if (!S.dplvList) {
-    try {
-      await loadDplv();
-    } catch (e) {}
-  }
-  renderKotlar();
-  renderRainTable();
-  renderDplvGrid();
-  updatePlvAutoInfo();
-  // kayıtta varsa CORINE dökümü ve Adım 4'teki C bloğu geri gelir
-  if (S.cnSonuc) renderCnSonuc(S.cnSonuc);
-  updateComputeReady();
-  if (S.havza) {
-    layers.havza.clearLayers();
-    layers.havza.addData(S.havza);
-    layers.dere.clearLayers();
-    if (S.dere) layers.dere.addData(S.dere);
-    layers.kanal.clearLayers();
-    if (S.kanal) layers.kanal.addData(S.kanal);
-    map.fitBounds(layers.havza.getBounds());
+  try {
+    const resp = await fetch("/api/project/load/" + encodeURIComponent(ad));
+    const text = await resp.text();
+    if (!resp.ok) {
+      let msg = resp.statusText;
+      try {
+        msg = JSON.parse(text).hata || msg;
+      } catch (e) {}
+      throw new Error(msg);
+    }
+    const d = JSON.parse(text, setReviver);
+    // haritada duran canlı katman nesneleri kayda girmez; yüklemede korunmalı
+    const infoY = S.infoLayers,
+      rasterY = S.rasterLayers;
+    Object.assign(S, d.S);
+    reviveSets(S);
+    S.infoLayers = infoY;
+    S.rasterLayers = rasterY;
+    Object.entries(d.fields).forEach(([id, v]) => {
+      if ($(id)) $(id).value = v;
+    });
+    $("projName").value = ad;
+    if (S.dplvManual === undefined) {
+      const hasOldPlv =
+        !!(d.S && d.S.dplvValues) || !!(d.fields && d.fields.inpDplv != null && String(d.fields.inpDplv) !== "");
+      S.dplvManual = hasOldPlv ? true : false;
+    }
+    if (S.dplvAuto === undefined) S.dplvAuto = null;
+    if (S.dplvValues === undefined) S.dplvValues = null;
+    if (!S.dplvList) {
+      try {
+        await loadDplv();
+      } catch (e) {}
+    }
+    renderKotlar();
+    renderRainTable();
+    renderDplvGrid();
+    updatePlvAutoInfo();
+    // kayıtta varsa CORINE dökümü ve Adım 4'teki C bloğu geri gelir
+    if (S.cnSonuc) renderCnSonuc(S.cnSonuc);
+    updateComputeReady();
+    // F7: thiessen ve outlet marker'ı projeden geri getir (harita taze çıkarım görünümüne eş)
+    if (S.thiessen && S.thiessen.length) {
+      layers.thiessen.clearLayers();
+      S.thiessen
+        .filter((t) => t.agirlik > 0 && t.poligon_geojson)
+        .forEach((t) => {
+          try {
+            layers.thiessen.addData({
+              type: "Feature",
+              properties: { name: t.name },
+              geometry: t.poligon_geojson,
+            });
+          } catch (e) {}
+        });
+      // stil renklerini yağış verisine göre yenile
+      try {
+        const { recolorThiessen } = await import("../wizard/rain.js");
+        recolorThiessen();
+      } catch (e) {}
+    } else {
+      layers.thiessen.clearLayers();
+    }
+    layers.markers.clearLayers();
+    if (S.outlet) {
+      try {
+        const lat = S.outlet.snap_lat ?? S.outlet.lat;
+        const lon = S.outlet.snap_lon ?? S.outlet.lon;
+        if (lat != null && lon != null) L.marker([lat, lon]).addTo(layers.markers).bindPopup("Çıkış noktası (proje)");
+      } catch (e) {}
+    }
+    if (S.havza) {
+      layers.havza.clearLayers();
+      layers.havza.addData(S.havza);
+      layers.dere.clearLayers();
+      if (S.dere) layers.dere.addData(S.dere);
+      layers.kanal.clearLayers();
+      if (S.kanal) layers.kanal.addData(S.kanal);
+      map.fitBounds(layers.havza.getBounds());
+    }
+  } catch (e) {
+    alert("Proje yüklenemedi: " + e.message);
+    console.error(e);
   }
 };
-loadProjects();
+loadProjects().catch((err) => console.error("proje listesi yüklenemedi:", err));
 
 export { loadProjects };

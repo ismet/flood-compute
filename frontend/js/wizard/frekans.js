@@ -706,15 +706,16 @@ $("btnMmy").onclick = async () => {
       '<div class="rain-tools"><button id="btnMmyOet" class="small-btn">' +
       "↧ Bu değeri 3. adımdaki OET yağışına yaz</button></div>";
     $("btnMmyOet").onclick = () => {
-      const hedef = document.querySelector("[data-rain-oet], #inpP24OET");
+      const hedef = document.getElementById("inpOetElle");
       if (hedef) {
         hedef.value = fmt(o.mmy, 1);
-        setStatus("mmyStatus", "OET yağışı güncellendi.", "ok");
+        hedef.dispatchEvent(new Event("input", { bubbles: true }));
+        setStatus("mmyStatus", "OET yağışı güncellendi — OEY ELLE yazıldı.", "ok");
       } else {
         navigator.clipboard?.writeText(fmt(o.mmy, 1));
         setStatus(
           "mmyStatus",
-          `MMY = ${fmt(o.mmy, 1)} mm panoya kopyalandı — ` + "3. adımdaki yağış tablosunda OET satırına yapıştırın.",
+          `MMY = ${fmt(o.mmy, 1)} mm panoya kopyalandı — ` + "3. adımdaki OET (elle) alanına yapıştırın.",
           "ok",
         );
       }

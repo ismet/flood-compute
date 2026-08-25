@@ -258,6 +258,9 @@ export function readRainGrid() {
   });
   recalcRain();
 }
+export function oetSec(elle, sums6) {
+  return elle !== "" && elle != null ? +elle : sums6;
+}
 export function recalcRain() {
   recolorThiessen();
   const w = activeStations();
@@ -274,15 +277,24 @@ export function recalcRain() {
   }
   const ok = sums.slice(0, 6).every((v) => v != null);
   S.P24w = ok ? { 2: sums[0], 5: sums[1], 10: sums[2], 25: sums[3], 50: sums[4], 100: sums[5] } : null;
-  S.OETw = sums[6];
+  const elle = $("inpOetElle")?.value.trim() ?? "";
+  S.OETw = oetSec(elle, sums[6]);
   for (let i = 0; i < 7; i++) {
     const el = $("rw" + i);
     if (el) el.innerHTML = sums[i] == null ? "—" : `<b>${sums[i].toFixed(2)}</b>`;
   }
+  // OET kaynak bilgisi için ayrı gösterge
+  const oetInfo = $("oetKaynakInfo");
+  if (oetInfo) {
+    if (elle !== "") oetInfo.textContent = `→ OEY ELLE ${S.OETw != null ? S.OETw.toFixed(2) : "—"} mm`;
+    else if (sums[6] != null) oetInfo.textContent = `→ OEY ağırlıklı ${sums[6].toFixed(2)} mm`;
+    else oetInfo.textContent = "";
+  }
   if (ok) {
+    const kaynakEtiket = elle !== "" ? `OEY: ELLE ${S.OETw != null ? S.OETw.toFixed(2) : "—"} mm` : sums[6] != null ? `OEY: ağırlıklı ${sums[6].toFixed(2)} mm` : "OEY: ağırlıklı —";
     setStatus(
       "rainStatus",
-      S.OETw == null ? "⚠ OEY sütunu boş: OET/QOET hesapları 0 kabul edilir" : "Ağırlıklı yağışlar hazır",
+      S.OETw == null ? `⚠ OEY sütunu boş: OET/QOET hesapları 0 kabul edilir — ${kaynakEtiket}` : `Ağırlıklı yağışlar hazır — ${kaynakEtiket}`,
       S.OETw == null ? "err" : "ok",
     );
     markDone(3);
@@ -290,6 +302,20 @@ export function recalcRain() {
     setStatus("rainStatus", "Tüm istasyonlar için P2..P100 değerlerini girin", "");
   }
   updateComputeReady();
+}
+// OET elle input self-wiring
+if ($("inpOetElle") && !$("inpOetElle")._wired) {
+  $("inpOetElle")._wired = true;
+  $("inpOetElle").addEventListener("input", recalcRain);
+} else {
+  // DOM henüz yoksa, DOMContentLoaded'da bağla
+  document.addEventListener("DOMContentLoaded", () => {
+    const el = $("inpOetElle");
+    if (el && !el._wired) {
+      el._wired = true;
+      el.addEventListener("input", recalcRain);
+    }
+  });
 }
 export async function mgmDbListesi() {
   if (S.mgmDbYakin || !S.havza) return S.mgmDbYakin || [];
