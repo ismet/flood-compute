@@ -1478,14 +1478,26 @@ def api_delete(ad: str):
 
 
 # ------------------------------------------------------------------ frontend
+# /static altındaki JS/CSS hiç önbelleklenmesin: modül yapısında derin içe
+# aktarmalar ?v= damgasıyla tek tek sürümlenemez; dosya değişince tarayıcı
+# aynı oturumda taze kod görmeli. Karolar/API yanıtları etkilenmez.
+@app.middleware("http")
+async def _static_no_cache(request, call_next):
+    response = await call_next(request)
+    p = request.url.path
+    if p.startswith("/static") and (p.endswith(".js") or p.endswith(".css")):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 
 @app.get("/")
 def index():
-    # index.html önbelleğe alınmamalı: içindeki ?v= sürüm damgaları yalnız
-    # app.js/style.css'i tazeler, HTML'in kendisi eski kalırsa yeni eklenen
-    # alanlar (ör. DEM kaynağı seçici) arayüzde hiç görünmez.
+    # index.html de önbelleğe alınmamalı: içindeki script/link referansları
+    # eski kalırsa yeni eklenen alanlar (ör. DEM kaynağı seçici) arayüzde
+    # hiç görünmez. /static/*.{js,css} için yukarıdaki middleware aynısını yapar.
     return FileResponse(
         os.path.join(FRONTEND, "index.html"),
         headers={"Cache-Control": "no-cache, no-store, must-revalidate",
