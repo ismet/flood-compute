@@ -1,7 +1,10 @@
 import { S } from "../core/state.js";
 import { $ , setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { map, layers } from "./init.js";
+import { map, layers, katmanGeojson } from "./init.js";
+import { applyBasinResult } from "../wizard/havza.js";
+import { updateComputeReady } from "../wizard/steps.js";
+import { renderKotlar } from "../wizard/cn.js";
 
 /* -------- havza sınırı / dere ağını haritada elle düzenleme (Geoman) --------
    Düzenleme bitince geometri /api/basin-from-geometry'ye gönderilir; alan
@@ -173,7 +176,7 @@ function setGeomEdit(acik) {
       kanal: layers.kanal.toGeoJSON(), sHavza: S.havza,
     };
     // düzenlerken havzaya tıklamak SİLME onayını açmasın
-    layers.havza.eachLayer(l => { l.off("click", onHavzaClick); l.unbindTooltip(); });
+    layers.havza.eachLayer(l => { l.off("click"); l.unbindTooltip(); });
     const d = derePatlat();          // dere kollarını ayrı ayrı düzenlenebilir yap
     duzenlenebilirKatmanlar().forEach(l => l.pm.enable(PM_SECENEK));
     btn.classList.add("hidden"); ok.classList.remove("hidden"); iptal.classList.remove("hidden");
@@ -268,69 +271,8 @@ $("btnEditCancel").onclick = cancelGeomEdit;
 $("btnEditApply").onclick = applyGeomEdit;
 
 map.on("click", (ev) => {
-  if (S.multi && S.multi.place) { multiAddPoint(ev.latlng); return; }
+  if (S.multi && S.multi.place) {
+    // will be handled by modes/multi.js in stage5; for now just return to avoid picking
+    return;
+  }
 });
-map.on("click", async (ev) => {
-  if (!picking) return;
-  picking = false;
-  $("btnPick").classList.remove("picking");
-  map.getContainer().style.cursor = "";
-  setStatus("delinStatus", "Havza çıkarılıyor… DEM işleniyor: küçük havzada birkaç saniye, " +
-    "büyük havzada (binlerce km²) pencere büyütülüp DEM indirildiği için 1–3 dakika sürebilir.", "loading");
-  try {
-    const r = await api("/api/delineate", {
-      lat: ev.latlng.lat, lon: ev.latlng.lng, river_km2: +$("inpRivThr").value || 1,
-      snap_m: +$("inpSnap").value || 500, dem_source: $("inpDem").value,
-      // Beklenen alan verilirse kenetleme "en büyük kol" yerine "alanı buna en
-      // yakın kol" der. Kavşakta tıklandığında fark büyük: Beyağaç'ta 24.6 km²
-      // yerine doğru kol olan 8.3 km² geliyor ve nokta 477 m değil 78 m kayıyor.
-      hedef_alan_km2: +$("inpHedefAlan").value || 0,
-      tampon_m: +$("inpTampon").value || 500,
-    });
-    S.outlet = r.outlet; S.havza = r.havza_geojson; S.kotlar = r.kotlar.slice();
-    S.mgmDbYakin = null; S.dplvManual = false; S.dplvAuto = null; S.dplvValues = null;
-    S.sonuc = null; S.girdi = null;
-    if ($("results")) $("results").innerHTML = "";
-    if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
-    $("hesapDock")?.classList.add("hidden");
-    setStatus("compStatus", "", "");
-    S.dere = r.dere_geojson || null; S.kanal = r.ana_kanal_geojson || null;
-    $("inpA").value = r.alan_km2; $("inpL").value = r.L_km; $("inpLc").value = r.Lc_km;
-    updateSnyderW();
-    layers.havza.clearLayers(); layers.havza.addData(r.havza_geojson);
-    layers.dere.clearLayers(); if (r.dere_geojson) layers.dere.addData(r.dere_geojson);
-    layers.kanal.clearLayers(); layers.kanal.addData(r.ana_kanal_geojson);
-    layers.markers.clearLayers();
-    L.marker([r.outlet.snap_lat, r.outlet.snap_lon]).addTo(layers.markers).bindPopup("Outlet");
-    map.fitBounds(layers.havza.getBounds(), { padding: [30, 30] });
-    renderKotlar();
-    // YZD alansal dağılım bölgesini (A/B/C) otomatik ayarla
-    let yzdMsg = "";
-    if (r.yzd_bolge && r.yzd_bolge.bolge) {
-      S.yzdBolge = r.yzd_bolge;
-      $("inpRegion").value = r.yzd_bolge.bolge;
-      yzdMsg = `\nYZD bölgesi: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem}) — otomatik seçildi`;
-      const ov = r.yzd_bolge.ortusme;
-      const ovTxt = ov ? " | örtüşme: " + Object.entries(ov).map(([k, v]) => `${k}=${(v * 100).toFixed(0)}%`).join(" ") : "";
-      $("yzdInfo").textContent = `🌧 Otomatik: ${r.yzd_bolge.bolge} (${r.yzd_bolge.yontem})${ovTxt}`;
-    }
-    zeminGrubunuBelirle();   // zemin grubunu da havzadan seç (sessiz varsayılan yok)
-    // teşhis: çözünürlük + kenetleme mesafesi (havza beklenenden küçükse ipucu)
-    let dgn = "";
-    if (r.cozunurluk_m) dgn += `\nDEM çözünürlüğü: ${r.cozunurluk_m} m`;
-    if (r.snap_mesafe_m != null) dgn += ` | kanala kenetleme: ${r.snap_mesafe_m} m`;
-    if (r.snap_mesafe_m != null && r.snap_mesafe_m > 0.8 * (+$("inpSnap").value || 500))
-      dgn += `\n⚠ Tıklanan nokta kanaldan uzak (${r.snap_mesafe_m} m) — yanlış/küçük bir kola oturmuş olabilir.` +
-             ` Havza beklenenden küçükse dere ağına daha yakın tıklayın veya "Kanala kenetleme" değerini artırın.`;
-    setStatus("delinStatus",
-      `Havza: ${r.alan_km2} km² | L=${r.L_km} km | Lc=${r.Lc_km} km` +
-      (r.kenar_uyarisi ? "\n⚠ Havza pencere kenarına değiyor, sonuçları kontrol edin!" : "") +
-      dgn + yzdMsg, "ok");
-    markDone(1);
-    renderAdayKanallar(r);
-    updateComputeReady();
-    autoSelectPLV();
-    if (S.mode === "su") suHavzaGuncelle();   // su akışı 1. adımı havzayla başlıyor
-  } catch (e) { setStatus("delinStatus", "Hata: " + e.message, "err"); }
-});
-
