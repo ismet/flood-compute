@@ -157,6 +157,17 @@ label.chk input { width: auto; }
 .dplv-head { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; flex-wrap: wrap; }
 .dplv-head .inline { flex-direction: row; align-items: center; gap: 6px; }
 .rain-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+
+/* ---- Havza sekmesi gizli kontrolleri (kod + backend korunur, karar için geri açılabilir) ---- */
+label:has(> #basinFile),      /* Havza (poligon) dosya girişi */
+label:has(> #riverFile),      /* Dere ağı (opsiyonel) dosya girişi */
+#btnImport,                   /* İçe aktar ve hesapla */
+label:has(> #akarsuOlcek),    /* Ölçek — varsayılan: Otomatik */
+label:has(> #yagisKatman),    /* Katman — varsayılan: Yıllık Toplam Yağış */
+#btnYagisHavza,               /* Havza ortalaması — çıkarım bitince kendiliğinden hesaplanır */
+label:has(> #inpHedefAlan) {  /* Beklenen alan (km², ops.) */
+  display: none !important;
+}
 .small-btn { padding: 3px 8px; font-size: 12px; background: var(--vurgu); color: var(--beyaz); border: none; border-radius: 5px; cursor: pointer; }
 table.rain.st td:nth-child(2) { width: 130px; }
 .mgm-pick { width: 100%; min-width: 0; border: 1px solid var(--kenar-cok-acik); border-radius: 3px; padding: 3px 4px; font-size: 11.5px; }

@@ -2,7 +2,7 @@
  * @fileoverview İklim katmanı (CHELSA P/PET/net) — WMS/XYZ ve havza ortalaması.
  * @module map/yagis-katman
  * Owns: S.yagisHavza
- * Exports: — (self-wiring)
+ * Exports: havzaOrtalamasiGoster (wizard/havza çıkarım sonrası kendiliğinden çağırır)
  * Notes: Rank 2 (map).
  */
 
@@ -76,11 +76,11 @@ $("yagisOpak").oninput = () => {
   if (layers.yagis) layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
 };
 
-$("btnYagisHavza").onclick = async () => {
-  if (!S.havza) {
-    $("yagisInfo").textContent = "Önce havzayı çıkarın.";
-    return;
-  }
+export async function havzaOrtalamasiGoster() {
+  // düğme artık gizli: çıkarım bittiğinde wizard/havza kendiliğinden çağırır.
+  // Havza yoksa veya iklim verisi yoksa sessizce çık (otomatik çağrı yolunda
+  // "Önce havzayı çıkarın" uyarısının boşuna yazılmaması için).
+  if (!S.havza || !yagisBilgi || !yagisBilgi.var) return;
   $("yagisInfo").textContent = "Havza ortalamaları hesaplanıyor…";
   try {
     const g = S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza;
@@ -111,7 +111,8 @@ $("btnYagisHavza").onclick = async () => {
   } catch (e) {
     $("yagisInfo").textContent = "Hesaplanamadı: " + e.message;
   }
-};
+}
+$("btnYagisHavza").onclick = havzaOrtalamasiGoster;
 
 /* Haritaya tıklayınca değerleri oku. Diğer tıklama kipleri (outlet seçimi,
    ara havza noktası, istasyon ekleme) önceliklidir — onlar açıkken sorgu
