@@ -208,6 +208,7 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 3 OK — 63d4871 — wizard A (steps/havza/cn/thiessen/rain/dplv, legacy 155→105 tot 213, smoke steps/Thiessen→CN→rain, no console errors)
 [2026-08-25] stage 4 OK — dc1db23 — wizard B (hesap/grafik/frekans, legacy 105→56 tot 214, grafik before hesap for hesap→grafik, stub modes/rezervuar for hesap→rezervuar dynamic, smoke cmp/chart overlays, no console errors)
 [2026-08-25] stage 5 OK — 9487b8a — modes (multi/multi-sonuc/rezervuar/su/dilekce/proje, legacy 56→4 tot 214, multi-sonuc→multi→rezervuar order, su observer onHavzaChanged, dilekce/proje fan-in, dynamic imports for dialogs, smoke all modes, no console errors)
+[2026-08-25] stage 6 OK — <sha> — legacy 4→0 tot 214, thin root finalized (setMode/activateStep/clearSingleBasin/onHavzaClick + overlay-Esc + debug seam), smoke 4 modes×5 steps + overlays Esc (res→mcmp→cmp→chart prio) + picking/stPlace Esc + havza clear, §6 zero, no console errors
 ```
 
 ## 10. Standing Protocols

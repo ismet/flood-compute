@@ -277,17 +277,5 @@ function showSnyderChart() {
   });
 }
 $("btnCloseChart").onclick = () => $("chartwrap").classList.add("hidden");
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    const rw = $("resWrap");
-    if (rw && !rw.classList.contains("hidden")) { rw.classList.add("hidden"); return; }
-    const mcmp = $("mcmpWrap");
-    if (mcmp && !mcmp.classList.contains("hidden")) { mcmp.classList.add("hidden"); return; }
-    const cmp = $("cmpWrap");
-    if (cmp && !cmp.classList.contains("hidden")) { cmp.classList.add("hidden"); return; }
-    const cw = $("chartwrap");
-    if (cw && !cw.classList.contains("hidden")) { cw.classList.add("hidden"); return; }
-  }
-});
 
 export { openCompare, showChart, showSnyderChart, cmpPeak, cmpInterp, cmpHydro, cmpAvailable };
