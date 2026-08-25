@@ -22,8 +22,8 @@ describe("fmt", () => {
 
 describe("_esc", () => {
   it("escapes html specials", () => {
-    expect(_esc('<img src=x onerror=alert(1)>')).toBe("&lt;img src=x onerror=alert(1)&gt;");
-    expect(_esc('A & B "c" \'d\'')).toBe("A &amp; B &quot;c&quot; &#x27;d&#x27;");
+    expect(_esc("<img src=x onerror=alert(1)>")).toBe("&lt;img src=x onerror=alert(1)&gt;");
+    expect(_esc("A & B \"c\" 'd'")).toBe("A &amp; B &quot;c&quot; &#x27;d&#x27;");
   });
   it("null/undefined → empty", () => {
     expect(_esc(null)).toBe("");

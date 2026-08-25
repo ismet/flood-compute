@@ -3,7 +3,10 @@ import { dpSadelestir } from "./duzenle.js";
 
 describe("dpSadelestir", () => {
   it("returns same when <3 points", () => {
-    const pts = [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }];
+    const pts = [
+      { lat: 0, lng: 0 },
+      { lat: 1, lng: 1 },
+    ];
     expect(dpSadelestir(pts, 1, 1)).toBe(pts);
   });
   it("colinear middle removed even with tiny tol", () => {

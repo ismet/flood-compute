@@ -1,5 +1,5 @@
 import { S } from "../core/state.js";
-import { $ , setStatus } from "../ui/dom.js";
+import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers, katmanGeojson } from "./init.js";
 import { applyBasinResult } from "../wizard/havza.js";
@@ -9,7 +9,7 @@ import { updateComputeReady } from "../wizard/steps.js";
    Düzenleme bitince geometri /api/basin-from-geometry'ye gönderilir; alan
    poligonun kendisinden (jeodezik), L/Lc/kot profili DEM'den yeniden üretilir
    — yani dosyadan içe aktarmayla birebir aynı yol. */
-let editYedek = null;   // vazgeçmek için düzenleme öncesi anlık kopya
+let editYedek = null; // vazgeçmek için düzenleme öncesi anlık kopya
 
 /* Geoman seçenekleri.
    - allowSelfIntersection: Geoman'ın varsayılanı (true) KALMALI. false yapılırsa
@@ -23,20 +23,26 @@ const PM_SECENEK = { allowSelfIntersection: true, limitMarkersToCount: 80, snapp
 
 function duzenlenebilirKatmanlar() {
   const out = [];
-  [layers.havza, layers.dere].forEach(g => g.eachLayer(l => { if (l.pm) out.push(l); }));
+  [layers.havza, layers.dere].forEach((g) =>
+    g.eachLayer((l) => {
+      if (l.pm) out.push(l);
+    }),
+  );
   return out;
 }
 
 /* Bir Leaflet katmanındaki toplam köşe sayısı (iç içe latlng dizilerini gezer). */
 function koseSayisi(katman) {
   let n = 0;
-  const say = (a) => Array.isArray(a) ? a.forEach(say) : n++;
-  katman.eachLayer(l => { if (l.getLatLngs) say(l.getLatLngs()); });
+  const say = (a) => (Array.isArray(a) ? a.forEach(say) : n++);
+  katman.eachLayer((l) => {
+    if (l.getLatLngs) say(l.getLatLngs());
+  });
   return n;
 }
 
 const DERE_STIL = { color: "#3b8ea5", weight: 1.5 };
-const DERE_PATLAT_LIMIT = 400;   // bu kol sayısını aşarsa patlatma yapılmaz
+const DERE_PATLAT_LIMIT = 400; // bu kol sayısını aşarsa patlatma yapılmaz
 
 /* Dere ağı DEM'den TEK bir çok parçalı MultiLineString olarak gelir (her DEM
    hücresi bir segment, unary_union ile birleştirilmiş). Tek Leaflet nesnesi
@@ -46,11 +52,12 @@ const DERE_PATLAT_LIMIT = 400;   // bu kol sayısını aşarsa patlatma yapılma
    önce sadeleştirme önerilir. Döner: {kol, kose, patladi}                    */
 function derePatlat() {
   const kollar = [];
-  layers.dere.eachLayer(l => {
+  layers.dere.eachLayer((l) => {
     if (!l.getLatLngs) return;
     const topla = (a) => {
       if (!a.length) return;
-      if (Array.isArray(a[0])) a.forEach(topla); else kollar.push(a);
+      if (Array.isArray(a[0])) a.forEach(topla);
+      else kollar.push(a);
     };
     topla(l.getLatLngs());
   });
@@ -59,7 +66,7 @@ function derePatlat() {
     return { kol: kollar.length, kose, patladi: false };
   }
   layers.dere.clearLayers();
-  kollar.forEach(p => layers.dere.addLayer(L.polyline(p, DERE_STIL)));
+  kollar.forEach((p) => layers.dere.addLayer(L.polyline(p, DERE_STIL)));
   return { kol: kollar.length, kose, patladi: true };
 }
 
@@ -75,7 +82,7 @@ function setDereSil(acik) {
   dereSilModu = acik;
   $("btnDereDel").classList.toggle("picking", acik);
   map.getContainer().style.cursor = acik ? "not-allowed" : "";
-  layers.dere.eachLayer(l => {
+  layers.dere.eachLayer((l) => {
     l.off("click", dereSilTikla);
     if (acik) l.on("click", dereSilTikla);
   });
@@ -107,8 +114,7 @@ if (window.L && L.PM) {
     if (l.pm) l.pm.enable(PM_SECENEK);
     if (dereSilModu) l.on("click", dereSilTikla);
     $("btnDereDraw").classList.remove("picking");
-    $("editInfo").textContent =
-      `Yeni dere kolu eklendi (toplam ${layers.dere.getLayers().length}).`;
+    $("editInfo").textContent = `Yeni dere kolu eklendi (toplam ${layers.dere.getLayers().length}).`;
   });
 }
 
@@ -118,8 +124,10 @@ if (window.L && L.PM) {
 export function dpSadelestir(noktalar, tol, kos) {
   if (noktalar.length < 3) return noktalar;
   const dik = (p, a, b) => {
-    const px = (p.lng - a.lng) * kos, py = p.lat - a.lat;
-    const bx = (b.lng - a.lng) * kos, by = b.lat - a.lat;
+    const px = (p.lng - a.lng) * kos,
+      py = p.lat - a.lat;
+    const bx = (b.lng - a.lng) * kos,
+      by = b.lat - a.lat;
     if (bx === 0 && by === 0) return Math.hypot(px, py);
     const t = (px * bx + py * by) / (bx * bx + by * by);
     const u = Math.max(0, Math.min(1, t));
@@ -130,12 +138,19 @@ export function dpSadelestir(noktalar, tol, kos) {
   const yigin = [[0, noktalar.length - 1]];
   while (yigin.length) {
     const [i, j] = yigin.pop();
-    let enUzak = -1, idx = -1;
+    let enUzak = -1,
+      idx = -1;
     for (let k = i + 1; k < j; k++) {
       const d = dik(noktalar[k], noktalar[i], noktalar[j]);
-      if (d > enUzak) { enUzak = d; idx = k; }
+      if (d > enUzak) {
+        enUzak = d;
+        idx = k;
+      }
     }
-    if (enUzak > tol && idx > 0) { tut[idx] = true; yigin.push([i, idx], [idx, j]); }
+    if (enUzak > tol && idx > 0) {
+      tut[idx] = true;
+      yigin.push([i, idx], [idx, j]);
+    }
   }
   return noktalar.filter((_, i) => tut[i]);
 }
@@ -143,9 +158,10 @@ export function dpSadelestir(noktalar, tol, kos) {
 /* Havza sınırını ve dereleri verilen toleransla sadeleştirir (haritada, yerinde). */
 function sadelestirGeometri(metre) {
   const tol = metre / 111320;
-  const kos = Math.cos(map.getCenter().lat * Math.PI / 180) || 1;
-  let once = 0, sonra = 0;
-  duzenlenebilirKatmanlar().forEach(l => {
+  const kos = Math.cos((map.getCenter().lat * Math.PI) / 180) || 1;
+  let once = 0,
+    sonra = 0;
+  duzenlenebilirKatmanlar().forEach((l) => {
     if (!l.getLatLngs) return;
     const kapali = l instanceof L.Polygon;
     const isle = (a) => {
@@ -159,44 +175,71 @@ function sadelestirGeometri(metre) {
       return y;
     };
     l.setLatLngs(isle(l.getLatLngs()));
-    if (l.pm && l.pm.enabled()) { l.pm.disable(); l.pm.enable(PM_SECENEK); }
+    if (l.pm && l.pm.enabled()) {
+      l.pm.disable();
+      l.pm.enable(PM_SECENEK);
+    }
   });
   return { once, sonra };
 }
 
 function setGeomEdit(acik) {
-  const btn = $("btnEditGeom"), ok = $("btnEditApply"), iptal = $("btnEditCancel");
+  const btn = $("btnEditGeom"),
+    ok = $("btnEditApply"),
+    iptal = $("btnEditCancel");
   if (acik) {
     if (!S.havza) return setStatus("delinStatus", "Önce havzayı çıkarın", "err");
-    if (!L.PM) return setStatus("delinStatus",
-      "Düzenleme kütüphanesi yüklenemedi (internet bağlantısı gerekiyor).", "err");
+    if (!L.PM)
+      return setStatus("delinStatus", "Düzenleme kütüphanesi yüklenemedi (internet bağlantısı gerekiyor).", "err");
     editYedek = {
-      havza: layers.havza.toGeoJSON(), dere: layers.dere.toGeoJSON(),
-      kanal: layers.kanal.toGeoJSON(), sHavza: S.havza,
+      havza: layers.havza.toGeoJSON(),
+      dere: layers.dere.toGeoJSON(),
+      kanal: layers.kanal.toGeoJSON(),
+      sHavza: S.havza,
     };
     // düzenlerken havzaya tıklamak SİLME onayını açmasın
-    layers.havza.eachLayer(l => { l.off("click"); l.unbindTooltip(); });
-    const d = derePatlat();          // dere kollarını ayrı ayrı düzenlenebilir yap
-    duzenlenebilirKatmanlar().forEach(l => l.pm.enable(PM_SECENEK));
-    btn.classList.add("hidden"); ok.classList.remove("hidden"); iptal.classList.remove("hidden");
+    layers.havza.eachLayer((l) => {
+      l.off("click");
+      l.unbindTooltip();
+    });
+    const d = derePatlat(); // dere kollarını ayrı ayrı düzenlenebilir yap
+    duzenlenebilirKatmanlar().forEach((l) => l.pm.enable(PM_SECENEK));
+    btn.classList.add("hidden");
+    ok.classList.remove("hidden");
+    iptal.classList.remove("hidden");
     $("editTools").classList.remove("hidden");
     const n = koseSayisi(layers.havza);
     // ~400 köşe hedefiyle tolerans öner (DEM adımı ≈ 30 m)
-    $("editTol").value = Math.round(Math.max(20, Math.min(1000, 30 * (n + d.kose) / 800)));
-    const dereMsg = d.kol === 0 ? "Haritada dere yok."
-      : d.patladi ? `Dere ağı ${d.kol} ayrı kola bölündü (${d.kose} köşe) — her kol tek tek taşınıp silinebilir.`
-      : `Dere ağı ${d.kol} kol / ${d.kose} köşe — ayrı kollara bölmek için fazla kalabalık, `
-        + `önce “Sadeleştir”e basın (kol sayısı ${DERE_PATLAT_LIMIT} altına inince bölünür).`;
-    setStatus("delinStatus", "Düzenleme açık — köşeyi sürükleyerek taşıyın, ara noktaya "
-      + "tıklayarak yeni köşe ekleyin, köşeye sağ tıklayarak silin. Bitince “Uygula”ya basın."
-      + `\nHavza sınırında ${n} köşe var; imlece en yakın ${PM_SECENEK.limitMarkersToCount} tanesi gösteriliyor.`
-      + "\n" + dereMsg
-      + (n + d.kose > 800 ? "\n⚠ DEM'den gelen geometri piksel merdiveni olduğu için çok köşeli: tek "
-        + "köşeyi oynatmak havza ölçeğinde neredeyse hiçbir şey değiştirmez. Önce “Sadeleştir”i kullanın." : ""), "");
+    $("editTol").value = Math.round(Math.max(20, Math.min(1000, (30 * (n + d.kose)) / 800)));
+    const dereMsg =
+      d.kol === 0
+        ? "Haritada dere yok."
+        : d.patladi
+          ? `Dere ağı ${d.kol} ayrı kola bölündü (${d.kose} köşe) — her kol tek tek taşınıp silinebilir.`
+          : `Dere ağı ${d.kol} kol / ${d.kose} köşe — ayrı kollara bölmek için fazla kalabalık, ` +
+            `önce “Sadeleştir”e basın (kol sayısı ${DERE_PATLAT_LIMIT} altına inince bölünür).`;
+    setStatus(
+      "delinStatus",
+      "Düzenleme açık — köşeyi sürükleyerek taşıyın, ara noktaya " +
+        "tıklayarak yeni köşe ekleyin, köşeye sağ tıklayarak silin. Bitince “Uygula”ya basın." +
+        `\nHavza sınırında ${n} köşe var; imlece en yakın ${PM_SECENEK.limitMarkersToCount} tanesi gösteriliyor.` +
+        "\n" +
+        dereMsg +
+        (n + d.kose > 800
+          ? "\n⚠ DEM'den gelen geometri piksel merdiveni olduğu için çok köşeli: tek " +
+            "köşeyi oynatmak havza ölçeğinde neredeyse hiçbir şey değiştirmez. Önce “Sadeleştir”i kullanın."
+          : ""),
+      "",
+    );
   } else {
-    setDereCiz(false); setDereSil(false);
-    duzenlenebilirKatmanlar().forEach(l => { if (l.pm.enabled()) l.pm.disable(); });
-    btn.classList.remove("hidden"); ok.classList.add("hidden"); iptal.classList.add("hidden");
+    setDereCiz(false);
+    setDereSil(false);
+    duzenlenebilirKatmanlar().forEach((l) => {
+      if (l.pm.enabled()) l.pm.disable();
+    });
+    btn.classList.remove("hidden");
+    ok.classList.add("hidden");
+    iptal.classList.add("hidden");
     $("editTools").classList.add("hidden");
     $("editInfo").textContent = "";
   }
@@ -207,14 +250,15 @@ $("btnEditSimplify").onclick = () => {
   const { once, sonra } = sadelestirGeometri(m);
   // sadeleşme sonrası kol sayısı sınırın altına inmiş olabilir → tekrar dene
   const d = derePatlat();
-  if (d.patladi) duzenlenebilirKatmanlar().forEach(l => {
-    if (!l.pm.enabled()) l.pm.enable(PM_SECENEK);
-    if (dereSilModu) l.on("click", dereSilTikla);
-  });
+  if (d.patladi)
+    duzenlenebilirKatmanlar().forEach((l) => {
+      if (!l.pm.enabled()) l.pm.enable(PM_SECENEK);
+      if (dereSilModu) l.on("click", dereSilTikla);
+    });
   $("editInfo").textContent =
-    `${once} → ${sonra} köşe (${m} m tolerans), dere ${d.kol} kol`
-    + (d.patladi ? " (ayrı ayrı düzenlenebilir)" : "")
-    + ". Yetmezse toleransı artırıp tekrar basın.";
+    `${once} → ${sonra} köşe (${m} m tolerans), dere ${d.kol} kol` +
+    (d.patladi ? " (ayrı ayrı düzenlenebilir)" : "") +
+    ". Yetmezse toleransı artırıp tekrar basın.";
 };
 $("btnDereDraw").onclick = () => setDereCiz(!$("btnDereDraw").classList.contains("picking"));
 $("btnDereDel").onclick = () => setDereSil(!dereSilModu);
@@ -222,9 +266,12 @@ $("btnDereDel").onclick = () => setDereSil(!dereSilModu);
 function cancelGeomEdit() {
   setGeomEdit(false);
   if (editYedek) {
-    layers.havza.clearLayers(); layers.havza.addData(editYedek.havza);
-    layers.dere.clearLayers(); if (editYedek.dere) layers.dere.addData(editYedek.dere);
-    layers.kanal.clearLayers(); if (editYedek.kanal) layers.kanal.addData(editYedek.kanal);
+    layers.havza.clearLayers();
+    layers.havza.addData(editYedek.havza);
+    layers.dere.clearLayers();
+    if (editYedek.dere) layers.dere.addData(editYedek.dere);
+    layers.kanal.clearLayers();
+    if (editYedek.kanal) layers.kanal.addData(editYedek.kanal);
     S.havza = editYedek.sHavza;
     editYedek = null;
   }
@@ -235,8 +282,11 @@ async function applyGeomEdit() {
   const havza = katmanGeojson(layers.havza);
   if (!havza) return setStatus("delinStatus", "Havza sınırı boş", "err");
   setGeomEdit(false);
-  setStatus("delinStatus", "Düzenlenen geometriden parametreler yeniden üretiliyor… "
-    + "(DEM okunuyor, büyük havzada 1–3 dakika sürebilir)", "loading");
+  setStatus(
+    "delinStatus",
+    "Düzenlenen geometriden parametreler yeniden üretiliyor… " + "(DEM okunuyor, büyük havzada 1–3 dakika sürebilir)",
+    "loading",
+  );
   try {
     const r = await api("/api/basin-from-geometry", {
       havza_geojson: havza,
@@ -246,19 +296,30 @@ async function applyGeomEdit() {
     });
     applyBasinResult(r, "Düzenlenen havza uygulandı.");
     // geometri değişti → önceki hesap ve alana bağlı adımlar bayat
-    S.sonuc = null; S.girdi = null;
+    S.sonuc = null;
+    S.girdi = null;
     if ($("results")) $("results").innerHTML = "";
     if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
     $("hesapDock")?.classList.add("hidden");
     setStatus("compStatus", "", "");
     updateComputeReady();
     editYedek = null;
-    setStatus("delinStatus", $("delinStatus").textContent
-      + "\n⚠ Alan değiştiği için CN (Adım 2) ve Yağış (Adım 3) yeniden çalıştırılmalı, "
-      + "sonra tekrar hesaplayın.", "err");
+    setStatus(
+      "delinStatus",
+      $("delinStatus").textContent +
+        "\n⚠ Alan değiştiği için CN (Adım 2) ve Yağış (Adım 3) yeniden çalıştırılmalı, " +
+        "sonra tekrar hesaplayın.",
+      "err",
+    );
   } catch (e) {
-    setStatus("delinStatus", "Hata: " + e.message + "\nGeometri haritada duruyor; "
-      + "düzeltip tekrar deneyebilir veya “Vazgeç” ile geri alabilirsiniz.", "err");
+    setStatus(
+      "delinStatus",
+      "Hata: " +
+        e.message +
+        "\nGeometri haritada duruyor; " +
+        "düzeltip tekrar deneyebilir veya “Vazgeç” ile geri alabilirsiniz.",
+      "err",
+    );
     $("btnEditApply").classList.remove("hidden");
     $("btnEditCancel").classList.remove("hidden");
     $("btnEditGeom").classList.add("hidden");

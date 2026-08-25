@@ -4,14 +4,20 @@ import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 
 export function renderKotlar() {
-  const g = $("kotlar"); g.innerHTML = "";
+  const g = $("kotlar");
+  g.innerHTML = "";
   for (let i = 0; i < 11; i++) {
     const lab = document.createElement("label");
     lab.innerHTML = `H${i}${i === 0 ? " (outlet)" : i === 10 ? " (memba)" : ""}`;
     const inp = document.createElement("input");
-    inp.type = "number"; inp.step = "0.1"; inp.value = S.kotlar[i];
-    inp.oninput = () => { S.kotlar[i] = +inp.value; };
-    lab.appendChild(inp); g.appendChild(lab);
+    inp.type = "number";
+    inp.step = "0.1";
+    inp.value = S.kotlar[i];
+    inp.oninput = () => {
+      S.kotlar[i] = +inp.value;
+    };
+    lab.appendChild(inp);
+    g.appendChild(lab);
   }
 }
 renderKotlar();
@@ -20,27 +26,30 @@ $("btnCN").onclick = async () => {
   setStatus("cnStatus", "CORINE kesiliyor…", "loading");
   try {
     const r = await api("/api/cn", { havza_geojson: S.havza, zemin_grubu: $("inpSoil").value });
-    $("inpCN2").value = r.CN2; $("inpCN3").value = r.CN3;
+    $("inpCN2").value = r.CN2;
+    $("inpCN3").value = r.CN3;
     S.cnSonuc = r;
     renderCnSonuc(r);
     setStatus("cnStatus", `Ağırlıklı CN(II)=${r.CN2}  CN(III)=${r.CN3}\nVeri kaynağı: ${r.kaynak}`, "ok");
     markDone(2);
-  } catch (e) { setStatus("cnStatus", "Hata: " + e.message, "err"); }
+  } catch (e) {
+    setStatus("cnStatus", "Hata: " + e.message, "err");
+  }
 };
 export function renderCnSonuc(r) {
-  let h = `<table class="tbl"><tr><th></th><th>Kod</th><th>Sınıf</th><th>Oran</th>`
-    + `<th>CN</th><th>C</th><th>C aralığı</th></tr>`;
-  r.dokum.forEach(d => {
+  let h =
+    `<table class="tbl"><tr><th></th><th>Kod</th><th>Sınıf</th><th>Oran</th>` +
+    `<th>CN</th><th>C</th><th>C aralığı</th></tr>`;
+  r.dokum.forEach((d) => {
     const kutu = d.c_renk
       ? `<span style="display:inline-block;width:11px;height:11px;border:1px solid #b5b0a8;background:${d.c_renk}"></span>`
       : "";
-    const cOrt = d.c_ort == null ? "—"
-      : `<b>${d.c_ort.toFixed(2)}</b>${d.c_tablo ? "" : " *"}`;
-    const aralik = d.c_min == null ? "—"
-      : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}`;
-    h += `<tr><td>${kutu}</td><td>${d.kod}</td><td>${d.ad}</td>`
-      + `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td>`
-      + `<td>${cOrt}</td><td>${aralik}</td></tr>`;
+    const cOrt = d.c_ort == null ? "—" : `<b>${d.c_ort.toFixed(2)}</b>${d.c_tablo ? "" : " *"}`;
+    const aralik = d.c_min == null ? "—" : `${d.c_min.toFixed(2)}–${d.c_max.toFixed(2)}`;
+    h +=
+      `<tr><td>${kutu}</td><td>${d.kod}</td><td>${d.ad}</td>` +
+      `<td>${(d.oran * 100).toFixed(1)}%</td><td>${d.cn}</td>` +
+      `<td>${cOrt}</td><td>${aralik}</td></tr>`;
   });
   h += `</table>`;
   $("cnTable").innerHTML = h;
@@ -60,9 +69,11 @@ export function renderRasyonelC(r) {
       : RASYONEL_C_HINT;
     return;
   }
-  const turetilmis = c.turetilmis_orani > 0
-    ? `<div class="small">* Alanın %${(c.turetilmis_orani * 100).toFixed(1)}'i eşleştirme
-         matrisinde yer almayan CORINE sınıfı; en yakın sınıftan türetildi.</div>` : "";
+  const turetilmis =
+    c.turetilmis_orani > 0
+      ? `<div class="small">* Alanın %${(c.turetilmis_orani * 100).toFixed(1)}'i eşleştirme
+         matrisinde yer almayan CORINE sınıfı; en yakın sınıftan türetildi.</div>`
+      : "";
   el.innerHTML = `<div style="margin-top:6px;padding:6px;border:1px solid #d8d3cc;border-radius:4px">
     <b>Rasyonel yöntem akış katsayısı C</b> <span class="small">(CORINE'den alansal ağırlıklı)</span>
     <div style="margin:3px 0">alt <b>${c.C_min.toFixed(3)}</b> ·
@@ -80,7 +91,7 @@ export function renderRasyonelC(r) {
       C<sub>T</sub>=C100·(T/100)<sup>üs</sup> ile ölçeklenir. Değeri mühendislik kararınızla gözden geçirin.</div>
   </div>`;
   // kaydedilmiş tercih geri gelir; programatik atama change tetiklemez → yazma yok
-  $("cSecim").value = (S.cSecim && c[S.cSecim] != null) ? S.cSecim : "C_orta";
+  $("cSecim").value = S.cSecim && c[S.cSecim] != null ? S.cSecim : "C_orta";
   $("cSecim").onchange = () => {
     const anahtar = $("cSecim").value;
     const deger = c[anahtar];
@@ -105,12 +116,15 @@ export async function zeminGrubunuBelirle() {
     }
     S.zemin = r;
     $("inpSoil").value = r.grup;
-    const d = Object.entries(r.dagilim).filter(([, v]) => v > 0)
-      .map(([k, v]) => `${k}=%${v}`).join(" · ");
-    el.innerHTML = `🌍 Otomatik: <b>${r.grup}</b> (havzanın %${r.pay_yuzde}'si) — ${d}`
-      + `<br><span class="small">${r.yontem}; Ksat ${r.ksat_araligi_mm_sa} mm/sa`
-      + (r.kararsiz ? ` · <span class="warn">⚠ baskın grup zayıf, havza karışık — elle kontrol edin</span>` : "")
-      + `<br>⚠ ${r.uyari}</span>`;
+    const d = Object.entries(r.dagilim)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k}=%${v}`)
+      .join(" · ");
+    el.innerHTML =
+      `🌍 Otomatik: <b>${r.grup}</b> (havzanın %${r.pay_yuzde}'si) — ${d}` +
+      `<br><span class="small">${r.yontem}; Ksat ${r.ksat_araligi_mm_sa} mm/sa` +
+      (r.kararsiz ? ` · <span class="warn">⚠ baskın grup zayıf, havza karışık — elle kontrol edin</span>` : "") +
+      `<br>⚠ ${r.uyari}</span>`;
   } catch (e) {
     // Sessizce varsayılana düşmek, bu parametrede kabul edilemez: hangi grubun
     // kullanıldığı ve topraktan mı geldiği her hâlde yazılmalı.
@@ -118,5 +132,3 @@ export async function zeminGrubunuBelirle() {
       listede <b>${$("inpSoil").value}</b> duruyor (varsayılan, ölçümden gelmiyor). Elle kontrol edin.</span>`;
   }
 }
-
-
