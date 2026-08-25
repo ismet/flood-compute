@@ -200,7 +200,9 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 ## 9. Progress Log
 ```
 (append per gate: [date] stage N OK — commit <sha> — notes/deviations)
-[2026-08-25] stage 0 OK — <sha> — middleware verified: js/css no-cache, md/tiles untouched, / 200
+[2026-08-25] stage 0 OK — 6fdddaf — middleware verified: js/css no-cache, md/tiles untouched, / 200
+[2026-08-25] stage 0b OK — (no commit) — baseline captured .migration/run-0/*.json + baseline.json (5 files, A=14.14 km² L=6.25 Lc=2.83 CN=82/92)
+[2026-08-25] stage 0.5 OK — b9576e3 — vendor self-host: leaflet 1.9.4 + geoman 2.17.0 + chartjs 4.4.3 + images, SRI + crossorigin, offline-check via curl no-cache
 ```
 
 ## 10. Standing Protocols
