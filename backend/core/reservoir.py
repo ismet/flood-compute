@@ -280,15 +280,42 @@ def route(inflow, dt_hr, kret, vol_satih, rating):
 
     Ipk = max(I) if I else 0.0
     Opk = max(cikis) if cikis else 0.0
+
+    # --- uyarı: çok büyük hazne küçük taşkını tamamen yutar ---
+    uyari = None
+    kmin, kmax = kot[0], kot[-1]
+    if not (kmin - 1e-6 <= kret <= kmax + 1e-6):
+        uyari = (
+            f"Kret kotu {kret:g} m, hacim tablosu aralığı "
+            f"[{kmin:g}, {kmax:g}] m dışında — çıkış 0 çıkabilir. "
+            f"Kret kotunu hacim tablosuyla aynı düşeyde girin."
+        )
+    elif Opk < 1e-9 and Ipk > 1e-9:
+        maks_He_tmp = (max(su_kotu) - kret) if su_kotu else 0.0
+        uyari = (
+            f"Su kotu kret kotunu yeterince aşmadı (maks He {maks_He_tmp:.4f} m); "
+            "dolu savaktan akış yok, çıkış 0. Hazne giriş taşkınını tümüyle "
+            "depoluyor olabilir (hacim tablosu çok büyük)."
+        )
+
+    # gecikme ve çıkış pik saati yalnızca anlamlı çıkış varsa
+    if I and cikis and Opk > 1e-9:
+        gecikme = (cikis.index(Opk) - I.index(Ipk)) * dt_hr
+        cikis_pik_saat = cikis.index(Opk) * dt_hr
+    else:
+        gecikme = None
+        cikis_pik_saat = None
+
     ozet = {
         "giris_pik": Ipk,
         "cikis_pik": Opk,
         "pik_sonumleme": (1 - Opk / Ipk) if Ipk else None,
         "giris_pik_saat": (I.index(Ipk) * dt_hr) if I else None,
-        "cikis_pik_saat": (cikis.index(Opk) * dt_hr) if cikis else None,
+        "cikis_pik_saat": cikis_pik_saat,
         "maks_su_kotu": max(su_kotu) if su_kotu else None,
         "maks_He": (max(su_kotu) - kret) if su_kotu else None,
-        "gecikme_saat": ((cikis.index(Opk) - I.index(Ipk)) * dt_hr) if I and cikis else None,
+        "gecikme_saat": gecikme,
+        "girdi_uyarisi": uyari,
     }
     return {
         "t": [i * dt_hr for i in range(len(I))],

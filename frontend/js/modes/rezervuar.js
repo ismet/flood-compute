@@ -370,6 +370,8 @@ function renderReservoir() {
   } else {
     h += `<tr><td>Pik gecikmesi</td><td>${fmt(o.gecikme_saat, 0)} sa</td></tr>
     <tr><td>Maks su kotu</td><td><b>${fmt(o.maks_su_kotu, 2)}</b> m (kret+${fmt(o.maks_He, 2)} m)</td></tr>`;
+    if (o.girdi_uyarisi)
+      h += `<tr><td colspan="2" class="small err">⚠ ${_esc(o.girdi_uyarisi)}</td></tr>`;
     if (r.dolusavak_C && r.dolusavak_C.length) {
       // maks He'ye en yakın türetilen C (fiili tepe koşulu)
       const cAtPeak = r.dolusavak_C.reduce((a, b) => (Math.abs(b[0] - o.maks_He) < Math.abs(a[0] - o.maks_He) ? b : a));
