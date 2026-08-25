@@ -153,15 +153,11 @@ backend/core/      - Computation engine (no framework dependency)
                      points match by coordinate (prefer ≥25-yr record inside the
                      radius over a nearer short one - Lüleburgaz has 10-yr at
                      5.7 km, 74-yr at 6.3).
-frontend/           - 3 files: index.html, app.js (all state in `S` singleton), style.css
+frontend/           - ESM native (no build): `app.js` (composition root — `setMode`/`activateStep`/`clearSingleBasin`/`overlay-Esc`/`?debug` seam) + `js/{core,ui,map,wizard,modes}`, `vendor/` self-hosted (Leaflet 1.9.4/Geoman 2.17.0/Chart.js 4.4.3 SRI); full map & layer contract (`map/wizard/modes → ui → core`, static DAG) in `frontend/MIGRATION.md` §3
 ```
 
-- **`S` singleton** (`frontend/app.js:4`) tracks all app state - no React/Vue.
-  `S.dplvAuto`/`S.dplvManual` hold auto-selected nearest PLV (havza centroid).
-  `S` keys: `{outlet, havza, kotlar[11], istasyonlar, thiessen, yagis, dplvList, sonuc, dplvManual, dplvAuto}` - see `frontend/app.js:4-8`.
-  Public `/static/`; `index.html` at `/` with `Cache-Control: no-cache` - see `backend/main.py:1491` for `/` and `backend/main.py:1263,1367` for `/static`.
-  Leaflet + Geoman + Chart.js from CDNs.
-  Static assets are cache-busted by hand via `?v=NN` in index.html (`style.css?v=`, `app.js?v=`) - bump it when editing them.
+- **`S` singleton** (`frontend/js/core/state.js`) — global app state, no framework; slices owned per `frontend/MIGRATION.md` §3.1 (e.g. havza→outlet/havza/kotlar/dere/kanal, thiessen→istasyonlar/thiessen, rain→P24w/OETw, cn→CN, dplv→dplvValues, hesap→sonuc/girdi; `Object.assign(S,…)` only on project restore). Self-wiring modules (listeners at import); `_esc()` mandatory for interpolations; status ids (`delinStatus` etc.) are **SHARED** channels — panels/tables owned, statuses not. Debug seam `?debug=1` gates `window.__fh={map,S,layers}` (no globals otherwise). `index.html` `/` + `/static/*.{js,css}` served `no-cache` (`backend/main.py:1484,1496`); vendor same. No `?v=` stamping.
+- **Rejected decisions:** TS/framework builds (no build D-01) · CSP (deferred) · hashed assets (no-cache D-03) · state library (S singleton sufficient) · event delegation (self-wiring §3.1).
 - Frontend table/UH data lives in `data/` JSON: `data/tables/*.json` (16 Excel-extracted lookup tables; do NOT edit by hand, regenerate with `tools/extract_tables.py`)
 
 ## Data
