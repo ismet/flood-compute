@@ -20,6 +20,24 @@ import { renderRainTable } from "../wizard/rain.js";
 import { loadDplv, renderDplvGrid, updatePlvAutoInfo } from "../wizard/dplv.js";
 import { updateComputeReady } from "../wizard/steps.js";
 
+const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili"];
+function setReplacer(k, v) {
+  return v instanceof Set ? { __set: [...v] } : v;
+}
+function setReviver(k, v) {
+  if (v && typeof v === "object" && Array.isArray(v.__set) && SET_KEYS.includes(k)) return new Set(v.__set);
+  return v;
+}
+function reviveSets(obj) {
+  SET_KEYS.forEach((k) => {
+    const v = obj[k];
+    if (v instanceof Set) return;
+    if (v && typeof v === "object" && Array.isArray(v.__set)) obj[k] = new Set(v.__set);
+    else if (Array.isArray(v)) obj[k] = new Set(v);
+    else if (v && typeof v === "object" && Object.keys(v).length === 0) obj[k] = new Set();
+  });
+}
+
 $("btnDelete").onclick = async () => {
   const ad = ($("projList").value || $("projName").value).trim();
   if (!ad) return alert("Silinecek projeyi listeden seçin veya adını girin");
@@ -65,7 +83,14 @@ $("btnSave").onclick = async () => {
   // geri başvurduğu için JSON.stringify "circular structure" ile patlar. Raster
   // altlıklar zaten sunucuda duruyor ve açılışta /api/raster-layers ile geliyor.
   const durumS = { ...S, sonuc: null, infoLayers: [], rasterLayers: [] };
-  await api("/api/project/save", { ad, durum: { S: durumS, fields } });
+  const body = JSON.stringify({ ad, durum: { S: durumS, fields } }, setReplacer);
+  const r = await fetch("/api/project/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+  const j = await r.json();
+  if (!r.ok || j.hata) throw new Error(j.hata || r.statusText);
   loadProjects();
   alert("Kaydedildi");
 };
@@ -77,11 +102,21 @@ async function loadProjects() {
 $("projList").onchange = async () => {
   const ad = $("projList").value;
   if (!ad) return;
-  const d = await api("/api/project/load/" + encodeURIComponent(ad));
+  const resp = await fetch("/api/project/load/" + encodeURIComponent(ad));
+  const text = await resp.text();
+  if (!resp.ok) {
+    let msg = resp.statusText;
+    try {
+      msg = JSON.parse(text).hata || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  const d = JSON.parse(text, setReviver);
   // haritada duran canlı katman nesneleri kayda girmez; yüklemede korunmalı
   const infoY = S.infoLayers,
     rasterY = S.rasterLayers;
   Object.assign(S, d.S);
+  reviveSets(S);
   S.infoLayers = infoY;
   S.rasterLayers = rasterY;
   Object.entries(d.fields).forEach(([id, v]) => {
