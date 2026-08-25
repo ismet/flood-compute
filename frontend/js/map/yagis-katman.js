@@ -118,7 +118,7 @@ $("btnYagisHavza").onclick = async () => {
    yapılmaz, yoksa kullanıcı outlet seçerken karşısına balon çıkardı.        */
 map.on("click", async (ev) => {
   if (!$("yagisAc").checked || !yagisBilgi || !yagisBilgi.var) return;
-  if ($("btnPick")?.classList.contains("picking") || S.stPlace || (S.multi && S.multi.place)) return;
+  if ($("btnPick")?.classList.contains("picking") || (S.multi && S.multi.place)) return;
   if (S.mode && S.mode !== "wizard") return;
 
   const { lat, lng } = ev.latlng;

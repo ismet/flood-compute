@@ -215,7 +215,8 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 10 OK — d79bac9 — jsdoc contracts: AppState typedef + per-module headers + payload typedefs (compute/thiessen/tfa), docs-only, eslint+vitest green
 [2026-08-25] stage 11 OK — 95d99df — xss escaping: _esc() on all innerHTML/bindTooltip/Popup string interpolations (~96 sites), probe <img onerror> inert, 39 tests green, eslint green
 [2026-08-25] stage 12 OK — 72d61e3 — css tokens: :root Turkish tokens (--vurgu:#0d5c63; --kenar:#cbc7c0; --hata:#c73e3a; --uyari:#fce5b0; …) 33 tokens, literals replaced via var(), visual unchanged
-[2026-08-25] stage 13 OK — <pending> — set serialization fix: save replacer {__set:[...]}, load reviver for [agiBolgesel,stExclude,suSecili], E2E round-trip intact, 41 tests green
+[2026-08-25] stage 13 OK — 1ee7c50 — set serialization fix: save replacer {__set:[...]}, load reviver for [agiBolgesel,stExclude,suSecili], E2E round-trip intact, 41 tests green
+[2026-08-25] stage 14 OK — <pending> — dead-code removal: S.stPlace chain (reads 121/182/191, writes false-only, never true) + handlers removed, 0 orphans, eslint+vitest green
 ```
 
 ## 10. Standing Protocols

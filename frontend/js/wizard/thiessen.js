@@ -6,7 +6,6 @@
  * Notes:
  *  - Allowed pull (§3.1): thiessen→rain (recolorThiessen, renderRainTable)
  *  - kurumColor module-local (constants admission ≥2 gerekir, burada tek tüketici)
- *  - stPlace dead-code (stage14) — §3.1 istisna: map/yagis-katman ve thiessen okur, yalnızca false yazılır.
  *  - Rank 2 (wizard).
  * @typedef {Object} ThiessenPayload
  * @property {Object} havza_geojson - Havza Polygon/MultiPolygon
@@ -178,22 +177,3 @@ if (_btnDef) _btnDef.onclick = useDefaultStations;
 $("inpMinW")?.addEventListener("change", () => {
   if (S.thiessen && S.thiessen.length) recomputeThiessen();
 });
-map.on("click", (ev) => {
-  if (!S.stPlace) return;
-  S.stPlace = false;
-  map.getContainer().style.cursor = "";
-  const ad = (prompt("İstasyon adı:", "Yeni İstasyon") || "").trim();
-  if (!ad) return setStatus("thStatus", "İptal edildi", "");
-  S.stExtra.push({ name: ad, lat: +ev.latlng.lat.toFixed(6), lon: +ev.latlng.lng.toFixed(6), kurum: "Elle" });
-  recomputeThiessen();
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && S.stPlace) {
-    S.stPlace = false;
-    map.getContainer().style.cursor = "";
-    setStatus("thStatus", "İptal edildi", "");
-  }
-});
-
-// stPlace dead-code flag (until stage 14) — keep S.stPlace initialization if not exists
-if (S.stPlace === undefined) S.stPlace = false;

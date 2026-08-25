@@ -38,7 +38,6 @@
  * @property {Object} mgmByNorm - mgmNorm→station
  * @property {Object|null} mgmDb - /api/mgm-bilgi
  * @property {string|null} mode - wizard|multi|dilekce|su
- * @property {boolean} stPlace - Dead-code bayrağı (stage14'te silinecek) — haritaya elle istasyon koyma
  * @property {Array|null} stBase - Temel istasyon kümesi
  * @property {Set<string>} stExclude - Çıkarılan istasyon anahtarları
  * @property {Array} stExtra - Elle eklenen istasyonlar

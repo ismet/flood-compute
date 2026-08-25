@@ -1,10 +1,10 @@
 /**
  * @fileoverview Composition root — setMode/activateStep/clearSingleBasin/overlay-Escape/?debug seam.
  * @module app
- * Owns: S.mode, S.stPlace (dead — stage14), overlay Esc sırası, havza click handler kaydı
+ * Owns: S.mode, overlay Esc sırası, havza click handler kaydı
  * Exports: — (entry; activateStep/setMode/clearSingleBasin module-local)
  * Notes:
- *  - §3.1 root owns stPlace ve mode; havza→outlet/havza/kotlar/dere/kanal sahipliği wizard/havza'da.
+ *  - §3.1 root owns mode; havza→outlet/havza/kotlar/dere/kanal sahipliği wizard/havza'da.
  *  - Debug seam: ?debug=1 → window.__fh={map,S,layers} (kalıcı, belgeli).
  *  - Thin root — 155 satır hedef, iş mantığı içermez.
  */
@@ -123,7 +123,6 @@ function clearSingleBasin() {
   S.stBase = null;
   S.stExclude = new Set();
   S.stExtra = [];
-  S.stPlace = false;
   S.rainValues = {};
   S.P24w = null;
   S.OETw = null;
