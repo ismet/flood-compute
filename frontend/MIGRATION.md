@@ -213,7 +213,8 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 8 OK — d346152 — toolchain + unit tests (eslint 10.9.1/@eslint/js 10.0.1/eslint-config-prettier 10.1.8/prettier 3.9.6/vitest 4.1.11, flat browser globals+js.recommended+prettier, prettier printWidth:120, vitest node+setupFiles DOM stub, co-located *.test.js, 9 units 35 tests green, exports dpSadelestir/logInterp/lin1/yaldFromArea, lint fixes yagis-katman/cn/rain/havza, orphan exempt *.test.js)
 [2026-08-25] stage 9 OK — 6d43927 — prettier --write frontend/js + app.js, whitespace-only, eslint+vitest green
 [2026-08-25] stage 10 OK — d79bac9 — jsdoc contracts: AppState typedef + per-module headers + payload typedefs (compute/thiessen/tfa), docs-only, eslint+vitest green
-[2026-08-25] stage 11 OK — <pending> — xss escaping: _esc() on all innerHTML/bindTooltip/Popup string interpolations (~96 sites), probe <img onerror> inert, 39 tests green, eslint green
+[2026-08-25] stage 11 OK — 95d99df — xss escaping: _esc() on all innerHTML/bindTooltip/Popup string interpolations (~96 sites), probe <img onerror> inert, 39 tests green, eslint green
+[2026-08-25] stage 12 OK — <pending> — css tokens: :root Turkish tokens (--vurgu:#0d5c63; --kenar:#cbc7c0; --hata:#c73e3a; --uyari:#fce5b0; …) 33 tokens, literals replaced via var(), visual unchanged
 ```
 
 ## 10. Standing Protocols
