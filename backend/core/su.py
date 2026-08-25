@@ -2,8 +2,8 @@
 """Su potansiyeli / su temini — AGİ günlük akım serilerinden.
 
 Veri `data/su/su.sqlite` içinde durur ve `tools/su_veritabani_olustur.py` ile
-`Data.db`'den bir kez üretilir (2909 istasyon, 1934-2015, 8,9 milyon günlük
-kayıt). Seri istasyon başına tek sıkıştırılmış float32 dizisi olarak saklanır;
+`Data.db`'den bir kez üretilir (2909 istasyon, 1934-2015, 8,3 milyon ölçülü
+gün kaydı). Seri istasyon başına tek sıkıştırılmış float32 dizisi olarak saklanır;
 eksik günler NaN'dır.
 
 Taşkın tarafından farklı olarak burada pik değil HACİM önemlidir: ortalama

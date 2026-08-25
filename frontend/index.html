@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <title>Taşkın Hesap — Sentetik Yöntemler</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
-<link rel="stylesheet" href="/static/style.css?v=60">
+<!-- satır-içi SVG favicon: /favicon.ico isteği hiç çıkmaz (404 gürültüsü biter) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMwZDVjNjMiLz48cGF0aCBkPSJNOCA0MWM1LjMtNiAxMC43LTYgMTYgMHMxMC43IDYgMTYgMCAxMC43LTYgMTYgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+<link rel="stylesheet" href="/static/vendor/geoman/leaflet-geoman.css" integrity="sha384-nfYqa/3Xh7kCl9/bO8fCcmqGuhuVWAle+CQgdE/LdgaQiO6fSkKh8C0fLdCVrrQJ" crossorigin="anonymous">
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div id="app">
@@ -438,6 +440,10 @@
     </div>
     <div id="rainDock" class="hidden">
       <div id="rainGrid"></div>
+      <div class="rain-tools" style="margin-top:4px">
+        <label class="inline" title="Boş bırakılırsa ağırlıklı OET kullanılır; dolu ise elle değer hesaba girer.">OET (elle) <input id="inpOetElle" type="number" step="0.01" placeholder="boş = ağırlıklı" style="width:140px"></label>
+        <span id="oetKaynakInfo" class="small"></span>
+      </div>
       <div id="rainStatus" class="status"></div>
       <div class="dplv-head">
         <b>Yağış Zaman Dağılımı (DPLV)</b>
@@ -572,9 +578,9 @@
     </div>
   </main>
 </div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js?v=62"></script>
+<script src="/static/vendor/leaflet/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="/static/vendor/geoman/leaflet-geoman.min.js" integrity="sha384-7CTDkMmRSjHvjl8ftuwzLq/ogrEnsuNoi3825eH06KuMNWWwcfaNIHol5+I3EAzO" crossorigin="anonymous"></script>
+<script src="/static/vendor/chartjs/chart.umd.min.js" integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous"></script>
+<script type="module" src="/static/app.js"></script>
 </body>
 </html>

@@ -60,3 +60,9 @@ data/yagis/_onbellek_aylik.npz
 # ki elle oluşturulan kopya da tutulsun.
 /DMI-tümü/
 /DMİ-tümü/
+
+# Node devDependencies — depoya girmemeli (eslint/vitest/prettier)
+node_modules/
+
+# Lavish Editor inceleme yüzeyleri — yerel, geçici
+.lavish/

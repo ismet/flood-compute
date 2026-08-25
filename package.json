@@ -1,0 +1,21 @@
+{
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "vitest": "^4.1.11"
+  },
+  "scripts": {
+    "lint": "eslint frontend/js",
+    "lint:fix": "eslint frontend/js --fix",
+    "test": "vitest run",
+    "format": "prettier --write frontend/js frontend/app.js",
+    "format:check": "prettier --check frontend/js frontend/app.js"
+  },
+  "prettier": {
+    "printWidth": 120
+  }
+}
