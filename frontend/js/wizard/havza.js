@@ -2,12 +2,13 @@
  * @fileoverview Havza çıkarım akışı — pick/delineate/import/applyBasinResult/adayKanallar.
  * @module wizard/havza
  * Owns: S.outlet, S.havza, S.kotlar, S.dere, S.kanal, S.yzdBolge, S.sonuc/S.girdi resetleri, S.dplv* resetleri;
- *       layers.havza OWNER-CREATED (registry-bag)
- * Exports: importBasinFiles, applyBasinResult, renderAdayKanallar
+ *       layers.havza, layers.havzaAgi, layers.havzaMgm OWNER-CREATED (registry-bag)
+ * Exports: importBasinFiles, applyBasinResult, renderAdayKanallar, havzaYakinIstasyonlariGoster, havzaIstasyonlariniTemizle
  * Notes:
  *  - Allowed pull-imports (§3.1): havza→{cn,dplv,steps,hesap,yagis-katman}
  *    (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW,
  *    havzaOrtalamasiGoster — çıkarım bitince havza ortalaması kendiliğinden hesaplanır)
+ *  - Yakın istasyonlar: delineate/import sonrası AGİ (/api/agi-havza) ve MGM (/api/mgm) otomatik gösterilir (Frekans benzeri)
  *  - Observer publish: delineate sonrası _notifyHavzaChanged() (su dinler)
  *  - setOnHavzaClick(fn) ile kök onHavzaClick'i kaydeder.
  *  Rank 2 (wizard).
@@ -40,6 +41,94 @@ layers.havza = L.geoJSON(null, {
     layer.bindTooltip("🗑 Havzayı sil (tıkla) — parametre, yağış, hidrograf dahil", { sticky: true });
   },
 }).addTo(map);
+
+// Havza yakınındaki AGİ/MGM istasyonları (Frekans benzeri, salt görselleştirme)
+if (layers.havzaAgi) {
+  try {
+    map.removeLayer(layers.havzaAgi);
+  } catch (e) {}
+}
+layers.havzaAgi = L.layerGroup().addTo(map);
+if (layers.havzaMgm) {
+  try {
+    map.removeLayer(layers.havzaMgm);
+  } catch (e) {}
+}
+layers.havzaMgm = L.layerGroup().addTo(map);
+
+const havzaAgiRenk = (s) => (s.kurum === "EİE" ? "#6a1b9a" : "#e65100");
+const havzaMgmRenk = "#0288d1";
+
+export async function havzaYakinIstasyonlariGoster() {
+  if (!S.havza) return;
+  const geom = S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza;
+  layers.havzaAgi.clearLayers();
+  layers.havzaMgm.clearLayers();
+  try {
+    const agiP = api("/api/agi-havza", { geometri: geom, tampon_derece: 0.25, en_az_yil: 10, kurum: "" });
+    let mgmP = null;
+    try {
+      const b = layers.havza.getBounds();
+      const pad = 0.25;
+      const q = new URLSearchParams({
+        bati: String(b.getWest() - pad),
+        guney: String(b.getSouth() - pad),
+        dogu: String(b.getEast() + pad),
+        kuzey: String(b.getNorth() + pad),
+        en_az_yil: "10",
+      });
+      mgmP = api("/api/mgm?" + q.toString());
+    } catch (e) {
+      mgmP = Promise.resolve({ istasyonlar: [] });
+    }
+    const [agiR, mgmR] = await Promise.all([agiP, mgmP]);
+    (agiR.istasyonlar || []).forEach((s) => {
+      if (s.enlem == null || s.boylam == null) return;
+      const m = L.circleMarker([s.enlem, s.boylam], {
+        radius: 6,
+        color: havzaAgiRenk(s),
+        weight: 1.5,
+        fillColor: havzaAgiRenk(s),
+        fillOpacity: s.icinde === false ? 0.35 : 0.9,
+      });
+      m.bindTooltip(`${_esc(s.kod)} — ${_esc(s.ad || "")} (${s.yil_sayisi} yıl) — AGİ`, { sticky: true });
+      m.bindPopup(
+        `<b>${_esc(s.kod)}</b> — ${_esc(s.ad || "")}<br>${_esc(s.kurum || "")} · ${s.yil_sayisi} yıl (${s.ilk_yil}–${s.son_yil})` +
+          (s.yagis_alani ? `<br>Yağış alanı: ${s.yagis_alani} km²` : "") +
+          `<br><span class="small">Frekans sekmesinde analiz için seçin</span>`,
+      );
+      m.addTo(layers.havzaAgi);
+    });
+    (mgmR.istasyonlar || []).forEach((s) => {
+      const lat = s.enlem ?? s.lat;
+      const lon = s.boylam ?? s.lon;
+      if (lat == null || lon == null) return;
+      const m = L.circleMarker([lat, lon], {
+        radius: 6,
+        color: havzaMgmRenk,
+        weight: 1.5,
+        fillColor: havzaMgmRenk,
+        fillOpacity: 0.9,
+      });
+      m.bindTooltip(`${_esc(s.kod || s.no || "")} — ${_esc(s.ad || s.istasyon || "")} (${s.yil_sayisi || "?"} yıl) — MGM`, { sticky: true });
+      m.bindPopup(
+        `<b>${_esc(s.kod || s.no || "")}</b> — ${_esc(s.ad || s.istasyon || "")}<br>MGM · ${s.yil_sayisi || "?"} yıl` +
+          `<br><span class="small">Yağış sekmesinde Thiessen için kullanılır</span>`,
+      );
+      m.addTo(layers.havzaMgm);
+    });
+  } catch (e) {
+    // sessiz geç — istasyon yoksa veya ağ hatası
+  }
+}
+export function havzaIstasyonlariniTemizle() {
+  try {
+    layers.havzaAgi.clearLayers();
+  } catch (e) {}
+  try {
+    layers.havzaMgm.clearLayers();
+  } catch (e) {}
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const d = document.getElementById("inpDem"),
@@ -158,6 +247,7 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
   updateComputeReady();
   autoSelectPLV();
   havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
+  havzaYakinIstasyonlariGoster();
 }
 
 export function renderAdayKanallar(r) {
@@ -305,6 +395,7 @@ map.on("click", async (ev) => {
     updateComputeReady();
     autoSelectPLV();
     havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
+    havzaYakinIstasyonlariGoster();
     if (S.mode === "su") {
       try {
         _notifyHavzaChanged();
