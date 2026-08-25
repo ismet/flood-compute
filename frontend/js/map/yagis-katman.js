@@ -93,21 +93,11 @@ export async function havzaOrtalamasiGoster() {
           `<td style="text-align:right">${fmt(r[k].en_az_mm, 0)}–${fmt(r[k].en_cok_mm, 0)}</td>` +
           `<td style="text-align:right">±${fmt(r[k].std_mm, 0)}</td></tr>`
         : "";
-    const t = r.turetilmis;
     $("yagisInfo").innerHTML =
-      '<table class="tbl small"><tr><th>Havza alansal ortalaması</th>' +
+      '<table class="tbl small"><tr><th></th>' +
       "<th>mm/yıl</th><th>medyan</th><th>aralık</th><th>sapma</th></tr>" +
-      sat("yagis", "Yağış P") +
-      sat("pet", "PET") +
-      sat("net", "Net yağış (P−AET)") +
-      "</table>" +
-      (t
-        ? `<p class="small">Gerçek buharlaşma AET ≈ <b>${fmt(t.aet_mm, 0)}</b> mm/yıl · ` +
-          `akış katsayısı <b>${fmt(t.akis_katsayisi, 3)}</b>. ` +
-          "Net yağış uzun dönem ortalama akış yüksekliğidir; " +
-          "yakındaki bir AGİ'nin özgül verimiyle (Su Potansiyeli sekmesi) " +
-          "karşılaştırarak doğrulayın.</p>"
-        : "");
+      sat("yagis", "Yağış") +
+      "</table>";
   } catch (e) {
     $("yagisInfo").textContent = "Hesaplanamadı: " + e.message;
   }

@@ -165,7 +165,8 @@ label:has(> #riverFile),      /* Dere ağı (opsiyonel) dosya girişi */
 label:has(> #akarsuOlcek),    /* Ölçek — varsayılan: Otomatik */
 label:has(> #yagisKatman),    /* Katman — varsayılan: Yıllık Toplam Yağış */
 #btnYagisHavza,               /* Havza ortalaması — çıkarım bitince kendiliğinden hesaplanır */
-label:has(> #inpHedefAlan) {  /* Beklenen alan (km², ops.) */
+label:has(> #inpHedefAlan),   /* Beklenen alan (km², ops.) */
+#akarsuInfo {                 /* DSİ akarsu ölçek sayım/ipucu satırı */
   display: none !important;
 }
 .small-btn { padding: 3px 8px; font-size: 12px; background: var(--vurgu); color: var(--beyaz); border: none; border-radius: 5px; cursor: pointer; }
