@@ -167,9 +167,12 @@ label:has(> #akarsuOlcek),    /* Ölçek — varsayılan: Otomatik */
 label:has(> #yagisKatman),    /* Katman — varsayılan: Yıllık Toplam Yağış */
 #btnYagisHavza,               /* Havza ortalaması — çıkarım bitince kendiliğinden hesaplanır */
 label:has(> #inpHedefAlan),   /* Beklenen alan (km², ops.) */
+#btnRasterAdd,                /* Altlığı ekle — dosya seçilince otomatik yüklenir */
 #akarsuInfo {                 /* DSİ akarsu ölçek sayım/ipucu satırı */
   display: none !important;
 }
+#rasterFile { color: transparent; width: 95px; }
+#rasterFile::file-selector-button { color: var(--metin); }
 .info-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--kenar-hafif); color: var(--metin-orta); font-size: 11px; font-weight: 700; cursor: help; flex: none; }
 .small-btn { padding: 3px 8px; font-size: 12px; background: var(--vurgu); color: var(--beyaz); border: none; border-radius: 5px; cursor: pointer; }
 table.rain.st td:nth-child(2) { width: 130px; }

@@ -25,20 +25,20 @@ function renderRasterLayers() {
     return;
   }
   el.innerHTML =
-    `<b>Raster altlıklar:</b><br>` +
+    `<b>Raster altlıklar:</b>` +
+    `<table class="tbl small" style="margin-top:6px"><thead><tr><th>Dosya</th><th style="width:90px;text-align:center">Opaklık</th><th style="width:44px;text-align:center">Görünür</th><th style="width:60px"></th></tr></thead><tbody>` +
     S.rasterLayers
       .map(
         (k, i) =>
-          `<label class="inline" style="gap:4px">
-       <input type="checkbox" class="ras-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto">
-       🗺 ${_esc(k.meta.baslik || k.meta.ad)}
-       <input type="range" class="ras-op" data-i="${i}" min="10" max="100" value="${Math.round(k.saydam * 100)}"
-              title="Saydamlık" style="width:80px">
-       <button class="link-btn" data-zoom="${i}" title="Katmana git">⌖</button>
-       <button class="link-btn" data-del="${i}" title="Kaldır">✕</button>
-     </label>`,
+          `<tr>` +
+          `<td style="text-align:left;word-break:break-all" title="${_esc(k.meta.baslik || k.meta.ad)}">🗺 ${_esc(k.meta.baslik || k.meta.ad)}</td>` +
+          `<td style="text-align:center"><input type="range" class="ras-op" data-i="${i}" min="10" max="100" value="${Math.round(k.saydam * 100)}" title="Saydamlık" style="width:80px;vertical-align:middle"></td>` +
+          `<td style="text-align:center"><input type="checkbox" class="ras-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto;accent-color:var(--vurgu)"></td>` +
+          `<td style="text-align:center"><button class="link-btn" data-zoom="${i}" title="Katmana git">⌖</button> <button class="link-btn" data-del="${i}" title="Kaldır">✕</button></td>` +
+          `</tr>`,
       )
-      .join("<br>");
+      .join("") +
+    `</tbody></table>`;
   el.querySelectorAll(".ras-chk").forEach(
     (c) =>
       (c.onchange = () => {
@@ -117,58 +117,68 @@ let mrsidDurum = null;
 function sidUyar(dosyalar) {
   if (!mrsidDurum || mrsidDurum.mrsid) return false;
   if (!dosyalar.some((f) => /\.(sid|ecw)$/i.test(f.name))) return false;
-  setStatus(
-    "delinStatus",
-    mrsidDurum.sunucu
-      ? "Bu sunucu .sid (MrSID) okuyamıyor — sürücü tescilli olduğu için kurulamıyor. " +
+    setStatus(
+      "rasterStatus",
+      mrsidDurum.sunucu
+        ? "Bu sunucu .sid (MrSID) okuyamıyor — sürücü tescilli olduğu için kurulamıyor. " +
           "Dosyayı QGIS ile ya da “gdal_translate -of GTiff pafta.sid pafta.tif” " +
           "komutuyla GeoTIFF'e çevirip onu yükleyin (GeoTIFF doğrudan açılır)."
-      : "MrSID kod çözücüsü kurulu değil. OSGeo4W'den 'gdal-mrsid' eklentisini kurun " +
+        : "MrSID kod çözücüsü kurulu değil. OSGeo4W'den 'gdal-mrsid' eklentisini kurun " +
           "ya da dosyayı elle GeoTIFF'e çevirip yükleyin.",
-    "err",
-  );
+      "err",
+    );
   return true;
 }
 
-$("rasterFile").onchange = () => sidUyar(Array.from($("rasterFile").files || []));
-
-$("btnRasterAdd").onclick = async () => {
+async function rasterYukle() {
   const dosyalar = Array.from($("rasterFile").files || []);
-  if (!dosyalar.length) return setStatus("delinStatus", "Önce raster dosyasını seçin", "err");
-  if (sidUyar(dosyalar)) return; // boşuna yükleme yapma
-  const sid = dosyalar.some((f) => /\.sid$/i.test(f.name));
-  const worldVar = dosyalar.some((f) => /\.(sdw|tfw|wld|prj)$/i.test(f.name));
+  if (!dosyalar.length) return setStatus("rasterStatus", "Önce raster dosyasını seçin", "err");
+  // Tek dosya modu: yalnızca ilk dosya yüklenir (world dosyası CRS ile çözülür)
+  const tekDosya = dosyalar.slice(0, 1);
+  if (sidUyar(tekDosya)) {
+    $("rasterFile").value = "";
+    return;
+  }
+  const sid = tekDosya.some((f) => /\.sid$/i.test(f.name));
+  const worldVar = tekDosya.some((f) => /\.(sdw|tfw|wld|prj)$/i.test(f.name));
   if (sid && !worldVar && !$("rasterCrs").value.trim()) {
-    // .sid'lerde georeferans çoğu kez yalnız .sdw'dedir; uyar ama engelleme
     setStatus(
-      "delinStatus",
+      "rasterStatus",
       "Uyarı: .sid seçtiniz ama yanında .sdw/.tfw yok ve CRS " +
         "boş. Georeferans dosyanın içinde değilse altlık yanlış yere oturur.",
       "err",
     );
   }
   setStatus(
-    "delinStatus",
-    `${dosyalar.map((f) => "“" + _esc(f.name) + "”").join(", ")} yükleniyor…` +
+    "rasterStatus",
+    `${tekDosya.map((f) => "“" + _esc(f.name) + "”").join(", ")} yükleniyor…` +
       (sid ? " (.sid → GeoTIFF dönüşümü sürebilir)" : ""),
     "loading",
   );
   try {
     const fd = new FormData();
-    dosyalar.forEach((f) => fd.append("files", f));
+    tekDosya.forEach((f) => fd.append("files", f));
     const crs = $("rasterCrs").value.trim();
     const url = "/api/raster-add" + (crs ? `?crs=${encodeURIComponent(crs)}` : "");
     const meta = await api(url, fd, true);
     rasterKatmanEkle(meta);
     if (meta.sinir) map.fitBounds(meta.sinir, { padding: [20, 20] });
     setStatus(
-      "delinStatus",
+      "rasterStatus",
       `Altlık eklendi: ${meta.baslik || meta.ad} — ` +
         `${meta.genislik}×${meta.yukseklik} piksel, ${meta.bant} bant, ${meta.etkin_crs}.`,
       "ok",
     );
     $("rasterFile").value = "";
   } catch (e) {
-    setStatus("delinStatus", "Altlık eklenemedi: " + e.message, "err");
+    setStatus("rasterStatus", "Altlık eklenemedi: " + e.message, "err");
   }
+}
+$("rasterFile").onchange = () => {
+  if (sidUyar(Array.from($("rasterFile").files || []))) {
+    $("rasterFile").value = "";
+    return;
+  }
+  rasterYukle();
 };
+$("btnRasterAdd").onclick = rasterYukle;
