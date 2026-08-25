@@ -1,5 +1,5 @@
 import { S } from "../core/state.js";
-import { $, setStatus } from "../ui/dom.js";
+import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { _esc, mgmNorm } from "../core/format.js";
 

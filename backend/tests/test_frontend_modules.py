@@ -248,8 +248,8 @@ while q:
         if v not in visited:
             q.append(v)
 
-# Discovered for orphan = all js/**/*.js (excluding legacy if empty)
-discovered = set(rel_posix(p) for p in JS_DIR.rglob("*.js"))
+# Discovered for orphan = all js/**/*.js (excluding legacy if empty, and co-located vitest *.test.js)
+discovered = set(rel_posix(p) for p in JS_DIR.rglob("*.js") if not p.name.endswith(".test.js"))
 # legacy special case
 legacy_rel = "frontend/js/legacy.js"
 if legacy_rel in discovered:

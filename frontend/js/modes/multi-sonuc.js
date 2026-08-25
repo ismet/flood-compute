@@ -1,7 +1,6 @@
 import { S } from "../core/state.js";
-import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";
-import { $, setStatus, download } from "../ui/dom.js";
+import { $, download } from "../ui/dom.js";
 import { M_LABEL } from "../core/constants.js";
 import { cmpInterp } from "../wizard/grafik.js";
 
@@ -107,7 +106,7 @@ function openParams() {
     <tr><th>Havza</th>` + Array.from({ length: 10 }, (_, i) => `<th>H${i}–H${i + 1}</th>`).join("") + `</tr>`;
   taniLar.forEach(x => {
     if (!x.t) { h += `<tr><td>${x.ad}</td><td colspan="10">—</td></tr>`; return; }
-    h += `<tr><td>${x.ad}</td>` + x.t.paylar.map((p, i) =>
+    h += `<tr><td>${x.ad}</td>` + x.t.paylar.map((p) =>
       `<td${p > 0.35 ? ' class="max"' : ""}>%${(p * 100).toFixed(0)}</td>`).join("") + `</tr>`;
   });
   h += `</table><div class="small">Bir segmentin payı %35'i aşıyorsa (sarı) eğimi —dolayısıyla
@@ -298,7 +297,6 @@ $("btnCloseMcmp").onclick = () => $("mcmpWrap").classList.add("hidden");
 
 function mcmpRpOptions() {
   // bileşen/hidro sekmesinde yöntemde mevcut tekerrürler
-  const y = S.multiSonuc.rt.yontemler[mcmpState.method];
   const rps = MRP.filter(rp => (S.multiSonuc.rt.yontemler[mcmpState.method]?.hidrograflar || {})[rp]);
   return (mcmpState.tab === "pik") ? MRP : (rps.length ? rps : MRP);
 }

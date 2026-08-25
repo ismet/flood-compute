@@ -1,0 +1,56 @@
+import js from "@eslint/js";
+import prettier from "eslint-config-prettier";
+
+export default [
+  {
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        window: "readonly",
+        document: "readonly",
+        navigator: "readonly",
+        location: "readonly",
+        history: "readonly",
+        fetch: "readonly",
+        console: "readonly",
+        alert: "readonly",
+        confirm: "readonly",
+        prompt: "readonly",
+        URL: "readonly",
+        Blob: "readonly",
+        File: "readonly",
+        FileReader: "readonly",
+        FormData: "readonly",
+        URLSearchParams: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        requestAnimationFrame: "readonly",
+        cancelAnimationFrame: "readonly",
+        HTMLElement: "readonly",
+        HTMLInputElement: "readonly",
+        Element: "readonly",
+        Event: "readonly",
+        CustomEvent: "readonly",
+        DOMParser: "readonly",
+        XMLSerializer: "readonly",
+        Map: "readonly",
+        Set: "readonly",
+        Promise: "readonly",
+        L: "readonly",
+        Chart: "readonly",
+      },
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: "error",
+    },
+    rules: {
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],
+    },
+  },
+  js.configs.recommended,
+  prettier,
+];

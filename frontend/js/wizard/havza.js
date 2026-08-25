@@ -1,10 +1,11 @@
 import { S, _notifyHavzaChanged } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { map, layers, setOnHavzaClick, getOnHavzaClick } from "../map/init.js";
+import { map, layers, getOnHavzaClick } from "../map/init.js";
 import { renderKotlar, zeminGrubunuBelirle } from "./cn.js";
 import { autoSelectPLV } from "./dplv.js";
 import { markDone, updateComputeReady } from "./steps.js";
+import { updateSnyderW } from "./hesap.js";
 
 // layers.havza OWNER-CREATED (registry-bag)
 if (layers.havza) { try { map.removeLayer(layers.havza); } catch(e) {} }
@@ -14,7 +15,6 @@ layers.havza = L.geoJSON(null, {
     layer.on("click", () => {
       const fn = (typeof getOnHavzaClick === "function" ? getOnHavzaClick() : null);
       if (fn) fn();
-      else if (typeof onHavzaClick === "function") onHavzaClick();
     });
     layer.bindTooltip("🗑 Havzayı sil (tıkla) — parametre, yağış, hidrograf dahil", { sticky: true });
   },

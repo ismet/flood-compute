@@ -1,6 +1,6 @@
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
-import { $, setStatus } from "../ui/dom.js";
+import { $ } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
 import { renderKotlar, renderCnSonuc } from "../wizard/cn.js";
 import { renderRainTable } from "../wizard/rain.js";

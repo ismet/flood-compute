@@ -2,7 +2,7 @@ import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";
 import { $, setStatus, download, dosyaIndir } from "../ui/dom.js";
-import { map, layers, katmanGeojson } from "../map/init.js";
+import { layers, katmanGeojson } from "../map/init.js";
 import { DURS, RPS, CMP_LABELS, CMP_RPS } from "../core/constants.js";
 import { dplvRatios } from "./dplv.js";
 import { markDone } from "./steps.js";
@@ -11,7 +11,7 @@ import { openCompare, showChart, showSnyderChart, cmpPeak } from "./grafik.js";
 /* ---- Snyder Ct-Cp abağı (log-log, çift yönlü otomatik) ---- */
 
 let ctcpGuard = false;
-function logInterp(x, xs, ys) {
+export function logInterp(x, xs, ys) {
   const lx = Math.log(x), LX = xs.map(Math.log), LY = ys.map(Math.log);
   if (lx <= LX[0]) return Math.exp(LY[0]);
   if (lx >= LX[LX.length - 1]) return Math.exp(LY[LY.length - 1]);
@@ -41,7 +41,7 @@ function snyderW(Ct, Cp, L, Lc) {
   const q = qp / 1000;                // Qp/A (m³/s/km²/cm)
   return { tp, qp, W50: 5.87 / Math.pow(q, 1.08) / 2.54, W75: 3.35 / Math.pow(q, 1.08) / 2.54 };
 }
-function lin1(x, xs, ys) {
+export function lin1(x, xs, ys) {
   if (x <= xs[0]) return ys[0];
   if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
   for (let i = 1; i < xs.length; i++)
@@ -49,7 +49,7 @@ function lin1(x, xs, ys) {
   return ys[ys.length - 1];
 }
 // YALD (24 sa alansal azaltma) — ABAK2'den; A≤25 ise 1.0 (snyder.compute ile aynı)
-function yaldFromArea(A) {
+export function yaldFromArea(A) {
   if (!(A > 0) || !S.abak2) return null;
   if (A <= 25) return 1.0;
   const col = S.abak2.percent.map(r => r[r.length - 1]);   // 24 sa kolonu
@@ -239,7 +239,7 @@ function renderResults() {
     const sel = document.querySelector("#hesapGrid #selDur") || $("selDur");
     const d = sel?.value, q = +$("yilQ").value;
     if (!d) return;
-    const t = api("/api/yil-ara", { q, q10: r.kabulet[d]["10"], q100: r.kabulet[d]["100"] })
+    api("/api/yil-ara", { q, q10: r.kabulet[d]["10"], q100: r.kabulet[d]["100"] })
       .then(x => $("yilRes").textContent =
         `T ≈ ${x.tekerrur_yili ? x.tekerrur_yili.toFixed(1) : "—"} yıl (${d} sa hidrografına göre)`);
   };

@@ -1,6 +1,6 @@
 import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { map, layers } from "./init.js";
+import { map } from "./init.js";
 
 /* ---------------- harita adres arama (il/ilçe/mahalle) ---------------- */
 (function geocodeSearch() {

@@ -1,4 +1,4 @@
-import { $ , setStatus } from "../ui/dom.js";
+import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers } from "./init.js";
 

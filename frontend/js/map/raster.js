@@ -1,7 +1,7 @@
 import { S } from "../core/state.js";
 import { $ , setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { map, layers } from "./init.js";
+import { map } from "./init.js";
 
 /* ---- koordinatlı raster altlıklar (1/25000 paftalar) ----
    Dosya arka uca yüklenir, orada Web Mercator'a yeniden projeksiyonlanıp XYZ

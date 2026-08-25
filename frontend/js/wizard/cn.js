@@ -1,5 +1,5 @@
 import { S } from "../core/state.js";
-import { markDone } from "./steps.js";
+import { markDone, updateComputeReady } from "./steps.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 

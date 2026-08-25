@@ -2,9 +2,8 @@ import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
-import { map, layers } from "../map/init.js";
+import { map } from "../map/init.js";
 import { dplvRatios } from "../wizard/dplv.js";
-import { M_LABEL } from "../core/constants.js";
 import { renderMultiResults } from "./multi-sonuc.js";
 
 /* ================= ARA HAVZA (ÇOK PARÇALI) ================= */

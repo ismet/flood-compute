@@ -1,4 +1,6 @@
-import { $ , setStatus } from "../ui/dom.js";
+import { S } from "../core/state.js";
+import { fmt } from "../core/format.js";
+import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers } from "./init.js";
 
@@ -93,7 +95,7 @@ $("btnYagisHavza").onclick = async () => {
    yapılmaz, yoksa kullanıcı outlet seçerken karşısına balon çıkardı.        */
 map.on("click", async (ev) => {
   if (!$("yagisAc").checked || !yagisBilgi || !yagisBilgi.var) return;
-  if (picking || S.stPlace || (S.multi && S.multi.place)) return;
+  if ($("btnPick")?.classList.contains("picking") || S.stPlace || (S.multi && S.multi.place)) return;
   if (S.mode && S.mode !== "wizard") return;
 
   const { lat, lng } = ev.latlng;

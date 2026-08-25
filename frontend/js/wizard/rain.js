@@ -3,6 +3,7 @@ import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { mgmNorm } from "../core/format.js";
 import { map, layers } from "../map/init.js";
+import { markDone, updateComputeReady } from "./steps.js";
 
 // layers.thiessen OWNER-CREATED (registry-bag)
 if (layers.thiessen) { try { map.removeLayer(layers.thiessen); } catch(e) {} }

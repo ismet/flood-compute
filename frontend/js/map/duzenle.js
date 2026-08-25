@@ -4,7 +4,6 @@ import { api } from "../core/api.js";
 import { map, layers, katmanGeojson } from "./init.js";
 import { applyBasinResult } from "../wizard/havza.js";
 import { updateComputeReady } from "../wizard/steps.js";
-import { renderKotlar } from "../wizard/cn.js";
 
 /* -------- havza sınırı / dere ağını haritada elle düzenleme (Geoman) --------
    Düzenleme bitince geometri /api/basin-from-geometry'ye gönderilir; alan
@@ -114,9 +113,9 @@ if (window.L && L.PM) {
 }
 
 /* Douglas-Peucker — DEM'den gelen merdiven basamaklı sınırı elle düzenlenebilir
-   hale getirir. tol derece cinsinden (metre / 111320). kos = cos(enlem):
-   boylam derecesi enlemde kısaldığı için mesafe ona göre ölçeklenir.         */
-function dpSadelestir(noktalar, tol, kos) {
+    hale getirir. tol derece cinsinden (metre / 111320). kos = cos(enlem):
+    boylam derecesi enlemde kısaldığı için mesafe ona göre ölçeklenir.         */
+export function dpSadelestir(noktalar, tol, kos) {
   if (noktalar.length < 3) return noktalar;
   const dik = (p, a, b) => {
     const px = (p.lng - a.lng) * kos, py = p.lat - a.lat;
@@ -270,7 +269,7 @@ $("btnEditGeom").onclick = () => setGeomEdit(true);
 $("btnEditCancel").onclick = cancelGeomEdit;
 $("btnEditApply").onclick = applyGeomEdit;
 
-map.on("click", (ev) => {
+map.on("click", (_ev) => {
   if (S.multi && S.multi.place) {
     // will be handled by modes/multi.js in stage5; for now just return to avoid picking
     return;

@@ -1,7 +1,7 @@
 import { S } from "../core/state.js";
 import { $ , setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { map, layers } from "./init.js";
+import { map } from "./init.js";
 
 /* ---- bilgi amaçlı harita katmanları ----
    Hesaba GİRMEZ; proje sınırı, yollar, yerleşim, mevcut tesis gibi bağlam
