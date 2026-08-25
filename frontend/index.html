@@ -171,14 +171,8 @@
 
     <!-- ADIM 1: Havza -->
     <section class="page" data-page="1">
-      <p class="hint">Haritada derenin <b>çıkış noktasına (outlet)</b> tıklayın; havza sınırı,
-      dere ağı ve fiziksel parametreler DEM'den çıkarılır. Yerel DEM
-      (<code>data/dem/*.tif</code>) varsa o kullanılır, yoksa Copernicus GLO-30 indirilir.
-      <b>Mümkün olduğunca yatağın tam üzerine tıklayın:</b> nokta kanaldan uzaksa yan bir kola
-      kenetlenir ve havza olduğundan çok küçük çıkar (uydu görünümüne geçmek yardımcı olur).
-      Büyük nehirlerde gerekirse aşağıdaki <i>Kanala kenetleme</i> değerini artırın.</p>
       <div class="rain-tools" style="margin-top:2px">
-        <label title="ASTER: yerel, indirme yok, çok hızlı — küçük/eğimli havzalarda iyi. Copernicus: karo indirir, yavaş; düz ovalarda ve büyük havzalarda daha güvenilir akış ağı verir.">DEM kaynağı
+        <label title="ASTER: yerel, indirme yok, çok hızlı — küçük/eğimli havzalarda iyi. Copernicus: karo indirir, yavaş; düz ovalarda ve büyük havzalarda daha güvenilir akış ağı verir."><span style="display:inline-flex;align-items:center;gap:4px">DEM kaynağı <span class="info-icon" title="ASTER yereldir ve indirme yapmaz; büyük ve düz ova havzalarında akış ağı Copernicus'tan sapabildiği için sonucu şüpheliyse Copernicus ile karşılaştırın.">ⓘ</span></span>
           <select id="inpDem">
             <option value="auto">Otomatik (yerel varsa)</option>
             <option value="yerel">ASTER 30 m (yerel, hızlı)</option>
@@ -188,13 +182,8 @@
         </label>
         <label id="lblTampon" class="hidden" title="10 m seçildiğinde: önce 30 m ile havza bulunur, sınırına bu kadar pay eklenir, 10 m DEM o pencereden kesilir. Pay şart — 10 m akış yolları biraz farklı gider ve su bölümü birkaç yüz metre oynayabilir; tam sınırdan kesilirse havza kenardan budanır.">10 m tamponu (m)<input id="inpTampon" type="number" step="100" min="0" value="500"></label>
       </div>
-      <div class="small" id="demHint">ASTER yereldir ve indirme yapmaz; büyük ve <b>düz ova</b>
-        havzalarında akış ağı Copernicus'tan sapabildiği için sonucu şüpheliyse Copernicus ile
-        karşılaştırın.</div>
       <div class="rain-tools" style="margin-top:2px">
         <label title="Tıklanan nokta, bu yarıçap içindeki en büyük akış birikimine (ana kanala) kenetlenir. Büyük nehirde havza olduğundan küçük çıkıyorsa artırın (ör. 1500 m).">Kanala kenetleme (m)<input id="inpSnap" type="number" step="100" min="50" value="500"></label>
-      </div>
-      <div class="rain-tools" style="margin-top:2px">
         <label>Dere eşiği (km²)<input id="inpRivThr" type="number" step="0.1" value="1"></label>
       </div>
       <div class="rain-tools" style="margin-top:2px">
@@ -222,11 +211,17 @@
         <label class="chk" title="CHELSA v2.1 (1981-2010 normali, ~1 km piksel) tabanlı iklim katmanları. Türkiye'de 1005 MGM istasyonuna karşı yağışta en yüksek uyumu veren ızgara veri setidir. Katman açıkken haritaya tıklayınca o noktanın P / PET / AET / net yağış değerleri okunur."><input type="checkbox" id="yagisAc"> 🌧 İklim katmanı</label>
         <label class="inline" title="P: yıllık toplam yağış. PET: potansiyel evapotranspirasyon (Penman-Monteith). Net yağış: P − gerçek ET (Budyko-Fu); uzun dönem ortalama akış yüksekliğine karşılık gelir.">Katman
           <select id="yagisKatman" style="max-width:230px"></select></label>
-        <label class="inline" title="Katmanın saydamlığı.">Saydamlık<input id="yagisOpak" type="range" min="20" max="100" value="75" style="width:90px"></label>
+        <input id="yagisOpak" type="range" min="20" max="100" value="75" style="width:90px" title="Saydamlık — katmanın saydamlığı">
         <button id="btnYagisHavza" class="small-btn" title="Çıkarılmış havzanın üzerine düşen piksellerin alansal ortalaması — üç katman için birden, ayrıca AET ve akış katsayısı. Tek noktanın değerinden çok daha anlamlıdır.">Havza ortalaması</button>
       </div>
       <div id="yagisLejant" class="small"></div>
       <div id="yagisInfo" class="small"></div>
+      <p class="hint">Haritada derenin <b>çıkış noktasına (outlet)</b> tıklayın; havza sınırı,
+      dere ağı ve fiziksel parametreler DEM'den çıkarılır. Yerel DEM
+      (<code>data/dem/*.tif</code>) varsa o kullanılır, yoksa Copernicus GLO-30 indirilir.
+      <b>Mümkün olduğunca yatağın tam üzerine tıklayın:</b> nokta kanaldan uzaksa yan bir kola
+      kenetlenir ve havza olduğundan çok küçük çıkar (uydu görünümüne geçmek yardımcı olur).
+      Büyük nehirlerde gerekirse yukarıdaki <i>Kanala kenetleme</i> değerini artırın.</p>
       <button id="btnPick" class="primary">📍 Outlet seç (haritaya tıkla)</button>
       <div id="delinStatus" class="status"></div>
       <div id="adayKanallar" class="small"></div>
@@ -242,7 +237,7 @@
         <button id="btnDereDel" class="small-btn" title="Silme kipini açar; kaldırmak istediğiniz dere koluna tıklayın. Havza sınırına dokunmaz.">🗑 Dere kolu sil</button>
         <span id="editInfo" class="small"></span>
       </div>
-      <div class="grid2">
+      <div class="grid2" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
         <label>Alan A (km²)<input id="inpA" type="number" step="0.001"></label>
         <label>L (km)<input id="inpL" type="number" step="0.001"></label>
         <label>Lc (km)<input id="inpLc" type="number" step="0.001"></label>
