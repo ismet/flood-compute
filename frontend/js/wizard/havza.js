@@ -1,3 +1,17 @@
+/**
+ * @fileoverview Havza çıkarım akışı — pick/delineate/import/applyBasinResult/adayKanallar.
+ * @module wizard/havza
+ * Owns: S.outlet, S.havza, S.kotlar, S.dere, S.kanal, S.yzdBolge, S.sonuc/S.girdi resetleri, S.dplv* resetleri;
+ *       layers.havza OWNER-CREATED (registry-bag)
+ * Exports: importBasinFiles, applyBasinResult, renderAdayKanallar
+ * Notes:
+ *  - Allowed pull-imports (§3.1): havza→{cn,dplv,steps,hesap}
+ *    (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW)
+ *  - Observer publish: delineate sonrası _notifyHavzaChanged() (su dinler)
+ *  - setOnHavzaClick(fn) ile kök onHavzaClick'i kaydeder.
+ *  Rank 2 (wizard).
+ */
+
 import { S, _notifyHavzaChanged } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";

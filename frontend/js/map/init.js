@@ -1,3 +1,15 @@
+/**
+ * @fileoverview Harita kurulumu ve registry-bag.
+ * @module map/init
+ * Owns: layers registry-bag ({}), map nesnesi, pasif dere/kanal/markers katmanları; katmanGeojson()
+ * Exports: map, layers, katmanGeojson, setOnHavzaClick, getOnHavzaClick
+ * Notes:
+ *  - Registry-bag: init.js `export const layers = {}`; sahipler assign eder
+ *    (layers.havza = L.geoJSON…); tüketiciler {layers} import eder (§3.1).
+ *  - Rank 2 (feature: map) — ui→core'a import edebilir, diğer feature'lardan import etmez
+ *    (istisna: duzenle/hesap → registry okuma serbest).
+ */
+
 export const map = L.map("map").setView([39.2, 32.8], 6);
 export const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,

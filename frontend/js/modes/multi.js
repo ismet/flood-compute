@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Ara havza (multi) — noktalar, Qbaz, solve orchestration + reRouteMulti.
+ * @module modes/multi
+ * Owns: S.multi, S.multiMd, S.multiQbazVals, S.multiSonuc, S.multiShowRes (shared with multi-sonuc); multiLayers
+ * Exports: multiLayers, invalidateMultiSolve, renderMultiPoints, updateMultiShared, reRouteMulti
+ * Notes:
+ *  - Allowed pulls (§3.1): multi→dplv (dplvRatios), multi→multi-sonuc
+ *  - Rank 2 (modes).
+ */
+
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";

@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Harita adres arama (il/ilçe/mahalle — Nominatim).
+ * @module map/geocode
+ * Owns: geocode marker (module-local)
+ * Exports: — (self-wiring; import yan etkisiyle dinleyici kurar)
+ * Notes: Rank 2 (map).
+ */
+
 import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map } from "./init.js";

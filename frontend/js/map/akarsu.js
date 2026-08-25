@@ -1,3 +1,11 @@
+/**
+ * @fileoverview DSİ akarsu ağı bağlam katmanı (bbox, ölçek).
+ * @module map/akarsu
+ * Owns: layers.akarsu (registry-bag)
+ * Exports: — (self-wiring)
+ * Notes: Rank 2 (map). AKARSU_MIN_ZOOM lokal sabit.
+ */
+
 import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers } from "./init.js";

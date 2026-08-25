@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Rezervuar öteleme UI + memba atama (Storage-Indication).
+ * @module modes/rezervuar
+ * Owns: S.resDefaults, S.resConDefaults, S.resPoints, S.resSonuc, S.resMarker, S.resVolGrid, S.ratGrid; S.multiRes[i] cross-write
+ * Exports: openReservoir
+ * Notes:
+ *  - Allowed pull (§3.1): rezervuar→multi (reRouteMulti)
+ *  - Rank 2 (modes).
+ */
+
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";

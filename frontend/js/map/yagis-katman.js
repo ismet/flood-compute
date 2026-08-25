@@ -1,3 +1,11 @@
+/**
+ * @fileoverview İklim katmanı (CHELSA P/PET/net) — WMS/XYZ ve havza ortalaması.
+ * @module map/yagis-katman
+ * Owns: S.yagisHavza
+ * Exports: — (self-wiring)
+ * Notes: Rank 2 (map).
+ */
+
 import { S } from "../core/state.js";
 import { fmt } from "../core/format.js";
 import { $ } from "../ui/dom.js";

@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Yapıştırma tablosu yardımcıları (Excel → grid).
+ * @module ui/paste-grid
+ * Owns: — (widget, S yazmaz doğrudan)
+ * Exports: makePasteGrid, readGridNums
+ * Notes: Rank 1 (ui).
+ */
+
 import { $ } from "./dom.js";
 export function makePasteGrid(gridId, addId, clearId, headers, data, minRows) {
   const el = $(gridId);

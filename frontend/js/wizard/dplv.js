@@ -1,3 +1,11 @@
+/**
+ * @fileoverview DPLV oranları — hazır istasyon ve MGM PLV, otomatik seçim.
+ * @module wizard/dplv
+ * Owns: S.dplvList, S.dplvManual, S.dplvAuto, S.dplvValues, S.mgm, S.mgmByNorm, S.mgmDb
+ * Exports: DPLV_LABELS, DPLV_GIZLI, loadDplv, loadMgm, updatePlvAutoInfo, autoSelectPLV, loadMgmDb, mgmFind, renderDplvGrid, readDplvGrid, dplvRatios
+ * Notes: Rank 2 (wizard). DPLV_* lokal sabitler (constants admission).
+ */
+
 import { S } from "../core/state.js";
 import { $ } from "../ui/dom.js";
 import { api } from "../core/api.js";

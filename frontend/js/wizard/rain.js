@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Yağış tablosu — MGM eşleştirme, recalcRain, renk kümesi.
+ * @module wizard/rain
+ * Owns: S.rainValues, S.rainMeta, S.P24w, S.OETw, S.rainColorCol, S.mgmDbYakin; layers.thiessen OWNER-CREATED
+ * Exports: RAIN_BLUES, rainRange, rainColor, thiessenStyle, recolorThiessen, renderRainLegend, RAIN_COLS, activeStations, renderRainTable, mgmOtomatikEslestir, onRainPaste, readRainGrid, recalcRain, mgmDbListesi, fillRainRowFromP24, mgmSatirBagla
+ * Notes: Rank 2 (wizard). mgmDbYakin havzaya bağlı, havza değişince sıfırlanır.
+ */
+
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";

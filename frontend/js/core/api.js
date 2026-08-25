@@ -1,3 +1,14 @@
+/**
+ * @fileoverview Fetch sarmalayıcısı — tüm API çağrıları tek noktadan.
+ * @module core/api
+ * Owns: — (pure, S/layers yazmaz)
+ * Exports: api(url, body?, isForm?) => Promise<json>
+ * Notes:
+ *  - Rank 0 (core) — ui/map/wizard/modes'ten serbestçe import edilir.
+ *  - Hata uzlaşımı: {hata} alanı varsa throw; HTTP !ok da throw.
+ *  - JSON gövde otomatik stringify; isForm ise ham FormData.
+ */
+
 export const api = async (url, body, isForm) => {
   const opt =
     body === undefined

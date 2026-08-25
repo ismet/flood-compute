@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Havza/dere geometri düzenleme (Geoman).
+ * @module map/duzenle
+ * Owns: — (edit session state module-local; S.havza/S.dere'yi günceller)
+ * Exports: dpSadelestir
+ * Notes: Rank 2 (map). hesap→map/init registry okuma serbest.
+ */
+
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";

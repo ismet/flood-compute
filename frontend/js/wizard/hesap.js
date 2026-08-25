@@ -1,3 +1,35 @@
+/**
+ * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, rapor/KMZ/CSV, abaklar.
+ * @module wizard/hesap
+ * Owns: S.girdi, S.sonuc, S.ctcp, S.abak2 (abak verileri)
+ * Exports: logInterp, lin1, yaldFromArea, loadCtCp, loadAbak2, snyderW, updateSnyderW, build*Html, renderHesapDock, renderResults, syncRepSecili, downloadReport, downloadKmz, exportCSV
+ * Notes:
+ *  - Allowed pulls (§3.1): hesap→grafik (openCompare, showChart, cmpPeak), hesap→map/init (katmanGeojson, layers)
+ *  - Dialog: hesap→rezervuar dynamic import(openReservoir)
+ *  - Rank 2 (wizard).
+ * @typedef {Object} ComputeGirdi
+ * @property {string} ad - Proje/havza adı
+ * @property {number} A_km2 - Alan km²
+ * @property {number} L_km - Ana kanal uzunluğu
+ * @property {number} Lc_km - Ağırlık merkezi uzaklığı
+ * @property {number} CN2 - CN II
+ * @property {number|null} CN3
+ * @property {string} region - YZD bölgesi A/B/C
+ * @property {Array<number>} elevations - 11 kot
+ * @property {number} Qbaz
+ * @property {Object} P24 - {2,5,10,25,50,100} ağırlıklı P24
+ * @property {number} P24_OET - OET yağış
+ * @property {Array<number>} dplv_ratios - 14 oran
+ * @typedef {Object} ComputePayload
+ * @property {ComputeGirdi} girdi
+ * @property {Object|null} kar - Kar erimesi parametreleri veya null
+ * @property {boolean} rasyonel
+ * @property {number} c100
+ * @property {number} us
+ * @property {boolean} snyder
+ * @property {Object|null} snyder_par - {Ct,Cp,W50,W75,YALD}
+ */
+
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";

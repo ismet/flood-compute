@@ -211,6 +211,8 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 6 OK — d54088e — legacy 4→0 tot 214, thin root finalized (setMode/activateStep/clearSingleBasin/onHavzaClick + overlay-Esc + debug seam), smoke 4 modes×5 steps + overlays Esc (res→mcmp→cmp→chart prio) + picking/stPlace Esc + havza clear, §6 zero, no console errors
 [2026-08-25] stage 7 OK — 691c225 — docs + graph test (AGENTS.md frontend bullet → concise map + MIGRATION pointer, ?v= stamping deleted, debug seam + shared-status + rejected decisions; backend/tests/test_frontend_modules.py stdlib-only, static/dynamic, rank/dir-prefix, cycle, orphan, legacy-empty exempt; green)
 [2026-08-25] stage 8 OK — d346152 — toolchain + unit tests (eslint 10.9.1/@eslint/js 10.0.1/eslint-config-prettier 10.1.8/prettier 3.9.6/vitest 4.1.11, flat browser globals+js.recommended+prettier, prettier printWidth:120, vitest node+setupFiles DOM stub, co-located *.test.js, 9 units 35 tests green, exports dpSadelestir/logInterp/lin1/yaldFromArea, lint fixes yagis-katman/cn/rain/havza, orphan exempt *.test.js)
+[2026-08-25] stage 9 OK — 6d43927 — prettier --write frontend/js + app.js, whitespace-only, eslint+vitest green
+[2026-08-25] stage 10 OK — 2626f9d — jsdoc contracts: AppState typedef + per-module headers + payload typedefs (compute/thiessen/tfa), docs-only, eslint+vitest green
 ```
 
 ## 10. Standing Protocols

@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Ara havza sonuç — renderMultiResults, profil, mcmp tabs, charts/CSV.
+ * @module modes/multi-sonuc
+ * Owns: S.multiSonuc, S.multiShowRes (shared both)
+ * Exports: renderMultiResults, profilTani
+ * Notes:
+ *  - Dialog: dynamic import → rezervuar.openReservoir
+ *  - Rank 2 (modes). multi-sonuc → rezervuar dinamik, döngü yok.
+ */
+
 import { S } from "../core/state.js";
 import { fmt } from "../core/format.js";
 import { $, download } from "../ui/dom.js";

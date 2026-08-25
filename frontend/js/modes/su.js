@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Su potansiyeli — AGİ günlük akımlar, periyot, tamamlama, taşıma.
+ * @module modes/su
+ * Owns: S.suSecili, S.suListe, S.suPeriyot, S.suTamam
+ * Exports: suBaslat, suHavzaGuncelle
+ * Notes:
+ *  - Push reaction: onHavzaChanged(suHavzaGuncelle) ile havza değişimini dinler (§3.1 tek izinli push).
+ *  - Rank 2 (modes).
+ */
+
 import { S, onHavzaChanged } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";

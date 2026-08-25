@@ -1,3 +1,13 @@
+/**
+ * @fileoverview DOM ilkelleri — $ yardımcı, durum/loa­der, dosya indiriciler.
+ * @module ui/dom
+ * Owns: — (DOM yardımcıları; S/layers yazmaz, yalnızca okur)
+ * Exports: $, setStatus, download, dosyaIndir
+ * Notes:
+ *  - setStatus(id,msg,cls) — status kanalları PAYLAŞILIR (panolar sahipli, statuslar değil — §3.1).
+ *  - Rank 1 (ui) — core'u import edebilir, map/wizard/modes'ten import edilmez.
+ */
+
 export const $ = (id) => document.getElementById(id);
 export const setStatus = (id, msg, cls = "") => {
   const e = $(id);

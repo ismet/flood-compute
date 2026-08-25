@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Grafik ve karşılaştırma — chartwrap, cmp, hidrograf çizimleri.
+ * @module wizard/grafik
+ * Owns: S.cmpCoords (cmpState module-local)
+ * Exports: chartwrap helpers, cmpInterp, openCompare, showChart, showSnyderChart, cmpPeak
+ * Notes: Rank 2 (wizard). CMP_* lokal.
+ */
+
 import { S } from "../core/state.js";
 import { $ } from "../ui/dom.js";
 import { fmt } from "../core/format.js";

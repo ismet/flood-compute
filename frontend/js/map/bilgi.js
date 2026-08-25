@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Bilgi katmanı yükleyici (KML/KMZ/GeoJSON — hesaba girmez).
+ * @module map/bilgi
+ * Owns: S.infoLayers
+ * Exports: — (self-wiring)
+ * Notes: Rank 2 (map). S.infoLayers yalnızca burada yazılır.
+ */
+
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";

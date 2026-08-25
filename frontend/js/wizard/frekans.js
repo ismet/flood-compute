@@ -1,3 +1,29 @@
+/**
+ * @fileoverview Frekans modülleri — AGİ katmanı, NTFA/BTFA/MMY.
+ * @module wizard/frekans
+ * Owns: S.agiSecili, S.agiBolgesel, S.agiListe, S.tfa, S.btfa, S.mmy; layers.agi
+ * Exports: agiYukle, agiListele, agiSec, agiKatmanAc, tfaAykiriBlok, tfaCiz, btfaHomojenCiz, btfaCiz
+ * Notes:
+ *  - 550 satır — boyut bilinçli kabul (§3).
+ *  - Rank 2 (wizard).
+ * @typedef {Object} TfaPayload
+ * @property {string} kod - AGİ kodu
+ * @property {number} ilk_yil - Başlangıç su yılı (0=tümü)
+ * @property {number} son_yil
+ * @property {boolean} dusuk_guveni_at
+ * @property {boolean} olanaksizi_at
+ * @property {boolean} aykiri_disla
+ * @typedef {Object} BtfaPayload
+ * @property {Array<string>} kodlar
+ * @property {number} alan_km2
+ * @property {number|null} us
+ * @property {number|null} katsayi
+ * @property {boolean} katsayi_serbest
+ * @property {string} transfer_kod
+ * @property {number} transfer_ussu
+ * @property {boolean} aykiri_disla
+ */
+
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt } from "../core/format.js";

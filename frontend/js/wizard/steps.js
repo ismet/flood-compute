@@ -1,3 +1,12 @@
+/**
+ * @fileoverview Adım navigasyon yardımcıları.
+ * @module wizard/steps
+ * Owns: STEP_KEYS, adım done işaretleme
+ * Exports: STEP_KEYS, markDone, updateComputeReady
+ * Notes: activateStep KÖK'te (app.js), burada değil — §3.1.
+ *  Rank 2 (wizard).
+ */
+
 import { S } from "../core/state.js";
 import { $ } from "../ui/dom.js";
 

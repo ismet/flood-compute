@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Koordinatlı raster altlık yükleyici (GeoTIFF/MrSID → XYZ).
+ * @module map/raster
+ * Owns: S.rasterLayers
+ * Exports: — (self-wiring; rasterKatmanEkle içsel)
+ * Notes: Rank 2 (map).
+ */
+
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";

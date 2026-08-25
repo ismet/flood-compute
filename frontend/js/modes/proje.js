@@ -1,3 +1,15 @@
+/**
+ * @fileoverview Proje kayıt/yükleme — JSON kaydetme, geri yükleme.
+ * @module modes/proje
+ * Owns: — (S'ye toptan yazar — yaşayan katmanlar korunur)
+ * Exports: loadProjects
+ * Notes:
+ *  - Sanctioned wholesale Object.assign(S, d.S) yalnızca restore'da (§3.1).
+ *  - Save'da infoLayers/rasterLayers circular olduğu için stripped.
+ *  - Stage13: Set serileştirme replacer/reviver (agiBolgesel,stExclude,suSecili).
+ *  - Rank 2 (modes) — proje→wizard renders fan-in izinli.
+ */
+
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { $ } from "../ui/dom.js";

@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Kotlar, CN (CORINE), zemin grubu, YZD, rasyonel C bloğu.
+ * @module wizard/cn
+ * Owns: S.cnSonuc, S.zemin, S.rasyonelCKaynak, S.cSecim
+ * Exports: renderKotlar, renderCnSonuc, renderRasyonelC, zeminGrubunuBelirle
+ * Notes: Rank 2 (wizard). zeminGrubunuBelirle havza sonrası otomatik çağrılır.
+ */
+
 import { S } from "../core/state.js";
 import { markDone, updateComputeReady } from "./steps.js";
 import { $, setStatus } from "../ui/dom.js";

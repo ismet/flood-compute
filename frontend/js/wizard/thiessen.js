@@ -1,3 +1,19 @@
+/**
+ * @fileoverview Thiessen istasyon kümeleri ve ağırlıklar.
+ * @module wizard/thiessen
+ * Owns: S.stBase, S.stExclude, S.stExtra, S.stKaynak, S.istasyonlar, S.thiessen, S.thElenen
+ * Exports: kurumColor, stKey, effectiveStations, loadStationSet, recomputeThiessen, renderExcluded, runThiessen, removeStation, useDefaultStations
+ * Notes:
+ *  - Allowed pull (§3.1): thiessen→rain (recolorThiessen, renderRainTable)
+ *  - kurumColor module-local (constants admission ≥2 gerekir, burada tek tüketici)
+ *  - stPlace dead-code (stage14) — §3.1 istisna: map/yagis-katman ve thiessen okur, yalnızca false yazılır.
+ *  - Rank 2 (wizard).
+ * @typedef {Object} ThiessenPayload
+ * @property {Object} havza_geojson - Havza Polygon/MultiPolygon
+ * @property {Array<Object>} istasyonlar - [{name,lat,lon,kurum}]
+ * @property {number} min_agirlik - Küçük pay eşiği 0..1
+ */
+
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
