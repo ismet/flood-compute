@@ -33,7 +33,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | ⚠ Eski yıllıkların (1979–1986) çıkarımında **118 pik kaydının başına fazladan bir rakam yapışmış** (D24A029 1981: 9500 m³/s, diğer 29 yıl 68–1033). NTFA/BTFA bunları varsayılan olarak eler ve hangisini neden elediğini sonuçta gösterir. `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 5’teki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
 | `data/yagis/` | `yagis_tr.tif` (yağış), `pet_tr.tif` (potansiyel evapotranspirasyon), `net_tr.tif` (net yağış = P − AET) — CHELSA v2.1, 1981–2010 normali, ~1 km piksel, toplam 6.6 MB. Haritada tematik katman; nokta ve havza alansal ortalaması sorgulanır. Yeniden üretmek: `python tools/yagis_haritasi_indir.py`. |
-| `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,9 milyon gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
+| `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,3 milyon ölçülü gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (5 adım)
 
@@ -511,4 +511,8 @@ python backend/tests/test_tfa_golden.py          :: NTFA birebir (6 dağılım �
 python backend/tests/test_btfa_golden.py         :: BTFA birebir (Karamandere indeks-debi)
 python backend/tests/test_mmy_golden.py          :: MMY birebir (Hershfield, iki kaynak dosya)
 python backend/tests/test_api_smoke.py           :: API uçtan uca duman testi
+python backend/tests/test_corine_c.py            :: CORINE → rasyonel C türetimi
+python backend/tests/test_akarsu.py              :: DSİ akarsu katmanı (veri yoksa atlanır)
+python backend/tests/test_kenetleme.py           :: outlet kenetleme sıçrama uyarısı (DEMsiz)
+python backend/tests/test_frontend_modules.py    :: frontend ESM modül grafiği koruması (eksik/rank/döngü/yetim)
 ```

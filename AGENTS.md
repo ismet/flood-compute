@@ -28,6 +28,7 @@ python backend/tests/test_kenetleme.py               # outlet snap jump warning 
 python backend/tests/test_tfa_golden.py              # NTFA golden (ornek.xlsm, 6 distributions)
 python backend/tests/test_btfa_golden.py             # BTFA golden (Karamandere index-flood)
 python backend/tests/test_mmy_golden.py              # MMY golden (Hershfield PMP, 2 workbooks)
+python backend/tests/test_frontend_modules.py        # frontend ESM module-graph guard (missing/rank/cycle/orphan)
 # one-off data builders
 python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb> # one-off: MDB -> data/akarsu/akarsu.sqlite
 python tools/akarsu_sikistir.py                      # one-off: recode an old float32 akarsu.sqlite
@@ -196,7 +197,7 @@ Stage paths explicitly - see `.gitignore:25-32`.
 | DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (cache grows to GBs with use) |
 | CORINE (CLC2018) | EEA WMS → `data/corine/cache/` | First CN computation |
 
-## API endpoints (66 total)
+## API endpoints (65 API total; main.py has 66 routes incl. the `/` index)
 
 | Endpoint | Notes |
 |---|---|
@@ -231,6 +232,7 @@ Stage paths explicitly - see `.gitignore:25-32`.
 | `POST /api/yil-ara` | Return period given Q, Q10, Q100 (inverse) |
 | `POST /api/rainfall/parse` | parse pasted rainfall tables |
 | `POST /api/zemin-grubu` / `POST /api/yzd-region` | soil group / region, with reasoning |
+| `POST /api/stations` | Station KMZ/KML upload (multipart) - custom Thiessen set |
 | `GET /api/stations/default` / `GET /api/mgm-stations` | default Thiessen set / PLV stations |
 | `GET /api/dplv` / `GET /api/geocode` / `GET /api/snyder-ctcp` / `GET /api/abak2` | static data |
 | `GET /api/reservoir-defaults` / `GET /api/reservoir-controlled-defaults` | Söylemez/ gated defaults |
