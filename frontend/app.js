@@ -11,4 +11,7 @@ import "./js/wizard/dplv.js";
 import "./js/wizard/rain.js";
 import "./js/wizard/thiessen.js";
 import "./js/wizard/havza.js";
+import "./js/wizard/grafik.js";
+import "./js/wizard/hesap.js";
+import "./js/wizard/frekans.js";
 import "./js/legacy.js";

@@ -206,6 +206,7 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 1 OK — e6a87e3 — core skeleton (state/api/constants/format + dom/paste-grid + map/init + legacy, entry module, index type=module, smoke modes/steps, no console errors)
 [2026-08-25] stage 2 OK — e2e5f06 — map features (geocode/bilgi/raster/akarsu/yagis-katman/duzenle, entry imports 6, legacy 185→155, tot 211, smoke map controls + Esc, no console errors)
 [2026-08-25] stage 3 OK — 63d4871 — wizard A (steps/havza/cn/thiessen/rain/dplv, legacy 155→105 tot 213, smoke steps/Thiessen→CN→rain, no console errors)
+[2026-08-25] stage 4 OK — dc1db23 — wizard B (hesap/grafik/frekans, legacy 105→56 tot 214, grafik before hesap for hesap→grafik, stub modes/rezervuar for hesap→rezervuar dynamic, smoke cmp/chart overlays, no console errors)
 ```
 
 ## 10. Standing Protocols
