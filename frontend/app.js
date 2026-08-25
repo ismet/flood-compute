@@ -142,7 +142,11 @@ function clearSingleBasin() {
     S.resMarker.remove();
     S.resMarker = null;
   }
-  ["havza", "dere", "kanal", "thiessen", "markers"].forEach((k) => layers[k].clearLayers());
+  ["havza", "dere", "kanal", "thiessen", "markers", "havzaAgi", "havzaMgm"].forEach((k) => {
+    try {
+      layers[k].clearLayers();
+    } catch (e) {}
+  });
   ["inpA", "inpL", "inpLc", "inpCN3"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });
