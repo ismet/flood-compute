@@ -217,7 +217,8 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 12 OK — 72d61e3 — css tokens: :root Turkish tokens (--vurgu:#0d5c63; --kenar:#cbc7c0; --hata:#c73e3a; --uyari:#fce5b0; …) 33 tokens, literals replaced via var(), visual unchanged
 [2026-08-25] stage 13 OK — 1ee7c50 — set serialization fix: save replacer {__set:[...]}, load reviver for [agiBolgesel,stExclude,suSecili], E2E round-trip intact, 41 tests green
 [2026-08-25] stage 14 OK — a248f02 — dead-code removal: S.stPlace chain (reads 121/182/191, writes false-only, never true) + handlers removed, 0 orphans, eslint+vitest green
-[2026-08-25] stage 15 OK — <pending> — approved defect fixes: F6(c) OET elle input #inpOetElle + oetSec + status kaynak, F7 thiessen+outlet repaint + fitBounds, F8 try/catch + loadProjects catch, 44 tests green
+[2026-08-25] stage 15 OK — e218922 — approved defect fixes: F6(c) OET elle input #inpOetElle + oetSec + status kaynak, F7 thiessen+outlet repaint + fitBounds, F8 try/catch + loadProjects catch, 44 tests green
+[2026-08-25] stage 16 OK — 873fd80 — FINAL GATE: full §8 smoke, eslint+vitest+graph green, legacy 0, sentinel cleaned, baseline parity (approved deltas only), AGENTS finalized
 ```
 
 ## 10. Standing Protocols
