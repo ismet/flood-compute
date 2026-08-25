@@ -55,7 +55,7 @@ function yagisKatmanUygula() {
   if ($("yagisAc").checked) layers.yagis.addTo(map);
   yagisLejantCiz(k);
   const b = yagisKatmanBilgi(k);
-  if (b) {
+  if (b && !(S.havza && S.yagisHavza && document.getElementById("yagisInfo")?.querySelector("table"))) {
     $("yagisInfo").innerHTML =
       `<b>${_esc(b.ad)}</b> — ${_esc(b.kaynak)} · ${_esc(b.donem)} · ` +
       `~${b.cozunurluk_m} m piksel · ${b.lisans}` +
@@ -64,25 +64,34 @@ function yagisKatmanUygula() {
 }
 
 $("yagisAc").onchange = () => {
-  $("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
-  if (!$("yagisAc").checked) {
+  const acik = $("yagisAc").checked;
+  $("yagisOpak").classList.toggle("hidden", !acik);
+  $("yagisLejant").classList.toggle("hidden", !acik);
+  $("yagisInfo").classList.toggle("hidden", !acik);
+  if (!acik) {
     if (layers.yagis) layers.yagis.remove();
     $("yagisLejant").innerHTML = "";
     return;
   }
   yagisKatmanUygula();
+  if (S.havza && !S.yagisHavza) {
+    havzaOrtalamasiGoster();
+  }
 };
 $("yagisKatman").onchange = yagisKatmanUygula;
 $("yagisOpak").oninput = () => {
   if (layers.yagis) layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
 };
 $("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
+$("yagisLejant").classList.toggle("hidden", !$("yagisAc").checked);
+$("yagisInfo").classList.toggle("hidden", !$("yagisAc").checked);
 
 export async function havzaOrtalamasiGoster() {
   // düğme artık gizli: çıkarım bittiğinde wizard/havza kendiliğinden çağırır.
   // Havza yoksa veya iklim verisi yoksa sessizce çık (otomatik çağrı yolunda
   // "Önce havzayı çıkarın" uyarısının boşuna yazılmaması için).
   if (!S.havza || !yagisBilgi || !yagisBilgi.var) return;
+  if ($("yagisAc").checked) $("yagisInfo").classList.remove("hidden");
   $("yagisInfo").textContent = "Havza ortalamaları hesaplanıyor…";
   try {
     const g = S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza;
@@ -103,6 +112,9 @@ export async function havzaOrtalamasiGoster() {
   } catch (e) {
     $("yagisInfo").textContent = "Hesaplanamadı: " + e.message;
   }
+  $("yagisInfo").classList.toggle("hidden", !$("yagisAc").checked);
+  $("yagisLejant").classList.toggle("hidden", !$("yagisAc").checked);
+  $("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
 }
 $("btnYagisHavza").onclick = havzaOrtalamasiGoster;
 
@@ -160,6 +172,8 @@ map.on("click", async (ev) => {
       .join("");
     $("yagisKatman").value = yagisBilgi.varsayilan;
     $("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
+    $("yagisLejant").classList.toggle("hidden", !$("yagisAc").checked);
+    $("yagisInfo").classList.toggle("hidden", !$("yagisAc").checked);
   } catch (e) {
     /* uç yoksa sessiz geç */
   }
