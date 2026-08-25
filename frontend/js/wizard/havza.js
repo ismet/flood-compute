@@ -5,8 +5,9 @@
  *       layers.havza OWNER-CREATED (registry-bag)
  * Exports: importBasinFiles, applyBasinResult, renderAdayKanallar
  * Notes:
- *  - Allowed pull-imports (§3.1): havza→{cn,dplv,steps,hesap}
- *    (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW)
+ *  - Allowed pull-imports (§3.1): havza→{cn,dplv,steps,hesap,yagis-katman}
+ *    (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW,
+ *    havzaOrtalamasiGoster — çıkarım bitince havza ortalaması kendiliğinden hesaplanır)
  *  - Observer publish: delineate sonrası _notifyHavzaChanged() (su dinler)
  *  - setOnHavzaClick(fn) ile kök onHavzaClick'i kaydeder.
  *  Rank 2 (wizard).
@@ -21,6 +22,7 @@ import { renderKotlar, zeminGrubunuBelirle } from "./cn.js";
 import { autoSelectPLV } from "./dplv.js";
 import { markDone, updateComputeReady } from "./steps.js";
 import { updateSnyderW } from "./hesap.js";
+import { havzaOrtalamasiGoster } from "../map/yagis-katman.js";
 
 // layers.havza OWNER-CREATED (registry-bag)
 if (layers.havza) {
@@ -155,6 +157,7 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
   renderAdayKanallar(r);
   updateComputeReady();
   autoSelectPLV();
+  havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
 }
 
 export function renderAdayKanallar(r) {
@@ -301,6 +304,7 @@ map.on("click", async (ev) => {
     renderAdayKanallar(r);
     updateComputeReady();
     autoSelectPLV();
+    havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
     if (S.mode === "su") {
       try {
         _notifyHavzaChanged();

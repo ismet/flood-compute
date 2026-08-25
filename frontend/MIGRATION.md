@@ -91,7 +91,7 @@ frontend/
 ### 3.1 Dependency contract (enforced by D-08 test)
 - **Ranks strict:** `map/wizard/modes → ui → core`. No skips upward.
 - **Static feature graph ACYCLIC.**
-- **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable) · `havza→{cn,dplv,steps,hesap}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/hesap→map/init` (registry) · `hesap→grafik` (openCompare, showChart, cmpPeak).
+- **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable) · `havza→{cn,dplv,steps,hesap}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/hesap→map/init` (registry) · `hesap→grafik` (openCompare, showChart, cmpPeak).
 - **Push reactions:** only via `onHavzaChanged(fn)` observer in core/state (consumer today: `su.suHavzaGuncelle`). Direct wizard→modes pushes forbidden.
 - **Dialog opens across features:** dynamic `import()` inside handlers (`multi-sonuc`→rezervuar.openReservoir; `hesap`→rezervuar.openReservoir).
 - **Registry-bag:** `init.js` exports `const layers = {}`; owners assign (`layers.havza = L.geoJSON(...)` etc.). Consumers uniformly import `{layers}`.
