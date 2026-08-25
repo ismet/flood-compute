@@ -185,7 +185,8 @@ function showResMarker(pt) {
     return;
   }
   if (S.resMarker) S.resMarker.remove();
-  // rezervuar atanan nokta mor gösterilir
+  // rezervuar atanan nokta mor gösterilir; canlı katman projeye kaydedilmez
+  // (proje.js buildDurumS strip eder)
   S.resMarker = L.circleMarker([pt.ll.lat, pt.ll.lon], {
     radius: 9,
     color: "#6a1b9a",

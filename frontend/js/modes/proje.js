@@ -2,10 +2,11 @@
  * @fileoverview Proje kayıt/yükleme — JSON kaydetme, geri yükleme.
  * @module modes/proje
  * Owns: — (S'ye toptan yazar — yaşayan katmanlar korunur)
- * Exports: loadProjects
+ * Exports: loadProjects, buildDurumS
  * Notes:
  *  - Sanctioned wholesale Object.assign(S, d.S) yalnızca restore'da (§3.1).
- *  - Save'da infoLayers/rasterLayers circular olduğu için stripped.
+ *  - Save'da infoLayers/rasterLayers/resMarker canlı Leaflet nesneleri oldukları
+ *    için stripped (buildDurumS); yüklemede canlı değerler korunur.
  *  - Stage13: Set serileştirme replacer/reviver (agiBolgesel,stExclude,suSecili).
  *  - Rank 2 (modes) — proje→wizard renders fan-in izinli.
  */
@@ -36,6 +37,13 @@ function reviveSets(obj) {
     else if (Array.isArray(v)) obj[k] = new Set(v);
     else if (v && typeof v === "object" && Object.keys(v).length === 0) obj[k] = new Set();
   });
+}
+
+// Kayda girecek durum kopyası. Canlı Leaflet nesneleri stripped — JSON.stringify
+// "circular structure" ile patlar (örn. resMarker'ın Geoman .pm._layer geri
+// referansı). sonuc yeniden hesaplanabilir; raster altlıkları sunucudan gelir.
+export function buildDurumS() {
+  return { ...S, sonuc: null, infoLayers: [], rasterLayers: [], resMarker: null };
 }
 
 $("btnDelete").onclick = async () => {
@@ -80,10 +88,7 @@ $("btnSave").onclick = async () => {
     "inpYald",
     "inpOetElle",
   ].forEach((id) => (fields[id] = $(id).value));
-  // infoLayers/rasterLayers içinde Leaflet katman nesneleri var; bunlar haritaya
-  // geri başvurduğu için JSON.stringify "circular structure" ile patlar. Raster
-  // altlıklar zaten sunucuda duruyor ve açılışta /api/raster-layers ile geliyor.
-  const durumS = { ...S, sonuc: null, infoLayers: [], rasterLayers: [] };
+  const durumS = buildDurumS();
   try {
     const body = JSON.stringify({ ad, durum: { S: durumS, fields } }, setReplacer);
     const r = await fetch("/api/project/save", {
@@ -121,11 +126,15 @@ $("projList").onchange = async () => {
     const d = JSON.parse(text, setReviver);
     // haritada duran canlı katman nesneleri kayda girmez; yüklemede korunmalı
     const infoY = S.infoLayers,
-      rasterY = S.rasterLayers;
+      rasterY = S.rasterLayers,
+      resM = S.resMarker;
     Object.assign(S, d.S);
     reviveSets(S);
     S.infoLayers = infoY;
     S.rasterLayers = rasterY;
+    // resMarker canlı katmandır; null ile ezilirse eski mor işaretçi haritada
+    // yetim kalır ve showResMarker bir daha .remove() edemez — korunmalı.
+    S.resMarker = resM;
     Object.entries(d.fields).forEach(([id, v]) => {
       if ($(id)) $(id).value = v;
     });

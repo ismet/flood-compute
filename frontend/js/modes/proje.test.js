@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { buildDurumS } from "./proje.js";
+import { S } from "../core/state.js";
 
 const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili"];
 function setReplacer(k, v) {
@@ -39,5 +41,30 @@ describe("proje Set serialization", () => {
     expect(parsed.agiBolgesel instanceof Set).toBe(true);
     expect(parsed.diger instanceof Set).toBe(false);
     expect(parsed.diger.__set).toEqual(["b"]);
+  });
+});
+
+describe("proje save strips live leaflet layers", () => {
+  // Gerçek kaza: showResMarker (modes/rezervuar.js) S.resMarker'a canlı
+  // L.circleMarker koyar; Geoman katmana .pm._layer geri referansı ekler,
+  // JSON.stringify "circular structure" ile patlar ve kayıt hiç yapılamaz.
+  it("buildDurumS nulls resMarker — stringify survives pm/_map cycles", () => {
+    const marker = {};
+    marker._map = { _layers: { 9: marker } };
+    marker.pm = { _layer: marker };
+    const once = S.resMarker;
+    S.resMarker = marker;
+    try {
+      let body;
+      expect(() => {
+        body = JSON.stringify({ ad: "t", durum: { S: buildDurumS(), fields: {} } }, setReplacer);
+      }).not.toThrow();
+      const parsed = JSON.parse(body, setReviver);
+      expect(parsed.durum.S.resMarker).toBeNull();
+      expect(parsed.durum.S.infoLayers).toEqual([]);
+      expect(parsed.durum.S.rasterLayers).toEqual([]);
+    } finally {
+      S.resMarker = once;
+    }
   });
 });

@@ -219,6 +219,7 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 14 OK — a248f02 — dead-code removal: S.stPlace chain (reads 121/182/191, writes false-only, never true) + handlers removed, 0 orphans, eslint+vitest green
 [2026-08-25] stage 15 OK — e218922 — approved defect fixes: F6(c) OET elle input #inpOetElle + oetSec + status kaynak, F7 thiessen+outlet repaint + fitBounds, F8 try/catch + loadProjects catch, 44 tests green
 [2026-08-25] stage 16 OK — 873fd80 — FINAL GATE: full §8 smoke, eslint+vitest+graph green, legacy 0, sentinel cleaned, baseline parity (approved deltas only), AGENTS finalized
+[2026-08-25] post-signoff fix — resMarker circular-JSON save crash (pre-existing, latent): openReservoir stores live L.circleMarker in S.resMarker; Geoman .pm._layer back-ref breaks JSON.stringify. buildDurumS() strips it (proje.js), load preserves session handle (orphan-marker guard), regression test in proje.test.js
 ```
 
 ## 10. Standing Protocols
