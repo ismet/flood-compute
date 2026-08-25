@@ -64,6 +64,7 @@ function yagisKatmanUygula() {
 }
 
 $("yagisAc").onchange = () => {
+  $("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
   if (!$("yagisAc").checked) {
     if (layers.yagis) layers.yagis.remove();
     $("yagisLejant").innerHTML = "";
@@ -75,6 +76,7 @@ $("yagisKatman").onchange = yagisKatmanUygula;
 $("yagisOpak").oninput = () => {
   if (layers.yagis) layers.yagis.setOpacity((+$("yagisOpak").value || 75) / 100);
 };
+$("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
 
 export async function havzaOrtalamasiGoster() {
   // düğme artık gizli: çıkarım bittiğinde wizard/havza kendiliğinden çağırır.
@@ -157,6 +159,7 @@ map.on("click", async (ev) => {
       .map((k) => `<option value="${k.anahtar}">${k.ad}</option>`)
       .join("");
     $("yagisKatman").value = yagisBilgi.varsayilan;
+    $("yagisOpak").classList.toggle("hidden", !$("yagisAc").checked);
   } catch (e) {
     /* uç yoksa sessiz geç */
   }

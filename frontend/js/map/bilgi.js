@@ -25,18 +25,21 @@ function renderInfoLayers() {
     return;
   }
   el.innerHTML =
-    `<b>Bilgi katmanları</b> (hesaba girmez):<br>` +
+    `<b>Bilgi katmanları</b> (hesaba girmez):` +
+    `<table class="tbl small" style="margin-top:6px"><thead><tr><th style="width:22px"></th><th>Dosya</th><th style="width:70px;text-align:right">Geometri</th><th style="width:44px;text-align:center">Görünür</th><th style="width:30px"></th></tr></thead><tbody>` +
     S.infoLayers
       .map(
         (k, i) =>
-          `<label class="inline" style="gap:4px">
-       <input type="checkbox" class="info-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto">
-       <span style="color:${_esc(k.renk)};font-weight:700">■</span> ${_esc(k.ad)}
-       <span style="color:#8a857e">(${_esc(k.sayi)})</span>
-       <button class="link-btn" data-del="${i}" title="Kaldır">✕</button>
-     </label>`,
+          `<tr>` +
+          `<td style="text-align:center"><span style="display:inline-block;width:12px;height:12px;background:${_esc(k.renk)};border-radius:2px;vertical-align:middle"></span></td>` +
+          `<td style="text-align:left;word-break:break-all" title="${_esc(k.ad)}">${_esc(k.ad)}</td>` +
+          `<td style="text-align:right;color:#8a857e">${_esc(k.sayi)}</td>` +
+          `<td style="text-align:center"><input type="checkbox" class="info-chk" data-i="${i}" ${k.gorunur ? "checked" : ""} style="width:auto;accent-color:var(--vurgu)"></td>` +
+          `<td style="text-align:center"><button class="link-btn" data-del="${i}" title="Kaldır">✕</button></td>` +
+          `</tr>`,
       )
-      .join("<br>");
+      .join("") +
+    `</tbody></table>`;
   el.querySelectorAll(".info-chk").forEach(
     (c) =>
       (c.onchange = () => {

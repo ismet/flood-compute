@@ -191,11 +191,12 @@
       </div>
       <div id="infoLayers" class="small"></div>
       <div class="rain-tools" style="margin-top:2px">
-        <label class="inline" title="Koordinatlı raster altlık (1/25000 pafta vb.). GeoTIFF veya MrSID (.sid) yükleyin — .sid harici GDAL ile GeoTIFF'e çevrilir. Georeferans .sdw/.tfw world dosyasındaysa ONU DA birlikte seçin (Ctrl ile çoklu seçim): h48c2.sid + h48c2.sdw">🗺 1/25000 altlık <input type="file" id="rasterFile" accept=".tif,.tiff,.vrt,.img,.sid,.png,.jpg,.sdw,.tfw,.wld,.prj,.xml" multiple></label>
+        <label class="inline" title="Koordinatlı raster altlık (1/25000 pafta vb.). GeoTIFF veya MrSID (.sid) yükleyin — .sid harici GDAL ile GeoTIFF'e çevrilir.">🗺 1/25000 altlık <input type="file" id="rasterFile" accept=".tif,.tiff,.vrt,.img,.sid,.png,.jpg,.sdw,.tfw,.wld,.prj,.xml"></label>
         <label class="inline" title="Dosyada koordinat sistemi tanımlı değilse (ArcInfo .sdw world file ile gelen taramalarda çoğu kez böyledir) EPSG kodunu yazın. ED50/UTM 37N: EPSG:23037 — WGS84/UTM 37N: EPSG:32637. Gömülüyse boş bırakın.">CRS <input id="rasterCrs" placeholder="EPSG:32637" style="width:110px"></label>
         <button id="btnRasterAdd" class="small-btn">Altlığı ekle</button>
       </div>
       <div id="rasterLayers" class="small"></div>
+      <div id="rasterStatus" class="status"></div>
       <div class="rain-tools" style="margin-top:2px">
         <label class="chk" title="DSİ kaynak akarsu ağı. Yalnızca haritada bağlam olarak gösterilir, hesaba GİRMEZ — havza ve dere çıkarımı yine DEM'den yapılır. Türkiye geneli ~405.000 çizgi olduğu için sadece görünen pencere yüklenir, haritayı gezdirdikçe yenilenir."><input type="checkbox" id="akarsuAc"> 🌊 DSİ akarsu ağı</label>
         <label class="inline" title="Otomatik: görünen alanın genişliğine göre ölçek seçilir (geniş bakışta 1/500.000, yakınlaşınca 1/100.000). Geniş alanda 1/100.000 ağını zorlamak yanıtı megabaytlara çıkarır ve yavaşlatır.">Ölçek
@@ -216,13 +217,10 @@
       </div>
       <div id="yagisLejant" class="small"></div>
       <div id="yagisInfo" class="small"></div>
-      <p class="hint">Haritada derenin <b>çıkış noktasına (outlet)</b> tıklayın; havza sınırı,
-      dere ağı ve fiziksel parametreler DEM'den çıkarılır. Yerel DEM
-      (<code>data/dem/*.tif</code>) varsa o kullanılır, yoksa Copernicus GLO-30 indirilir.
-      <b>Mümkün olduğunca yatağın tam üzerine tıklayın:</b> nokta kanaldan uzaksa yan bir kola
-      kenetlenir ve havza olduğundan çok küçük çıkar (uydu görünümüne geçmek yardımcı olur).
-      Büyük nehirlerde gerekirse yukarıdaki <i>Kanala kenetleme</i> değerini artırın.</p>
-      <button id="btnPick" class="primary">📍 Outlet seç (haritaya tıkla)</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button id="btnPick" class="primary">📍 Outlet seç (haritaya tıkla)</button>
+        <span class="info-icon" title="Yatağın tam üzerine tıklayın; uzak nokta yanlış kola kenetlenir ve havza çok küçük çıkar. Büyük nehirlerde Kanala kenetleme değerini artırın.">ⓘ</span>
+      </div>
       <div id="delinStatus" class="status"></div>
       <div id="adayKanallar" class="small"></div>
       <div class="rain-tools" style="margin-top:2px">
