@@ -203,7 +203,8 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 0 OK — 6fdddaf — middleware verified: js/css no-cache, md/tiles untouched, / 200
 [2026-08-25] stage 0b OK — (no commit) — baseline captured .migration/run-0/*.json + baseline.json (5 files, A=14.14 km² L=6.25 Lc=2.83 CN=82/92)
 [2026-08-25] stage 0.5 OK — c7ca431 — vendor self-host: leaflet 1.9.4 + geoman 2.17.0 + chartjs 4.4.3 + images, SRI + crossorigin, offline-check via curl no-cache
-[2026-08-25] stage 1 OK — 8d1efaf — core skeleton (state/api/constants/format + dom/paste-grid + map/init + legacy, entry module, index type=module, smoke modes/steps, no console errors)
+[2026-08-25] stage 1 OK — e6a87e3 — core skeleton (state/api/constants/format + dom/paste-grid + map/init + legacy, entry module, index type=module, smoke modes/steps, no console errors)
+[2026-08-25] stage 2 OK — 23e0d44 — map features (geocode/bilgi/raster/akarsu/yagis-katman/duzenle, entry imports 6, legacy 185→155, tot 211, smoke map controls + Esc, no console errors)
 ```
 
 ## 10. Standing Protocols
