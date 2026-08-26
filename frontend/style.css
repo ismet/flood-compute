@@ -171,6 +171,12 @@ label:has(> #inpHedefAlan),   /* Beklenen alan (km², ops.) */
 #akarsuInfo {                 /* DSİ akarsu ölçek sayım/ipucu satırı */
   display: none !important;
 }
+
+/* ---- Dilekçe / Su Potansiyeli sekmeleri gizli (CSS only, backend korunur) ---- */
+#modeDilekce,
+#modeSu {
+  display: none !important;
+}
 #rasterFile { color: transparent; width: 95px; }
 #rasterFile::file-selector-button { color: var(--metin); }
 .info-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--kenar-hafif); color: var(--metin-orta); font-size: 11px; font-weight: 700; cursor: help; flex: none; }
