@@ -605,8 +605,10 @@ def api_rain_parse(req: RainParseReq):
 
 @app.get("/api/dplv")
 def api_dplv():
-    from backend.core import tables
-    return tables.load("dplv_stations")
+    # Hazır istasyon kaldırıldı — tek kaynak MGM PLV (otomatik) + manuel 14 oran
+    # 404: istemci GET /api/dplv çağırıyorsa artık yok; /api/mgm-stations veya /api/plv-en-yakin kullan
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=404, content={"hata": "Hazır istasyon kaldırıldı — MGM PLV (otomatik) veya elle 14 oran kullanın. Kaynak: /api/mgm-stations, /api/plv-en-yakin"})
 
 
 @app.get("/api/mgm-stations")
@@ -756,6 +758,8 @@ def api_compute(req: ComputeReq):
         g["P24"] = {int(k): v for k, v in g["P24"].items()}
         if not g.get("CN3"):
             g["CN3"] = tables.cn2_to_cn3(g["CN2"])
+        # DPLV 14 oran zorunlu — tek doğrulama (tables.dogrula_dplv)
+        tables.dogrula_dplv(g.get("dplv_ratios"))
         res = engine.compute(g)
         if kar_res:
             res["kar"] = kar_res

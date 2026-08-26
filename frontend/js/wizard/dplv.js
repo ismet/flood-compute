@@ -1,9 +1,10 @@
 /**
- * @fileoverview DPLV oranları — hazır istasyon ve MGM PLV, otomatik seçim.
+ * @fileoverview DPLV oranları — MGM PLV (otomatik) + manuel 14 grid.
  * @module wizard/dplv
- * Owns: S.dplvList, S.dplvManual, S.dplvAuto, S.dplvValues, S.mgm, S.mgmByNorm, S.mgmDb
- * Exports: DPLV_LABELS, DPLV_GIZLI, loadDplv, loadMgm, updatePlvAutoInfo, autoSelectPLV, loadMgmDb, mgmFind, renderDplvGrid, readDplvGrid, dplvRatios
- * Notes: Rank 2 (wizard). DPLV_* lokal sabitler (constants admission).
+ * Owns: S.dplvManual, S.dplvAuto, S.dplvValues, S.mgm, S.mgmByNorm, S.mgmDb
+ * Exports: DPLV_LABELS, loadMgm, updatePlvAutoInfo, autoSelectPLV, loadMgmDb, mgmFind, renderDplvGrid, readDplvGrid, dplvRatios
+ * Notes: Rank 2 (wizard). DPLV_LABELS lokal sabit (constants admission).
+ *   Hazır istasyon (dplvList/DPLV_GIZLI/loadDplv, GET /api/dplv) kaldırıldı — tek kaynak MGM PLV.
  */
 
 import { S } from "../core/state.js";
@@ -27,47 +28,7 @@ export const DPLV_LABELS = [
   "18sa",
   "24sa",
 ];
-export const DPLV_GIZLI = ["TEKİRDAĞ"];
-let _loadDplvPromise = null;
 let _autoPlvPromise = null;
-export async function loadDplv() {
-  if (S.dplvList) return S.dplvList;
-  if (_loadDplvPromise) return _loadDplvPromise;
-  _loadDplvPromise = (async () => {
-    const d = await api("/api/dplv");
-    S.dplvList = d;
-    const sel = $("inpDplv");
-    sel.innerHTML = "";
-    let ilk = null;
-    d.stations.forEach((s, i) => {
-      if (DPLV_GIZLI.includes(s.name)) return;
-      if (ilk === null) ilk = i;
-      const o = document.createElement("option");
-      o.value = i;
-      o.textContent = s.name;
-      sel.appendChild(o);
-    });
-    sel.onchange = () => {
-      S.dplvManual = true;
-      S.dplvValues = S.dplvList.stations[+sel.value].ratios.slice();
-      renderDplvGrid();
-      updatePlvAutoInfo();
-    };
-    if (ilk !== null) {
-      sel.value = ilk;
-      if (!S.dplvValues && !S.dplvAuto && !S.dplvManual) S.dplvValues = d.stations[ilk].ratios.slice();
-    }
-    renderDplvGrid();
-    updatePlvAutoInfo();
-    return d;
-  })();
-  try {
-    return await _loadDplvPromise;
-  } finally {
-    _loadDplvPromise = null;
-  }
-}
-loadDplv().catch(() => {});
 export async function loadMgm() {
   try {
     const d = await api("/api/mgm-stations");
@@ -122,15 +83,6 @@ export async function autoSelectPLV({ force = false } = {}) {
   if (!force && S.dplvManual) return;
   if (_autoPlvPromise) return _autoPlvPromise;
   _autoPlvPromise = (async () => {
-    // S.dplvList hazır değilse bekle (loadDplv fire-and-forget)
-    if (!S.dplvList) {
-      try {
-        await loadDplv();
-      } catch (e) {
-        /* sessiz */
-      }
-      if (!S.dplvList) return;
-    }
     const curHavza = S.havza;
     try {
       const r = await api("/api/plv-en-yakin", { havza_geojson: curHavza });
@@ -140,11 +92,11 @@ export async function autoSelectPLV({ force = false } = {}) {
       S.dplvAuto = r;
       const md = $("mgmDplv");
       if (md) md.value = r.ad;
-      // inpDplv dokunulmaz (3’lü), dplvRatios S.dplvValues öncelikli
       renderDplvGrid();
       updatePlvAutoInfo();
     } catch (e) {
-      // sessiz fallback: statik ÇORLU davranışı korunur
+      const el = $("plvAutoInfo");
+      if (el) el.innerHTML = `⚠ MGM PLV otomatik seçim yapılamadı: ${_esc(e.message)} — 14 oranı elle doldurun`;
     }
   })();
   try {
@@ -178,7 +130,7 @@ export function mgmFind(name) {
 }
 export function renderDplvGrid() {
   const div = $("dplvGrid");
-  if (!div || !S.dplvList) return;
+  if (!div) return;
   const vals = S.dplvValues || Array(14).fill(null);
   let h =
     `<table class="tbl rain"><tr>` +
@@ -200,11 +152,11 @@ export function renderDplvGrid() {
     });
     inp.addEventListener("paste", (e) => {
       const text = (e.clipboardData || window.clipboardData).getData("text");
-      if (!text || (!text.includes("\t") && !text.includes("\n"))) return;
+      if (!text || (!text.includes("\t") && !text.includes("\n") && !text.includes(";") && !text.includes(" "))) return;
       e.preventDefault();
       const flat = text
         .replace(/\r/g, "")
-        .split(/[\n\t]/)
+        .split(/[\s;]+/)
         .map((x) => x.trim())
         .filter((x) => x !== "");
       const c0 = +e.target.dataset.c;
@@ -222,16 +174,19 @@ export function renderDplvGrid() {
 export function readDplvGrid() {
   S.dplvValues = Array(14).fill(null);
   document.querySelectorAll(".dplv-cell").forEach((inp) => {
-    const t = inp.value.trim().replace(",", ".");
+    const t = inp.value.trim().replaceAll(",", ".");
     S.dplvValues[+inp.dataset.c] = t === "" || isNaN(+t) ? null : +t;
   });
 }
 export function dplvRatios() {
-  if (S.dplvValues && S.dplvValues.every((v) => v != null)) return S.dplvValues;
-  // Boş/bayat seçim (ör. gizlenmiş bir istasyonu işaret eden eski proje) +"" ile
-  // 0. istasyona düşmesin; ilk görünür istasyona geri çekil.
-  const v = $("inpDplv").value;
-  const st = v === "" ? null : S.dplvList.stations[+v];
-  const gorunur = S.dplvList.stations.find((s) => !DPLV_GIZLI.includes(s.name));
-  return (st || gorunur || S.dplvList.stations[0]).ratios;
+  const valsOk = S.dplvValues && S.dplvValues.every((v) => v != null && Number.isFinite(v)) && Math.abs(S.dplvValues[13] - 1.0) < 1e-9;
+  const autoOk = S.dplvAuto && S.dplvAuto.plv && S.dplvAuto.plv.every((v) => v != null && Number.isFinite(v));
+  // Elle modda eksik grid asla otomatikle maskelenmemeli — hep throw, asla silent fallback yok
+  if (S.dplvManual) {
+    if (!valsOk) throw new Error("DPLV elle tablo eksik — 14 hücreyi doldurun (son oran 1.0 olmalı)");
+    return S.dplvValues;
+  }
+  if (valsOk) return S.dplvValues;
+  if (autoOk) return S.dplvAuto.plv;
+  throw new Error("DPLV 14 oran eksik — MGM PLV otomatik seçilmedi ve tablo boş. Havzayı çıkarıp MGM'yi bekleyin veya 14 oranı doldurun.");
 }

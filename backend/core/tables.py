@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Sabit veri tabloları (Excel'den çıkarılmış JSON'lar) ve interpolasyon yardımcıları."""
 import json
+import math
 import os
 from functools import lru_cache
 
@@ -61,10 +62,21 @@ def yad_at_datagir_durations(area_km2):
     }
 
 
+DURATIONS_MIN = (5, 10, 15, 30, 60, 120, 180, 240, 300, 360, 480, 720, 1080, 1440)
+
+def dogrula_dplv(dplv_ratios):
+    """MGM PLV + manuel 14 oran doğrulaması — tek kaynak, tek mesaj."""
+    if not dplv_ratios or len(dplv_ratios) != 14 or any(v is None for v in dplv_ratios):
+        raise ValueError("dplv_ratios 14 oran gerekli — MGM PLV seçin veya 14 hücreyi doldurun")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in dplv_ratios):
+        raise ValueError("DPLV oranları sayı olmalı")
+    if abs(dplv_ratios[13] - 1.0) > 1e-9:
+        raise ValueError("DPLV son oran 1.0 olmalı (24sa)")
+
 def plv_ratio(duration_hr, dplv_ratios):
-    """DPLV istasyon eğrisinden süreye karşılık yağış oranı (24 sa = 1)."""
-    t = load("dplv_stations")
-    xs = [m / 60.0 for m in t["durations_min"]]
+    """DPLV eğrisinden süreye karşılık yağış oranı (24 sa = 1). MGM PLV (otomatik) + manuel 14 oran — süre ekseni sabit."""
+    dogrula_dplv(dplv_ratios)
+    xs = [m / 60.0 for m in DURATIONS_MIN]
     return interp1(duration_hr, xs, dplv_ratios)
 
 

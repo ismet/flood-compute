@@ -136,6 +136,7 @@ function clearSingleBasin() {
   S.dplvManual = false;
   S.dplvAuto = null;
   S.dplvValues = null;
+  if ("dplvList" in S) delete S.dplvList;
   S.resPoints = null;
   S.resSonuc = null;
   if (S.resMarker) {

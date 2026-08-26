@@ -9,8 +9,9 @@ from backend.core import engine, tables  # noqa: E402
 
 G = json.load(open(os.path.join(tables.TABLES, "golden_tayakadin.json"), encoding="utf-8"))
 
-# ÇORLU DPLV istasyonu (Excel O21=2)
-dplv = next(s for s in tables.load("dplv_stations")["stations"] if s["name"] == "ÇORLU")
+# ÇORLU DPLV istasyonu (Excel O21=2) — hazır kaldırıldığı için literal donduruldu (dplv_stations.json:39-54)
+CORLU_RATIOS = [0.1802921628417251,0.26,0.3300189300428163,0.4221712987689527,0.5019731426984025,0.58,0.6436670269180902,0.6800942972974249,0.7064472205692022,0.74,0.7733104391690655,0.82,0.89,1.0]
+dplv = {"ratios": CORLU_RATIOS}
 
 gi = G["girdi"]
 p24 = gi["P24_agirlikli"]

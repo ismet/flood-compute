@@ -18,7 +18,7 @@ import { $ } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
 import { renderKotlar, renderCnSonuc } from "../wizard/cn.js";
 import { renderRainTable } from "../wizard/rain.js";
-import { loadDplv, renderDplvGrid, updatePlvAutoInfo } from "../wizard/dplv.js";
+import { renderDplvGrid, updatePlvAutoInfo } from "../wizard/dplv.js";
 import { updateComputeReady } from "../wizard/steps.js";
 
 const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili"];
@@ -43,7 +43,8 @@ function reviveSets(obj) {
 // "circular structure" ile patlar (örn. resMarker'ın Geoman .pm._layer geri
 // referansı). sonuc yeniden hesaplanabilir; raster altlıkları sunucudan gelir.
 export function buildDurumS() {
-  return { ...S, sonuc: null, infoLayers: [], rasterLayers: [], resMarker: null };
+  const { dplvList: _deleted, ...rest } = S;
+  return { ...rest, sonuc: null, infoLayers: [], rasterLayers: [], resMarker: null };
 }
 
 $("btnDelete").onclick = async () => {
@@ -74,7 +75,6 @@ $("btnSave").onclick = async () => {
     "inpCN2",
     "inpCN3",
     "inpSoil",
-    "inpDplv",
     "karTemps",
     "karA",
     "karH",
@@ -87,7 +87,10 @@ $("btnSave").onclick = async () => {
     "inpW75",
     "inpYald",
     "inpOetElle",
-  ].forEach((id) => (fields[id] = $(id).value));
+  ].forEach((id) => {
+    const el = $(id);
+    if (el) fields[id] = el.value;
+  });
   const durumS = buildDurumS();
   try {
     const body = JSON.stringify({ ad, durum: { S: durumS, fields } }, setReplacer);
@@ -130,6 +133,8 @@ $("projList").onchange = async () => {
       resM = S.resMarker;
     Object.assign(S, d.S);
     reviveSets(S);
+    // Hazır istasyon kaldırıldı — eski projelerdeki dplvList zombie'sini temizle
+    if ("dplvList" in S) delete S.dplvList;
     S.infoLayers = infoY;
     S.rasterLayers = rasterY;
     // resMarker canlı katmandır; null ile ezilirse eski mor işaretçi haritada
@@ -140,17 +145,11 @@ $("projList").onchange = async () => {
     });
     $("projName").value = ad;
     if (S.dplvManual === undefined) {
-      const hasOldPlv =
-        !!(d.S && d.S.dplvValues) || !!(d.fields && d.fields.inpDplv != null && String(d.fields.inpDplv) !== "");
+      const hasOldPlv = !!(d.S && d.S.dplvValues);
       S.dplvManual = hasOldPlv ? true : false;
     }
     if (S.dplvAuto === undefined) S.dplvAuto = null;
     if (S.dplvValues === undefined) S.dplvValues = null;
-    if (!S.dplvList) {
-      try {
-        await loadDplv();
-      } catch (e) {}
-    }
     renderKotlar();
     renderRainTable();
     renderDplvGrid();

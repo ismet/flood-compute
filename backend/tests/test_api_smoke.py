@@ -11,10 +11,15 @@ from backend.core import tables  # noqa: E402
 
 c = TestClient(app)
 
-# --- dplv listesi
+# --- dplv hazır kaldırıldı — GET /api/dplv artık 404
 r = c.get("/api/dplv")
-assert r.status_code == 200 and len(r.json()["stations"]) >= 3
-print("dplv OK")
+assert r.status_code == 404 and "hata" in r.json(), r.json()
+print("dplv 404 OK (hazır kaldırıldı)")
+
+# --- mgm plv (tek kaynak) + manuel grid korunur — 404 sonrası bile süre ekseni const ile yaşar
+r = c.get("/api/mgm-stations")
+assert r.status_code == 200 and "plv" in r.json()["istasyonlar"][0]
+print("mgm-stations OK (MGM PLV tek kaynak)")
 
 # --- yağış çözümleme
 txt = "BİNKILIÇ\t79,57\t112,56\t138,43\t176,18\t208,20\t243,86\t452,6\nTERKOS 59.67 90.60 112.70 142.27 165.33 189.27 342.34"
@@ -41,7 +46,9 @@ print("thiessen OK:", [(x["name"], x["agirlik"]) for x in w])
 G = json.load(open(os.path.join(tables.TABLES, "golden_tayakadin.json"), encoding="utf-8"))
 gi = G["girdi"]
 p24 = gi["P24_agirlikli"]
-dplv = next(s for s in tables.load("dplv_stations")["stations"] if s["name"] == "ÇORLU")
+# ÇORLU DPLV 14 oran — hazır istasyon kaldırıldığı için literal donduruldu (data/tables/dplv_stations.json:39-54)
+CORLU_RATIOS = [0.1802921628417251,0.26,0.3300189300428163,0.4221712987689527,0.5019731426984025,0.58,0.6436670269180902,0.6800942972974249,0.7064472205692022,0.74,0.7733104391690655,0.82,0.89,1.0]
+dplv = {"ratios": CORLU_RATIOS}
 girdi = {
     "ad": gi["ad"], "A_km2": gi["A_km2"], "L_km": gi["L_km"], "Lc_km": gi["Lc_km"],
     "CN2": gi["CN2"], "CN3": gi["CN3"], "region": gi["bolge"],
