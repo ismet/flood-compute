@@ -33,7 +33,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 | `data/projects/` | Kaydedilen projeler (JSON). |
 | `data/agi/` | ⚠ Eski yıllıkların (1979–1986) çıkarımında **118 pik kaydının başına fazladan bir rakam yapışmış** (D24A029 1981: 9500 m³/s, diğer 29 yıl 68–1033). NTFA/BTFA bunları varsayılan olarak eler ve hangisini neden elediğini sonuçta gösterir. `agi.sqlite` — DSİ ve EİE Akım Gözlem Yıllıklarından çıkarılmış yıllık pik akım veri tabanı (1935–2020, 2732 istasyon / 36.5 bin istasyon-yıl). Adım 5’teki frekans analizinin girdisidir. Yeniden üretmek: `python tools/agi_veritabani_olustur.py <pik_veritabani.csv>`. |
 | `data/yagis/` | `yagis_tr.tif` (yağış), `pet_tr.tif` (potansiyel evapotranspirasyon), `net_tr.tif` (net yağış = P − AET) — CHELSA v2.1, 1981–2010 normali, ~1 km piksel, toplam 6.6 MB. Haritada tematik katman; nokta ve havza alansal ortalaması sorgulanır. Yeniden üretmek: `python tools/yagis_haritasi_indir.py`. |
-| `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,3 milyon ölçülü gün). **Su Potansiyeli** sekmesinin girdisidir. 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
+| `data/su/` | `su.sqlite` — AGİ **günlük** akım serileri (1934–2015, 2909 istasyon, 8,3 milyon ölçülü gün). **Su Potansiyeli** sekmesinin girdisidir (şu anda UI CSS ile gizli, API aktif). 1,68 GB'lık `Data.db`'den üretilir: `python tools/su_veritabani_olustur.py Data.db` (11,5 MB'a iner — her istasyonun serisi tek sıkıştırılmış float32 dizisi). |
 
 ## İş akışı (5 adım)
 
@@ -212,6 +212,8 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
 
 ## Su Potansiyeli modu
+
+> **Not:** Şu anda arayüzde CSS ile gizli (`frontend/style.css:175` — `display:none`); backend ve API uçları (`/api/su-*`) korunuyor. Görünür yapmak için o blok silinir.
 
 Üst kısımdaki **Su Potansiyeli** düğmesiyle geçilir; taşkın hesabından
 bağımsızdır. Burada pik değil **hacim** sorulur. Panel beş adımda ilerler:
