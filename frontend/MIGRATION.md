@@ -77,7 +77,7 @@ frontend/
       thiessen.js       # station sets/weights, kurumColor (local), stPlace dead-code (until stage 14)
       rain.js           # rain grid, MGM matching, recalcRain, rain-color cluster,
                         #   layers.thiessen OWNER-CREATED, mgmDbListesi/mgmDbYakin
-      dplv.js           # DPLV grids, loadDplv/autoSelectPLV, loadMgm, mgmFind
+      dplv.js           # DPLV grids (MGM PLV auto + manuel 14), loadMgm/autoSelectPLV/mgmFind/renderDplvGrid
       hesap.js          # compute+builders+results, report/KMZ/CSV, Snyder Ct/Cp/W50/YALD abak
       grafik.js         # chartwrap, cmp-compare, cmpInterp, showChart/showSnyderChart
       frekans.js        # AGI layer/list + NTFA/BTFA/MMY (~550 ln — size consciously accepted)
@@ -101,7 +101,7 @@ frontend/
   - thiessen ⇒ stBase, stExclude, stExtra, stKaynak, istasyonlar, thiessen, thElenen
   - rain ⇒ rainValues, rainMeta, P24w, OETw, rainColorCol, mgmDbYakin
   - cn ⇒ cnSonuc, zemin, rasyonelCKaynak, cSecim
-  - dplv ⇒ dplvList, dplvManual, dplvAuto, dplvValues, mgm, mgmByNorm, mgmDb
+  - dplv ⇒ dplvManual, dplvAuto, dplvValues, mgm, mgmByNorm, mgmDb (dplvList/Hazır kaldırıldı — tek kaynak MGM PLV)
   - frekans ⇒ agiSecili, agiBolgesel, agiListe, tfa, btfa, mmy
   - grafik ⇒ cmpCoords (cmpState is module-local)
   - multi / multi-sonuc ⇒ multi*, multiMd, multiQbazVals, multiSonuc, multiShowRes(shared both)

@@ -157,9 +157,9 @@ backend/core/      - Computation engine (no framework dependency)
 frontend/           - ESM native (no build): `app.js` (composition root — `setMode`/`activateStep`/`clearSingleBasin`/`overlay-Esc`/`?debug` seam) + `js/{core,ui,map,wizard,modes}`, `vendor/` self-hosted (Leaflet 1.9.4/Geoman 2.17.0/Chart.js 4.4.3 SRI); full map & layer contract (`map/wizard/modes → ui → core`, static DAG) in `frontend/MIGRATION.md` §3 — Dilekçe/Su sekmeleri CSS ile gizli (`frontend/style.css:175`, `display:none`; `frontend/js/modes/{su,dilekce}.js` ve backend korunur)
 ```
 
-- **`S` singleton** (`frontend/js/core/state.js`) — global app state, no framework; slices owned per `frontend/MIGRATION.md` §3.1 (e.g. havza→outlet/havza/kotlar/dere/kanal, thiessen→istasyonlar/thiessen, rain→P24w/OETw, cn→CN, dplv→dplvValues, hesap→sonuc/girdi; `Object.assign(S,…)` only on project restore). Self-wiring modules (listeners at import); `_esc()` mandatory for interpolations; status ids (`delinStatus` etc.) are **SHARED** channels — panels/tables owned, statuses not. Debug seam `?debug=1` gates `window.__fh={map,S,layers}` (no globals otherwise). `index.html` `/` + `/static/*.{js,css}` served `no-cache` (`backend/main.py:1484,1496`); vendor same. No `?v=` stamping.
+- **`S` singleton** (`frontend/js/core/state.js`) — global app state, no framework; slices owned per `frontend/MIGRATION.md` §3.1 (e.g. havza→outlet/havza/kotlar/dere/kanal, thiessen→istasyonlar/thiessen, rain→P24w/OETw, cn→CN, dplv→dplvManual/dplvAuto/dplvValues (MGM PLV + manuel), hesap→sonuc/girdi; `Object.assign(S,…)` only on project restore). Hazır istasyon (`dplvList`/TEKİRDAĞ/ÇORLU/KARTAL, `GET /api/dplv`) kaldırıldı — tek kaynak MGM PLV (236, `POST /api/plv-en-yakin` centroid) + manuel 14 oran. Self-wiring modules (listeners at import); `_esc()` mandatory for interpolations; status ids (`delinStatus` etc.) are **SHARED** channels — panels/tables owned, statuses not. Debug seam `?debug=1` gates `window.__fh={map,S,layers}` (no globals otherwise). `index.html` `/` + `/static/*.{js,css}` served `no-cache` (`backend/main.py:1484,1496`); vendor same. No `?v=` stamping.
 - **Rejected decisions:** TS/framework builds (no build D-01) · CSP (deferred) · hashed assets (no-cache D-03) · state library (S singleton sufficient) · event delegation (self-wiring §3.1).
-- Frontend table/UH data lives in `data/` JSON: `data/tables/*.json` (16 Excel-extracted lookup tables; do NOT edit by hand, regenerate with `tools/extract_tables.py`)
+- Frontend table/UH data lives in `data/` JSON: `data/tables/*.json` (15 Excel-extracted lookup tables; do NOT edit by hand, regenerate with `tools/extract_tables.py` — DPLV hazır `dplv_stations.json` kaldırıldı, süre ekseni `backend/core/tables.py:DURATIONS_MIN` sabit)
 
 ## Data
 
@@ -197,7 +197,7 @@ Stage paths explicitly - see `.gitignore:25-32`.
 | DEM (Copernicus GLO-30) | `copernicus-dem-30m.s3.amazonaws.com` → `data/dem/cache/` | First delineation (cache grows to GBs with use) |
 | CORINE (CLC2018) | EEA WMS → `data/corine/cache/` | First CN computation |
 
-## API endpoints (65 API total; main.py has 66 routes incl. the `/` index)
+## API endpoints (65 API total; main.py has 66 routes incl. the `/` index — `GET /api/dplv` 404 stub deprecated)
 
 | Endpoint | Notes |
 |---|---|
@@ -234,7 +234,8 @@ Stage paths explicitly - see `.gitignore:25-32`.
 | `POST /api/zemin-grubu` / `POST /api/yzd-region` | soil group / region, with reasoning |
 | `POST /api/stations` | Station KMZ/KML upload (multipart) - custom Thiessen set |
 | `GET /api/stations/default` / `GET /api/mgm-stations` | default Thiessen set / PLV stations |
-| `GET /api/dplv` / `GET /api/geocode` / `GET /api/snyder-ctcp` / `GET /api/abak2` | static data |
+| `GET /api/dplv` | **deprecated** 404 — Hazır kaldırıldı, `GET /api/mgm-stations` / `POST /api/plv-en-yakin` kullan |
+| `GET /api/geocode` / `GET /api/snyder-ctcp` / `GET /api/abak2` | static data |
 | `GET /api/reservoir-defaults` / `GET /api/reservoir-controlled-defaults` | Söylemez/ gated defaults |
 | `GET /api/dilekce-defaults` / `GET /api/dilekce-imza` | petition defaults — UI CSS ile gizli, API aktif |
 | `POST /api/project/save` · `GET /api/project/list` · `GET /api/project/load/{ad}` · `DELETE /api/project/{ad}` | project CRUD (JSON in `data/projects/`) |

@@ -66,3 +66,4 @@ node_modules/
 
 # Lavish Editor inceleme yüzeyleri — yerel, geçici
 .lavish/
+.opencode/

@@ -37,17 +37,24 @@ const multiLayers = {
 multiLayers.poly.remove();
 multiLayers.pts.remove(); // varsayılan gizli
 
-// 1) Ortak veri durumu (istasyon + yağış) — Adım 3'ten (birleşik) paylaşılır
+// 1) Ortak veri durumu (istasyon + yağış + DPLV) — Adım 3'ten (birleşik) paylaşılır
 function updateMultiShared() {
   const nSt = (S.istasyonlar || []).length;
   const nRain = S.rainValues
     ? Object.values(S.rainValues).filter((v) => v && v.slice(0, 6).every((x) => x != null)).length
     : 0;
-  const ok = nSt > 0 && nRain > 0;
-  $("multiShared").innerHTML = ok
-    ? `✓ İstasyonlar: ${nSt} yüklü — Yağış: ${nRain} istasyon dolu. (Değiştirmek için “Tek Havza” → Adım 3.)`
-    : `⚠ Eksik: ${nSt ? "" : "istasyon (Adım 3) "}${nRain ? "" : "yağış (Adım 3) "} — “Tek Havza” → Adım 3’ü doldurun.`;
-  $("multiShared").className = "small " + (ok ? "" : "err");
+  let dplvOk = false;
+  let dplvMsg = "";
+  try { dplvOk = !!dplvRatios(); } catch (e) { dplvMsg = _esc(e.message); }
+  const ok = nSt > 0 && nRain > 0 && dplvOk;
+  if (ok) {
+    $("multiShared").innerHTML = `✓ İstasyonlar: ${nSt} yüklü — Yağış: ${nRain} istasyon dolu — DPLV: hazır. (Değiştirmek için “Tek Havza” → Adım 3.)`;
+    $("multiShared").className = "small";
+  } else {
+    const eksik = `${nSt ? "" : "istasyon (Adım 3) "}${nRain ? "" : "yağış (Adım 3) "}${dplvOk ? "" : `DPLV (${dplvMsg || "MGM PLV / 14 oran"}) `}`;
+    $("multiShared").innerHTML = `⚠ Eksik: ${eksik}— “Tek Havza” → Adım 3’ü doldurun.`;
+    $("multiShared").className = "small err";
+  }
 }
 function selectedMethods() {
   return Array.from(document.querySelectorAll(".mmethod:checked")).map((x) => x.dataset.m);
@@ -203,6 +210,7 @@ async function autoComputeSub(sub, qbaz, methods) {
     else OET += t.agirlik * rv[6];
   });
   const cn = await api("/api/cn", { havza_geojson: sub.havza_geojson, zemin_grubu: $("multiSoil").value });
+  const _dplv = dplvRatios(); // throws if eksik
   const girdi = {
     ad: "alt",
     A_km2: sub.alan_km2,
@@ -215,7 +223,7 @@ async function autoComputeSub(sub, qbaz, methods) {
     Qbaz: qbaz,
     P24,
     P24_OET: oetOk ? OET : 0,
-    dplv_ratios: dplvRatios(),
+    dplv_ratios: _dplv,
   };
   const snyderOn = methods.includes("snyder");
   // rasyonel C: alt havzanın KENDİ CORINE dökümünden türet; yoksa 0.45'e düş

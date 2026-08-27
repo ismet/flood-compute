@@ -178,6 +178,7 @@ $("btnCompute").onclick = async () => {
           period: +$("karPeriod").value,
         }
       : null;
+    const _dplv = dplvRatios(); // throws if eksik — mesaj doğrudan compStatus'a gider
     const girdi = {
       ad: $("projName").value || "Havza",
       A_km2: +$("inpA").value,
@@ -190,7 +191,7 @@ $("btnCompute").onclick = async () => {
       Qbaz: +$("inpQbaz").value || 0,
       P24: S.P24w,
       P24_OET: S.OETw ?? 0,
-      dplv_ratios: dplvRatios(),
+      dplv_ratios: _dplv,
     };
     S.girdi = girdi;
     setStatus("compStatus", "Hesaplanıyor…", "loading");
@@ -425,6 +426,16 @@ async function downloadReport() {
   $("repStatus").textContent = "Rapor hazırlanıyor… (şekiller çiziliyor)";
   try {
     const secili = $("repSecili").value;
+    let dplvKaynak;
+    if (S.dplvAuto && !S.dplvManual) {
+      dplvKaynak = { ad: S.dplvAuto.ad, kod: S.dplvAuto.kod, mesafe_km: S.dplvAuto.mesafe_km, yontem: "mgm-auto" };
+    } else if (S.dplvValues) {
+      const hit = (S.mgm || []).find((s) => s.plv && S.dplvValues.length === 14 && s.plv.every((v, i) => Math.abs(v - S.dplvValues[i]) < 1e-6));
+      if (hit) dplvKaynak = { ad: hit.ad, kod: hit.no ? String(hit.no) : "", mesafe_km: null, yontem: "mgm-manuel" };
+      else dplvKaynak = { yontem: "elle", plv: S.dplvValues };
+    } else {
+      dplvKaynak = { yontem: "elle", plv: S.dplvValues };
+    }
     const meta = {
       proje_adi: $("projName").value || S.girdi.ad || "Proje",
       bolum_no: $("repBolum").value.trim() || "4.7.3",
@@ -432,6 +443,7 @@ async function downloadReport() {
       secili_yontem: dahil.includes(secili) ? secili : dahil[0],
       MF: 1.13,
       thiessen: (S.thiessen || []).filter((t) => t.agirlik > 0).map((t) => ({ name: t.name, agirlik: t.agirlik })),
+      dplvKaynak,
     };
     const resp = await fetch("/api/report", {
       method: "POST",

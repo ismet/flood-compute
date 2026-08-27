@@ -91,16 +91,9 @@ def main():
         r += 1
     dump("abak2_yad", {"durations_hr": durations, "areas_km2": areas, "percent": vals})
 
-    # ---- 4) DPLV istasyon dağılım eğrileri (DATAGİR P23:AD62) ----
-    ws = wbv["DATAGİR"]
-    durations_min = [5, 10, 15, 30, 60, 120, 180, 240, 300, 360, 480, 720, 1080, 1440]
-    stations = []
-    for r in range(23, 63):
-        name = ws.cell(r, 16).value  # P
-        vals = [ws.cell(r, c).value for c in range(17, 31)]  # Q..AD
-        if name and all(isinstance(v, (int, float)) for v in vals):
-            stations.append({"name": str(name).strip(), "ratios": [float(v) for v in vals]})
-    dump("dplv_stations", {"durations_min": durations_min, "stations": stations})
+    # ---- 4) DPLV süre ekseni (MGM PLV ile özdeş, const DURATIONS_MIN) ----
+    # Hazır istasyon (TEKİRDAĞ/ÇORLU/KARTAL) kaldırıldı — tek kaynak MGM PLV (mgm_plv_2020.sure_dk)
+    # Süre ekseni backend/core/tables.py DURATIONS_MIN'da sabit; dosya dplv_stations.json artık üretilmiyor.
 
     # ---- 5) CN Şart II -> Şart III dönüşümü ----
     ws = wbv["CNIII"]

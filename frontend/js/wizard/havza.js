@@ -188,6 +188,7 @@ export function applyBasinResult(r, baslik) {
   S.dplvManual = false;
   S.dplvAuto = null;
   S.dplvValues = null;
+  if ("dplvList" in S) delete S.dplvList;
   // önceki hesap artık geçersiz (alan değişti) — overlay gizlenir
   S.sonuc = null;
   S.girdi = null;
@@ -331,6 +332,7 @@ map.on("click", async (ev) => {
     S.dplvManual = false;
     S.dplvAuto = null;
     S.dplvValues = null;
+    if ("dplvList" in S) delete S.dplvList;
     S.sonuc = null;
     S.girdi = null;
     if ($("results")) $("results").innerHTML = "";

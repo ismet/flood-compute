@@ -30,10 +30,9 @@
  * @property {Object|null} zemin - Zemin grubu {grup,dagilim,pay_yuzde,yontem,ksat_araligi_mm_sa}
  * @property {string|null} cSecim - Rasyonel C seçimi (C_min/C_orta/C_max)
  * @property {Object|null} rasyonelCKaynak - {deger,secim,kaynak}
- * @property {Array|null} dplvList - {stations:[{name,ratios}]}
- * @property {boolean} dplvManual - DPLV elle değiştirildi mi
- * @property {Object|null} dplvAuto - Otomatik seçilen PLV {ad,kod,mesafe_km,plv}
- * @property {Array|null} dplvValues - 14 oran
+ * @property {boolean} dplvManual - DPLV elle değiştirildi mi (MGM otomatik vs elle)
+ * @property {Object|null} dplvAuto - Otomatik seçilen MGM PLV {ad,kod,mesafe_km,plv}
+ * @property {Array|null} dplvValues - 14 oran (MGM veya elle)
  * @property {Array} mgm - MGM station list
  * @property {Object} mgmByNorm - mgmNorm→station
  * @property {Object|null} mgmDb - /api/mgm-bilgi
@@ -82,10 +81,10 @@ export const S = {
   istasyonlar: [],
   thiessen: [],
   yagis: [],
-  dplvList: null,
   sonuc: null,
   dplvManual: false,
   dplvAuto: null,
+  dplvValues: null,
 };
 
 const _havzaListeners = [];

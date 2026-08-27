@@ -160,10 +160,21 @@ def build_report(girdi, sonuc, meta=None):
                         for t in thiessen if t.get("agirlik", 0) > 0)
         thi_txt = (f" Yağış alanını temsil eden meteoroloji istasyonları arasında "
                    f"Thiessen poligonu çizilmiş ve temsil oranları hesaplanmıştır: {pay}.")
+    dplv_src = ""
+    dk = meta.get("dplvKaynak")
+    if dk:
+        if dk.get("yontem") == "mgm-auto" and dk.get("ad"):
+            mk = dk.get("mesafe_km")
+            mk_txt = f", {mk:.1f} km" if isinstance(mk, (int, float)) else ""
+            dplv_src = f" DPLV eğrisi havza centroid'ine en yakın MGM PLV istasyonu {dk['ad']} ({dk.get('kod','')}{mk_txt}) üzerinden alınmıştır."
+        elif dk.get("yontem") == "mgm-manuel" and dk.get("ad"):
+            dplv_src = f" DPLV eğrisi MGM PLV istasyonu {dk['ad']} ({dk.get('kod','')}) — manuel seçilen — üzerinden alınmıştır."
+        elif dk.get("yontem") in ("elle", "elle-manuel"):
+            dplv_src = " DPLV eğrisi kullanıcı tarafından elle girilen 14 oran üzerinden alınmıştır."
     doc.add_paragraph(
         "Proje alanı kritik yağış süresindeki yağışları; plüviyograf oranları (PLV), "
         f"alan dağılım katsayısı (ADK/YAD), maksimize faktörü (MF={_n(mf)}) ve Thiessen "
-        "oranı ile çarpılarak hesaplanmıştır." + thi_txt +
+        "oranı ile çarpılarak hesaplanmıştır." + dplv_src + thi_txt +
         " Havzayı temsil eden istasyonların ağırlıklı 24 saatlik yinelenmeli yağış "
         "değerleri aşağıdaki tabloda verilmiştir.")
     p24 = girdi.get("P24", {})
