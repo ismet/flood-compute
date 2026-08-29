@@ -41,6 +41,80 @@ import { markDone } from "./steps.js";
 import { showChart, showSnyderChart } from "./grafik.js";
 import { exportKmz } from "./kmz.js";
 
+/* ---- Hesaplanacak Yöntemler (Sentetik Yöntemler) — S.seciliYontemler Set ---- */
+export function seciliYontemler() {
+  if (S.seciliYontemler instanceof Set) return new Set(S.seciliYontemler);
+  const dom = document.querySelectorAll(".hesapYontem:checked");
+  if (dom.length) return new Set(Array.from(dom).map((e) => e.dataset.m));
+  return new Set(["dsi", "mockus"]);
+}
+function yontemSecili(m) {
+  return (S.seciliYontemler instanceof Set ? S.seciliYontemler : seciliYontemler()).has(m);
+}
+function syncYontemBoxes() {
+  const sel = S.seciliYontemler instanceof Set ? S.seciliYontemler : new Set(["dsi", "mockus"]);
+  const rBox = $("rasyonelBox");
+  const sBox = $("snyderBox");
+  if (rBox) {
+    rBox.classList.toggle("hidden", !sel.has("rasyonel"));
+    if (sel.has("rasyonel")) rBox.open = true;
+  }
+  if (sBox) {
+    sBox.classList.toggle("hidden", !sel.has("snyder"));
+    if (sel.has("snyder")) {
+      sBox.open = true;
+      updateSnyderW();
+    }
+  }
+  // hide-sync: inner legacy checkboxes for one-release compat (cn.js / app.js still write inpRasyonel)
+  const ir = $("inpRasyonel");
+  if (ir) ir.checked = sel.has("rasyonel");
+  const is = $("inpSnyder");
+  if (is) is.checked = sel.has("snyder");
+  // DSİ zorunlu — enforce checked disabled
+  const dsi = document.querySelector('.hesapYontem[data-m="dsi"]');
+  if (dsi) { dsi.checked = true; dsi.disabled = true; }
+}
+function wireYontemSecim() {
+  const boxes = document.querySelectorAll(".hesapYontem");
+  if (!boxes.length) return false;
+  boxes.forEach((cb) => {
+    if (cb.dataset.wired) return;
+    cb.dataset.wired = "1";
+    cb.addEventListener("change", () => {
+      if (!(S.seciliYontemler instanceof Set)) S.seciliYontemler = new Set(["dsi", "mockus"]);
+      const m = cb.dataset.m;
+      if (m === "dsi") { cb.checked = true; return; } // zorunlu
+      if (cb.checked) S.seciliYontemler.add(m);
+      else S.seciliYontemler.delete(m);
+      if (!S.seciliYontemler.size) {
+        // en az bir yöntem — sonuncuyu geri al
+        S.seciliYontemler.add(m);
+        cb.checked = true;
+        setStatus("compStatus", "En az bir yöntem seçili olmalı", "err");
+        setTimeout(() => setStatus("compStatus", "", ""), 1500);
+        return;
+      }
+      syncYontemBoxes();
+      // live-filter overlay if already computed
+      if (S.sonuc) renderHesapDock();
+      // update disabled state of HESAPLA via steps helper if available
+      try { const e = $("btnCompute"); if (e) { const ready = $("inpA").value && $("inpL").value && S.P24w != null; e.disabled = !ready || S.seciliYontemler.size === 0; } } catch (e) {}
+    });
+  });
+  // initial sync from S (project restore) to DOM
+  boxes.forEach((cb) => {
+    const m = cb.dataset.m;
+    if (m === "dsi") cb.checked = true;
+    else cb.checked = S.seciliYontemler instanceof Set ? S.seciliYontemler.has(m) : cb.checked;
+  });
+  syncYontemBoxes();
+  return true;
+}
+// try immediate wire, else on DOMContentLoaded
+if (!wireYontemSecim()) {
+  document.addEventListener("DOMContentLoaded", wireYontemSecim);
+}
 /* ---- Snyder Ct-Cp abağı (log-log, çift yönlü otomatik) ---- */
 
 let ctcpGuard = false;
@@ -196,11 +270,20 @@ $("btnCompute").onclick = async () => {
     };
     S.girdi = girdi;
     setStatus("compStatus", "Hesaplanıyor…", "loading");
-    const snyderOn = $("inpSnyder").checked;
+    const sel = S.seciliYontemler instanceof Set ? S.seciliYontemler : seciliYontemler();
+    if (!sel.size) throw new Error("En az bir yöntem seçin (Hesaplanacak Yöntemler)");
+    if (sel.has("dsi") === false) { sel.add("dsi"); S.seciliYontemler = sel; } // DSİ zorunlu
+    const rasyonelOn = sel.has("rasyonel");
+    const snyderOn = sel.has("snyder");
+    // hide-sync keep inner legacy checkboxes for one-release compat
+    if ($("inpRasyonel")) $("inpRasyonel").checked = rasyonelOn;
+    if ($("inpSnyder")) $("inpSnyder").checked = snyderOn;
     S.sonuc = await api("/api/compute", {
       girdi,
       kar,
-      rasyonel: $("inpRasyonel").checked,
+      dsi: sel.has("dsi"),
+      mockus: sel.has("mockus"),
+      rasyonel: rasyonelOn,
       c100: +$("inpC100").value || 0.45,
       us: +$("inpUs").value || 0.2,
       snyder: snyderOn,
@@ -232,6 +315,7 @@ $("btnCompute").onclick = async () => {
 /* === extracted to core/constants.js DURS === */ /* === extracted to core/constants.js RPS === */ function buildDsiHtml(
   r,
 ) {
+  if (!r?.dsi_onhesap || !r?.girdi_ozeti) return "";
   const on = r.dsi_onhesap;
   return (
     `<h3 class="res">DSİ Sentetik — Önhesap</h3>` +
@@ -240,19 +324,20 @@ $("btnCompute").onclick = async () => {
   );
 }
 function buildKabuletHtml(r) {
+  if (!r?.kabulet) return "";
   let h = `<h3 class="res">Pik Debiler — KABULET (m³/s)</h3><div class="tbl-wrap"><table class="tbl"><tr><th>T (yıl)</th>`;
   DURS.forEach((d) => (h += `<th>${d} sa</th>`));
   h += `</tr>`;
   RPS.forEach((rp) => {
-    const vals = DURS.map((d) => r.kabulet[d][rp]);
-    const mx = Math.max(...vals);
+    const vals = DURS.map((d) => r.kabulet[d]?.[rp]);
+    const mx = Math.max(...vals.filter((v) => v != null));
     h +=
       `<tr><td>Q${rp}</td>` +
-      vals.map((v) => `<td class="${v === mx ? "max" : ""}">${fmt(v, 2)}</td>`).join("") +
+      vals.map((v) => `<td class="${v === mx && v != null ? "max" : ""}">${v == null ? "—" : fmt(v, 2)}</td>`).join("") +
       `</tr>`;
   });
   ["500", "1000", "10000"].forEach((rp) => {
-    h += `<tr><td>Q${rp}</td>` + DURS.map((d) => `<td>${fmt(r.kabulet[d][rp], 2)}</td>`).join("") + `</tr>`;
+    h += `<tr><td>Q${rp}</td>` + DURS.map((d) => `<td>${r.kabulet[d]?.[rp] == null ? "—" : fmt(r.kabulet[d][rp], 2)}</td>`).join("") + `</tr>`;
   });
   h +=
     `</table></div>` +
@@ -262,6 +347,7 @@ function buildKabuletHtml(r) {
   return h;
 }
 function buildMockusHtml(r) {
+  if (!r?.mockus?.sonuclar) return "";
   const m = r.mockus;
   let h =
     `<h3 class="res">Mockus (süperpozesiz) pik debiler</h3>` +
@@ -333,13 +419,29 @@ function renderHesapDock() {
     grid.innerHTML = "";
     return;
   }
-  grid.innerHTML =
-    buildDsiHtml(S.sonuc) +
-    buildKabuletHtml(S.sonuc) +
-    buildMockusHtml(S.sonuc) +
-    buildRasyonelHtml(S.sonuc) +
-    buildSnyderHtml(S.sonuc) +
-    buildKarHtml(S.sonuc);
+  const sel = S.seciliYontemler instanceof Set ? S.seciliYontemler : new Set(["dsi", "mockus"]);
+  const r = S.sonuc;
+  // DSİ zorunlu — if missing (backend filtered), show hint not throw (guards in builders)
+  let html = "";
+  if (sel.has("dsi")) {
+    html += buildDsiHtml(r) + buildKabuletHtml(r);
+    if (!r.kabulet) html += `<div class="small" style="margin-top:4px">DSİ seçili ama hesaplanmadı — HESAPLA ile yenileyin.</div>`;
+  }
+  if (sel.has("mockus")) {
+    html += buildMockusHtml(r);
+    if (!r.mockus) html += `<div class="small" style="margin-top:4px">Mockus seçili ama hesaplanmadı — HESAPLA ile yenileyin.</div>`;
+  }
+  if (sel.has("rasyonel")) {
+    html += buildRasyonelHtml(r);
+    if (!r.rasyonel) html += `<div class="small" style="margin-top:4px">Rasyonel seçili ama hesaplanmadı (A>1 ve parametreler eksik olabilir) — HESAPLA ile yenileyin.</div>`;
+  }
+  if (sel.has("snyder")) {
+    html += buildSnyderHtml(r);
+    if (!r.snyder) html += `<div class="small" style="margin-top:4px">Snyder seçili ama hesaplanmadı — HESAPLA ile yenileyin.</div>`;
+  }
+  html += buildKarHtml(r);
+  if (!html.trim()) html = `<div class="small">Seçili yöntem yok — Hesaplanacak Yöntemler’den en az birini seçip HESAPLA.</div>`;
+  grid.innerHTML = html;
   const btn = grid.querySelector("#btnChart");
   if (btn) btn.onclick = () => showChart(+grid.querySelector("#selDur").value);
   const btnSny = grid.querySelector("#btnSnyChart");
@@ -369,7 +471,13 @@ function renderResults() {
     const d = sel?.value,
       q = +$("yilQ").value;
     if (!d) return;
-    api("/api/yil-ara", { q, q10: r.kabulet[d]["10"], q100: r.kabulet[d]["100"] }).then(
+    const q10 = r?.kabulet?.[d]?.["10"];
+    const q100 = r?.kabulet?.[d]?.["100"];
+    if (q10 == null || q100 == null) {
+      $("yilRes").textContent = "DSİ KABULET yok — Yıl_Ara yalnızca DSİ hesaplandıysa çalışır.";
+      return;
+    }
+    api("/api/yil-ara", { q, q10, q100 }).then(
       (x) =>
         ($("yilRes").textContent =
           `T ≈ ${x.tekerrur_yili ? x.tekerrur_yili.toFixed(1) : "—"} yıl (${d} sa hidrografına göre)`),
@@ -467,8 +575,9 @@ async function downloadKmz(opts = {}) {
 }
 /* === extracted to ui/dom.js download === */ function exportCSV() {
   const r = S.sonuc;
+  if (!r?.kabulet) { download("kabulet.csv", "KABULET yok — DSİ hesaplanmadı"); return; }
   let rows = [["T(yil)", ...DURS.map((d) => d + "sa")]];
-  [...RPS, "500", "1000", "10000"].forEach((rp) => rows.push([rp, ...DURS.map((d) => fmt(r.kabulet[d][rp], 3))]));
+  [...RPS, "500", "1000", "10000"].forEach((rp) => rows.push([rp, ...DURS.map((d) => fmt(r.kabulet[d]?.[rp] ?? "", 3))]));
   download("kabulet.csv", rows.map((x) => x.join(";")).join("\n"));
 }
 
@@ -485,6 +594,9 @@ export {
   renderHesapDock,
   renderResults,
   syncRepSecili,
+  syncYontemBoxes,
+  wireYontemSecim,
+  yontemSecili,
   downloadReport,
   downloadKmz,
   exportCSV,

@@ -73,6 +73,7 @@
  * @property {Object|null} resDefaults
  * @property {Object|null} resConDefaults
  * @property {Set<string>} rapFilter - Rapor/Mukayese hariç tutulan yöntemler (comparison→hesap, KABULET CSV dışı değil sadece rapor filtresi)
+ * @property {Set<string>} seciliYontemler - Hesap adımında seçili sentetik yöntemler (hesap→S: dsi/mockus/rasyonel/snyder; DSİ zorunlu)
  */
 
 export const S = {
@@ -87,6 +88,7 @@ export const S = {
   dplvAuto: null,
   dplvValues: null,
   rapFilter: new Set(),
+  seciliYontemler: new Set(["dsi", "mockus"]),
 };
 
 const _havzaListeners = [];

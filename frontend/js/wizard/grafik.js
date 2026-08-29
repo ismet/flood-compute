@@ -20,8 +20,9 @@ let cmpChart = null,
   cmpState = { tab: "pik", rp: "100", methods: {}, K: "K1" };
 
 function cmpAvailable() {
-  const r = S.sonuc,
-    m = {};
+  const r = S.sonuc;
+  if (!r) return {};
+  const m = {};
   if (r.kabulet) m.dsi = true;
   if (r.mockus) m.mockus = true;
   if (r.rasyonel) m.rasyonel = true;
@@ -43,15 +44,16 @@ function cmpPeak(method, rp) {
   }
   if (method === "snyder") return r.snyder?.pikler?.[rp] ?? null;
   if (method === "mockus") {
-    const s = r.mockus.sonuclar[cmpState.K];
+    const s = r.mockus?.sonuclar?.[cmpState.K];
+    if (!s) return null;
     if (rp === "OET") return s.Q_OET;
     if (["500", "1000", "10000"].includes(rp)) return s.Q_ext?.[rp];
     return s.Q?.[rp];
   }
   if (method === "rasyonel") {
     if (rp === "OET") return null;
-    if (["500", "1000", "10000"].includes(rp)) return r.rasyonel.Q_ext?.[rp];
-    return r.rasyonel.Q?.[rp];
+    if (["500", "1000", "10000"].includes(rp)) return r.rasyonel?.Q_ext?.[rp] ?? null;
+    return r.rasyonel?.Q?.[rp] ?? null;
   }
   return null;
 }
@@ -65,13 +67,13 @@ function cmpHydro(method, rp) {
     let best = null,
       bestPk = -1;
     DURS.forEach((d) => {
-      const pk = r.kabulet[d]?.[rp];
+      const pk = r.kabulet?.[d]?.[rp];
       if (pk != null && pk > bestPk) {
         bestPk = pk;
         best = d;
       }
     });
-    const arr = r.dsi.hidrograflar[best]?.[rp];
+    const arr = r.dsi?.hidrograflar?.[best]?.[rp];
     if (!arr) return null;
     return { points: arr.map((y, i) => ({ x: i * 0.5, y })), synthetic: false, note: `hakim süre ${best} sa` };
   }
@@ -83,8 +85,9 @@ function cmpHydro(method, rp) {
   if (method === "mockus") {
     const pk = cmpPeak("mockus", rp);
     if (pk == null) return null;
-    const Tp = r.mockus.Tp,
-      base = qbaz,
+    const Tp = r.mockus?.Tp;
+    if (Tp == null) return null;
+    const base = qbaz,
       top = rp === "OET" ? pk + qbaz : pk; // OET'te baz akım yok
     const tb = 2.67 * Tp;
     return {
@@ -100,8 +103,9 @@ function cmpHydro(method, rp) {
   if (method === "rasyonel") {
     const pk = cmpPeak("rasyonel", rp);
     if (pk == null) return null;
-    const Tc = r.rasyonel.Tc_saat,
-      Tb = Math.max(r.rasyonel.Tb_saat, 2 * Tc);
+    const Tc = r.rasyonel?.Tc_saat;
+    if (Tc == null) return null;
+    const Tb = Math.max(r.rasyonel.Tb_saat, 2 * Tc);
     return {
       points: [
         { x: 0, y: qbaz },

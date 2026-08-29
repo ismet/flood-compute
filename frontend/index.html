@@ -334,21 +334,28 @@
       <div id="mmySonuc"></div>
     </section>
 
-    <!-- ADIM 4: Hesap -->
+    <!-- ADIM 4: Hesap — Sentetik Yöntemler -->
     <section class="page hidden" data-page="4">
-      <button id="btnCompute" class="primary big">▶ HESAPLA</button>
-      <div id="compStatus" class="status"></div>
-      <details id="rasyonelBox"><summary>Rasyonel yöntem seçenekleri</summary>
+      <h3 class="res" style="margin-top:0;border-bottom:1px solid var(--kenar);padding-bottom:4px;">Sentetik Yöntemler</h3>
+      <fieldset id="yontemSec" class="mmethods" aria-describedby="yontemHint">
+        <legend class="small" style="float:left;width:100%;margin-bottom:4px;">Hesaplanacak Yöntemler:</legend>
+        <label class="chk"><input type="checkbox" class="hesapYontem" data-m="dsi" id="yontemDsi" checked disabled> DSİ Sentetik</label>
+        <label class="chk"><input type="checkbox" class="hesapYontem" data-m="mockus" id="yontemMockus" checked> Mockus Sentetik</label>
+        <label class="chk"><input type="checkbox" class="hesapYontem" data-m="rasyonel" id="yontemRasyonel"> Rasyonel</label>
+        <label class="chk"><input type="checkbox" class="hesapYontem" data-m="snyder" id="yontemSnyder"> Snyder</label>
+      </fieldset>
+      <div id="yontemHint" class="small" style="margin-top:-4px;">DSİ zorunlu — diğer yöntemler isteğe bağlı; her biri raporda/karşılaştırmada ayrı sütun oluşturur.</div>
+      <details id="rasyonelBox" class="hidden"><summary>Rasyonel yöntem seçenekleri</summary>
         <div class="grid2">
-          <label class="chk"><input type="checkbox" id="inpRasyonel"> Rasyonel yöntemi de hesapla</label>
+          <label class="chk hidden" aria-hidden="true" style="display:none"><input type="checkbox" id="inpRasyonel"> Rasyonel yöntemi de hesapla</label>
           <span class="small">A ≤ 1 km² ise her durumda hesaplanır</span>
           <label>C100 katsayısı<input id="inpC100" type="number" step="0.01" value="0.45"></label>
           <label>Üs (C_T = C100·(T/100)^üs)<input id="inpUs" type="number" step="0.01" value="0.2"></label>
         </div>
         <div id="rasyonelCBox"></div>
       </details>
-      <details id="snyderBox"><summary>Snyder yöntemi seçenekleri</summary>
-        <label class="chk"><input type="checkbox" id="inpSnyder"> Snyder yöntemini de hesapla</label>
+      <details id="snyderBox" class="hidden"><summary>Snyder yöntemi seçenekleri</summary>
+        <label class="chk hidden" aria-hidden="true" style="display:none"><input type="checkbox" id="inpSnyder"> Snyder yöntemini de hesapla</label>
         <div class="grid2">
           <label>C<sub>t</sub><input id="inpCt" type="number" step="0.01" value="1.55"></label>
           <label>C<sub>p</sub><input id="inpCp" type="number" step="0.01" value="0.60"></label>
@@ -373,6 +380,8 @@
         </div>
         <label>Günlük en büyük sıcaklıklar (virgülle)<textarea id="karTemps" rows="2" placeholder="19.7, 18.8, 17.1, ..."></textarea></label>
       </details>
+      <button id="btnCompute" class="primary big">▶ HESAPLA</button>
+      <div id="compStatus" class="status"></div>
       <div id="results"></div>
     </section>
 

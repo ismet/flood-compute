@@ -71,10 +71,37 @@ async function activateStep(n) {
     }
   }
   if (n === 4 && +$("inpA").value > 0 && +$("inpA").value <= 1) {
-    $("inpRasyonel").checked = true;
-    $("rasyonelBox").open = true;
+    // Rasyonel küçük havza otomatiği — yeni outer group (hide-sync compat: inner hidden)
+    const rCb = document.querySelector('.hesapYontem[data-m="rasyonel"]');
+    if (rCb && !rCb.checked) {
+      rCb.checked = true;
+      if (S.seciliYontemler instanceof Set) S.seciliYontemler.add("rasyonel");
+      const rb = $("rasyonelBox");
+      if (rb) { rb.classList.remove("hidden"); rb.open = true; }
+      const ir = $("inpRasyonel");
+      if (ir) ir.checked = true;
+    } else if (!rCb) {
+      // fallback before DOM (old path)
+      if ($("inpRasyonel")) $("inpRasyonel").checked = true;
+      if ($("rasyonelBox")) $("rasyonelBox").open = true;
+    }
   }
-  if (n === 4) updateComputeReady();
+  if (n === 4) {
+    // ensure outer group synced on every entry to step 4 (project restore may have changed S.seciliYontemler)
+    try {
+      const boxes = document.querySelectorAll(".hesapYontem");
+      boxes.forEach((cb) => {
+        const m = cb.dataset.m;
+        if (m === "dsi") cb.checked = true;
+        else cb.checked = S.seciliYontemler instanceof Set ? S.seciliYontemler.has(m) : cb.checked;
+      });
+      const rBox = $("rasyonelBox");
+      const sBox = $("snyderBox");
+      if (rBox) { const on = S.seciliYontemler instanceof Set ? S.seciliYontemler.has("rasyonel") : !!document.querySelector('.hesapYontem[data-m="rasyonel"]:checked'); rBox.classList.toggle("hidden", !on); if (on) rBox.open = true; }
+      if (sBox) { const on2 = S.seciliYontemler instanceof Set ? S.seciliYontemler.has("snyder") : !!document.querySelector('.hesapYontem[data-m="snyder"]:checked'); sBox.classList.toggle("hidden", !on2); if (on2) sBox.open = true; }
+    } catch (e) {}
+    updateComputeReady();
+  }
   if (n === 5) {
     agiKatmanAc();
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;

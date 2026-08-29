@@ -30,7 +30,7 @@ export function renderMukayese() {
   }
   if (!(S.rapFilter instanceof Set)) S.rapFilter = new Set(S.rapFilter || []);
   const avail = ["dsi", "mockus", "rasyonel", "snyder"].filter(
-    (k) => k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder),
+    (k) => (k === "dsi" && r.kabulet && r.dsi) || (k === "mockus" && r.mockus) || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder),
   );
   // ensure rapFilter only contains still-available methods; stale entries ignored
   const filteredAvail = avail.filter((m) => !S.rapFilter.has(m));

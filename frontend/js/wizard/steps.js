@@ -15,5 +15,9 @@ export const STEP_KEYS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: 
 export const markDone = (n) => document.querySelector(`.step[data-step="${n}"]`)?.classList.add("done");
 export function updateComputeReady() {
   const ready = $("inpA").value && $("inpL").value && S.P24w != null;
-  $("btnCompute").disabled = !ready;
+  const sel = S.seciliYontemler instanceof Set ? S.seciliYontemler : null;
+  const hasSel = sel ? sel.size > 0 : document.querySelectorAll(".hesapYontem:checked").length > 0;
+  // before DOM (step 3) fallback to ready only
+  const selOk = document.querySelectorAll(".hesapYontem").length ? hasSel : true;
+  $("btnCompute").disabled = !ready || !selOk;
 }

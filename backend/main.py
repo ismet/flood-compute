@@ -141,6 +141,8 @@ class RainParseReq(BaseModel):
 
 class ComputeReq(BaseModel):
     girdi: dict           # engine.compute girdisi
+    dsi: bool = True      # DSİ Sentetik — zorunlu varsayılan (KABULET/Yıl_Ara için)
+    mockus: bool = True   # Mockus — seçili ise hesaplanır
     rasyonel: bool = False
     c100: float = 0.2
     us: float = 0.2       # C_T = C100 * (T/100)^us
@@ -761,6 +763,12 @@ def api_compute(req: ComputeReq):
         # DPLV 14 oran zorunlu — tek doğrulama (tables.dogrula_dplv)
         tables.dogrula_dplv(g.get("dplv_ratios"))
         res = engine.compute(g)
+        if not req.dsi:
+            res.pop("dsi", None)
+            res.pop("dsi_onhesap", None)
+            res.pop("kabulet", None)
+        if not req.mockus:
+            res.pop("mockus", None)
         if kar_res:
             res["kar"] = kar_res
         if req.rasyonel or g["A_km2"] <= 1.0:
