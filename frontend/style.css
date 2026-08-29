@@ -77,9 +77,9 @@ header h1 { font-size: 18px; font-weight: 800; color: var(--vurgu); letter-spaci
 .proj-row select { max-width: 110px; }
 
 #steps { display: flex; gap: 4px; margin-bottom: 10px; }
-.step { flex: 1; padding: 6px 2px 5px; border: 1px solid var(--kenar); background: var(--beyaz); cursor: pointer;
+.step { flex: 1; min-width: 0; padding: 6px 2px 5px; border: 1px solid var(--kenar); background: var(--beyaz); cursor: pointer;
         border-radius: 6px; font-weight: 700; font-size: 13px; color: var(--metin-soluk); }
-.step span { display: block; font-size: 11px; font-weight: 500; line-height: 1.3; }
+.step span { display: block; font-size: 11px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; hyphens: auto; }
 .step:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 1px; }
 .step.active { background: var(--vurgu); color: var(--beyaz); border-color: var(--vurgu); }
 .step.done { border-color: var(--basari); color: var(--basari); }
