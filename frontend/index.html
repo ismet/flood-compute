@@ -286,16 +286,6 @@
         <label>CN (Şart III)<input id="inpCN3" type="number" step="0.1"></label>
       </div>
       <div id="cnTable"></div>
-      <details><summary>Kar erimesi (opsiyonel)</summary>
-        <div class="grid2">
-          <label>Kar alanı (km²)<input id="karA" type="number" step="0.1"></label>
-          <label>Kar alanı ort. kotu (m)<input id="karH" type="number" step="1"></label>
-          <label>DMİ istasyon kotu (m)<input id="karHist" type="number" step="1"></label>
-          <label>Erime oranı (mm/°C-gün)<input id="karRate" type="number" step="0.01" value="1.08"></label>
-          <label>Periyot (gün)<select id="karPeriod"><option>5</option><option>10</option><option selected>15</option></select></label>
-        </div>
-        <label>Günlük en büyük sıcaklıklar (virgülle)<textarea id="karTemps" rows="2" placeholder="19.7, 18.8, 17.1, ..."></textarea></label>
-      </details>
     </section>
 
     <!-- ADIM 3: Yağış (Thiessen + Yağış birleşik) -->
@@ -346,6 +336,16 @@
         W50/W75 boşsa <b>ŞEKİL 1 abağından otomatik</b> okunur:
         W50=5.87/(Q<sub>p</sub>/A)<sup>1.08</sup>/2.54, W75=3.35/(Q<sub>p</sub>/A)<sup>1.08</sup>/2.54.
         Q500/1000/10000 ekstrapolasyonla, QOET C<sub>III</sub> ile hesaplanır.</span>
+      </details>
+      <details id="karBox"><summary>Kar erimesi (opsiyonel)</summary>
+        <div class="grid2">
+          <label>Kar alanı (km²)<input id="karA" type="number" step="0.1"></label>
+          <label>Kar alanı ort. kotu (m)<input id="karH" type="number" step="1"></label>
+          <label>DMİ istasyon kotu (m)<input id="karHist" type="number" step="1"></label>
+          <label>Erime oranı (mm/°C-gün)<input id="karRate" type="number" step="0.01" value="1.08"></label>
+          <label>Periyot (gün)<select id="karPeriod"><option>5</option><option>10</option><option selected>15</option></select></label>
+        </div>
+        <label>Günlük en büyük sıcaklıklar (virgülle)<textarea id="karTemps" rows="2" placeholder="19.7, 18.8, 17.1, ..."></textarea></label>
       </details>
       <div id="results"></div>
     </section>
