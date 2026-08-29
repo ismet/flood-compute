@@ -113,7 +113,9 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    Türkiye'nin **%1.6**'sına uyuyor (%92.3 C, %6.1 D). O varsayılan kaldırıldı.
 3. **Yağış — Thiessen + Yağış birleşik** — Üstte **Thiessen**: varsayılan küme **MGM ölçüm ağıdır** — en az 10 yıllık günlük maksimum yağış ölçümü olan **1184 istasyon** (`data/mgm/mgm.sqlite`). Voronoi hücreleri havzaya kesilerek alan ağırlıkları (DATAGİR H kolonu karşılığı) bulunur; haritada yalnız pay alan istasyonlar çizilir. Kendi KMZ/KML’nizi de yükleyebilirsiniz. Küme bilerek ölçümü olan istasyonlarla sınırlı: böylece **her hücre kendi ölçtüğü yağışı taşır** ve alt tablodaki P2–P100 bağlanması **kimlik eşleşmesidir**. Altta **Yağış**: **📊 Ölçümden hesapla** düğmesi Thiessen istasyonlarını MGM ölçüm veritabanına (`data/mgm/mgm.sqlite`) bağlar ve P2–P100’ü her istasyonun **yıllık en büyük günlük yağış** serisinden frekans analiziyle üretir — NTFA ile aynı hesap (altı dağılım, moment yöntemi, Smirnov-Kolmogorov ile kabul). Değerler elle de girilebilir/yapıştırılabilir; OEY her hâlde elle girilir. Tabloda her satırın **kaynağı** görünür: kaç yıllık seri, kabul edilen dağılım, eşleşmenin nasıl kurulduğu. Varsayılan kümede eşleşme **kimlik** eşleşmesidir (`kod`, mesafe 0); yalnız elle yüklenen KMZ veya haritaya konan noktalar koordinatla bağlanır; orada da yarıçap içinde ≥25 yıllık seri varsa daha yakındaki kısa seriye yeğlenir — Lüleburgaz’da 5.7 km’de 10 yıllık, 6.3 km’de 74 yıllık istasyon var. DPLV zaman-dağılım istasyonu havza çıkınca **236 MGM PLV içinden havza centroid’ine en yakın** istasyondan otomatik seçilir (`POST /api/plv-en-yakin`, küresel en yakın; elle değiştirilebilir, `↺ Otomatik’e dön` ile geri alınır, projede saklanır) ve 14 oranı elle / Excel'den yapıştırılabilir (MGM PLV — otomatik, gerekirse elle).
 
-   ⚠ **P100’e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor: SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl) P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var.
+    ⚠ **P100’e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor: SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl) P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var.
+
+    Aynı adımın sonunda **MMY (Muhtemel Maksimum Yağış)** hesabı vardır: bir meteoroloji istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2. K<sub>m</sub>, 9 bölgeye ait zarf eğrilerinden düzeltilmiş ortalamaya göre okunur. Çıkan derinlik aynı adımın sonundaki **OET (elle)** alanına yazılarak muhtemel maksimum feyezan (Q<sub>OET</sub>) elde edilir. `backend/core/mmy.py`, golden test: `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
 
 4. **Hesap** — Snyder ve kar erimesi seçenekleri doldurulup (opsiyonel) tek tıkla:
    * **DSİ Sentetik**: qp = 414·A⁻⁰·²²⁵·(L·Lc/√S)⁻⁰·¹⁶ → BH2 boyutsuz birim
@@ -197,19 +199,11 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
    serilerde bandın ne kadar genişlediği ancak böyle görülüyor. Banda sığmayan
    istasyonlar kırmızı üçgenle gösterilir.
 
-   **"Aykırıları çıkarıp tekrarla"** kutusu işaretliyse analiz bir kez daha
+    **"Aykırıları çıkarıp tekrarla"** kutusu işaretliyse analiz bir kez daha
    koşulur ve iki durum yan yana verilir: her tekerrür için tüm istasyonlarla
    ve aykırısız debiler, aralarındaki yüzde fark (%10'u aşan farklar kırmızı),
    aykırısız büyüme eğrisi ve indeks debi bağıntısı. Aykırıyı atma kararı,
    hangi sayının ne kadar değiştiği görülmeden verilmemeli.
-
-   Aynı adımda **MMY (Muhtemel Maksimum Yağış)** hesabı vardır: bir meteoroloji
-   istasyonunun 1 günlük yıllık en büyük yağış serisinden Hershfield yöntemiyle
-   MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2. K<sub>m</sub>, 9
-   bölgeye ait zarf eğrilerinden düzeltilmiş ortalamaya göre okunur. Çıkan
-   derinlik 3. adımdaki **OET** yağışına yazılarak muhtemel maksimum feyezan
-   (Q<sub>OET</sub>) elde edilir. `backend/core/mmy.py`, golden test:
-   `backend/tests/test_mmy_golden.py` (Binkılıç + Karamandere T7.3).
 
 ## Su Potansiyeli modu
 
