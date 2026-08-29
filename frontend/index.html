@@ -37,6 +37,7 @@
       <button class="step" data-step="3">3<span>Yağış</span></button>
       <button class="step" data-step="4">4<span>Hesap</span></button>
       <button class="step" data-step="5">5<span>Frekans Analizi</span></button>
+      <button class="step" data-step="6">6<span>Mukayese ve Rapor</span></button>
     </nav>
 
     <!-- ARA HAVZA MODU -->
@@ -373,6 +374,13 @@
         <label>Günlük en büyük sıcaklıklar (virgülle)<textarea id="karTemps" rows="2" placeholder="19.7, 18.8, 17.1, ..."></textarea></label>
       </details>
       <div id="results"></div>
+    </section>
+
+    <!-- 6) MUKAYESE VE RAPORLAMA -->
+    <section class="page hidden" data-page="6">
+      <p class="hint">Hesap (Adım 4) tamamlanınca yöntemler burada <b>karşılaştırılır</b> ve <b>rapor</b> üretilir. Harita üzerindeki karşılaştırma paneli her girişinizde otomatik açılır.</p>
+      <div id="comparisonStatus" class="status"></div>
+      <div id="comparisonResults"></div>
     </section>
 
     <!-- 5) NOKTASAL TAŞKIN FREKANS ANALİZİ (NTFA) -->

@@ -72,6 +72,7 @@
  * @property {Object|null} ratGrid
  * @property {Object|null} resDefaults
  * @property {Object|null} resConDefaults
+ * @property {Set<string>} rapFilter - Rapor/Mukayese hariç tutulan yöntemler (comparison→hesap, KABULET CSV dışı değil sadece rapor filtresi)
  */
 
 export const S = {
@@ -85,6 +86,7 @@ export const S = {
   dplvManual: false,
   dplvAuto: null,
   dplvValues: null,
+  rapFilter: new Set(),
 };
 
 const _havzaListeners = [];

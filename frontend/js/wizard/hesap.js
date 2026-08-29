@@ -1,12 +1,12 @@
 /**
- * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, rapor/CSV, abaklar, kar erimesi.
+ * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, abaklar, kar erimesi; Yıl_Ara + dock.
  * @module wizard/hesap
  * Owns: S.girdi, S.sonuc, S.ctcp, S.abak2 (abak verileri), kar DOM (karBox: karA/karH/karHist/karRate/karPeriod/karTemps — havza-scoped, clearSingleBasin'de sıfırlanır)
  * Exports: logInterp, lin1, yaldFromArea, loadCtCp, loadAbak2, snyderW, updateSnyderW, build*Html, renderHesapDock, renderResults, syncRepSecili, downloadReport, downloadKmz, exportCSV
  * Notes:
- *  - Allowed pulls (§3.1): hesap→grafik (openCompare, showChart, showSnyderChart), hesap→kmz (exportKmz — legacy re-export)
- *  - Dialog: hesap→rezervuar dynamic import(openReservoir)
+ *  - Allowed pulls (§3.1): hesap→grafik (showChart, showSnyderChart), hesap→kmz (exportKmz — legacy re-export)
  *  - KMZ dışa aktarım wizard/kmz.js'e taşındı (step 1'den erişim); buradaki downloadKmz uyumluluk sarmalayıcısıdır.
+ *  - 6. adım (Mukayese ve Rapor) için rapor mantığı bu modülde tek sahiplidir; comparison.js buradan import eder (comparison→hesap).
  *  - Rank 2 (wizard).
  * @typedef {Object} ComputeGirdi
  * @property {string} ad - Proje/havza adı
@@ -38,7 +38,7 @@ import { $, setStatus, download, dosyaIndir } from "../ui/dom.js";
 import { DURS, RPS, CMP_LABELS } from "../core/constants.js";
 import { dplvRatios } from "./dplv.js";
 import { markDone } from "./steps.js";
-import { openCompare, showChart, showSnyderChart } from "./grafik.js";
+import { showChart, showSnyderChart } from "./grafik.js";
 import { exportKmz } from "./kmz.js";
 
 /* ---- Snyder Ct-Cp abağı (log-log, çift yönlü otomatik) ---- */
@@ -215,6 +215,13 @@ $("btnCompute").onclick = async () => {
         : null,
     });
     renderResults();
+    // step 6 view may already be active — auto-open compare overlay (Q3: each entry to 6)
+    try {
+      if (document.querySelector('.step[data-step="6"]')?.classList.contains("active") && S.sonuc) {
+        const { openCompare } = await import("./grafik.js");
+        openCompare();
+      }
+    } catch (e) {}
     setStatus("compStatus", "Tamamlandı", "ok");
     markDone(4);
   } catch (e) {
@@ -337,54 +344,26 @@ function renderHesapDock() {
   if (btn) btn.onclick = () => showChart(+grid.querySelector("#selDur").value);
   const btnSny = grid.querySelector("#btnSnyChart");
   if (btnSny) btnSny.onclick = () => showSnyderChart();
-  const cur = document.querySelector('.step[data-step="4"]');
-  if (cur && cur.classList.contains("active")) el.classList.remove("hidden");
-  else el.classList.add("hidden");
+  // router-only: visibility is controlled solely by app.js:activateStep; no DOM peek here
 }
 function renderResults() {
   const r = S.sonuc,
     el = $("results");
-  const repMethods = ["dsi", "mockus", "rasyonel", "snyder"].filter(
-    (k) => k === "dsi" || k === "mockus" || (k === "rasyonel" && r.rasyonel) || (k === "snyder" && r.snyder),
-  );
   renderHesapDock();
+  // after compute, the hesapDock visibility is authoritative via activateStep (only on 4); ensure correct here for immediate feedback
+  const cur4 = document.querySelector('.step[data-step="4"]');
+  const hd = $("hesapDock");
+  if (hd) {
+    if (cur4 && cur4.classList.contains("active") && S.sonuc) hd.classList.remove("hidden");
+    else hd.classList.add("hidden");
+  }
   let h = "";
 
   h += `<h3 class="res">Tekerrür yılı ara (Yıl_Ara)</h3>
     <div class="grid2"><label>Debi (m³/s)<input id="yilQ" type="number" step="0.1"></label>
-    <button id="btnYil">Ara</button></div><div id="yilRes" class="status"></div>
-    <div class="export-row" style="align-items:center;flex-wrap:wrap">
-      <span class="small">Rapora dahil yöntemler:</span>
-      ${repMethods
-        .map(
-          (m) => `<label style="flex-direction:row;align-items:center;gap:3px">
-        <input type="checkbox" class="repMethod" data-m="${m}" checked>${CMP_LABELS[m]}</label>`,
-        )
-        .join("")}
-    </div>
-    <div class="export-row" style="align-items:center;flex-wrap:wrap">
-      <label style="flex-direction:row;align-items:center;gap:4px">Seçilen (kabul edilen) yöntem
-        <select id="repSecili">${repMethods.map((m) => `<option value="${m}">${CMP_LABELS[m]}</option>`).join("")}</select></label>
-      <label style="flex-direction:row;align-items:center;gap:4px">Bölüm no
-        <input id="repBolum" value="4.7.3" style="width:64px"></label>
-    </div>
-    <div class="export-row" style="align-items:center">
-      <button id="btnReport" class="primary">📄 Word Raporu (Bölüm) indir</button>
-      <span id="repStatus" class="small"></span>
-    </div>
-    <div class="export-row"><button id="btnCompare" class="primary">⚖ Yöntemleri Karşılaştır</button>
-      <button id="btnReservoir" class="primary">🏞 Rezervuar Ötelemesi</button>
-      <button id="btnCSV">⬇ CSV</button><button id="btnJSON">⬇ JSON</button></div>`;
+    <button id="btnYil">Ara</button></div><div id="yilRes" class="status"></div>`;
   el.innerHTML = h;
-  // dahil kutuları değişince seçilen-yöntem menüsünü güncel tut
-  document.querySelectorAll(".repMethod").forEach((cb) => (cb.onchange = syncRepSecili));
 
-  $("btnCompare").onclick = () => openCompare();
-  $("btnReservoir").onclick = async () => {
-    const m = await import("../modes/rezervuar.js");
-    m.openReservoir();
-  };
-  $("btnReport").onclick = downloadReport;
   $("btnYil").onclick = () => {
     const sel = document.querySelector("#hesapGrid #selDur") || $("selDur");
     const d = sel?.value,
@@ -396,33 +375,51 @@ function renderResults() {
           `T ≈ ${x.tekerrur_yili ? x.tekerrur_yili.toFixed(1) : "—"} yıl (${d} sa hidrografına göre)`),
     );
   };
-  $("btnCSV").onclick = exportCSV;
-  $("btnJSON").onclick = () => download("taskin_sonuc.json", JSON.stringify(S.sonuc, null, 1));
 }
 
 /* ================= WORD RAPORU ================= */
 // dahil kutuları değişince "seçilen yöntem" menüsünü yalnız işaretli yöntemlerle güncelle
+// — comparison.js de aynı seti S.rapFilter üzerinden yönetir; bu fonksiyon tek kaynaktır.
 function syncRepSecili() {
   const checked = Array.from(document.querySelectorAll(".repMethod:checked")).map((x) => x.dataset.m);
   const sel = $("repSecili");
   if (!sel) return;
+  // keep rapFilter in sync when called from comparison.js checkbox handler (already synced) or direct DOM
+  // (fallback: if comparison.js didn't update Set, derive it)
+  if (S.rapFilter instanceof Set) {
+    const avail = ["dsi", "mockus", "rasyonel", "snyder"];
+    avail.forEach((m) => {
+      if (checked.includes(m)) S.rapFilter.delete(m);
+      else {
+        // only track if method was available (checkbox existed)
+        const exists = document.querySelector(`.repMethod[data-m="${m}"]`);
+        if (exists) S.rapFilter.add(m);
+      }
+    });
+  }
   const cur = sel.value;
-  sel.innerHTML = checked.map((mm) => `<option value="${mm}">${CMP_LABELS[mm]}</option>`).join("");
+  sel.innerHTML = checked.map((mm) => `<option value="${mm}">${_esc(CMP_LABELS[mm])}</option>`).join("");
   if (checked.includes(cur)) sel.value = cur;
+  else if (checked[0]) sel.value = checked[0];
 }
 
 async function downloadReport() {
+  // status element may be #repStatus (inside comparison.js view) or fallback #comparisonStatus
+  const statusEl = $("repStatus") || $("comparisonStatus");
+  const statusId = statusEl ? statusEl.id : "repStatus";
   if (!S.sonuc || !S.girdi) {
-    $("repStatus").textContent = "Önce hesaplayın";
+    if (statusEl) statusEl.textContent = "Önce hesaplayın";
+    else setStatus(statusId, "Önce hesaplayın", "err");
     return;
   }
   const dahil = Array.from(document.querySelectorAll(".repMethod:checked")).map((x) => x.dataset.m);
   if (!dahil.length) {
-    $("repStatus").textContent = "En az bir yöntem seçin";
+    if (statusEl) statusEl.textContent = "En az bir yöntem seçin";
+    else setStatus(statusId, "En az bir yöntem seçin", "err");
     return;
   }
-  setStatus("repStatus", "", "");
-  $("repStatus").textContent = "Rapor hazırlanıyor… (şekiller çiziliyor)";
+  setStatus(statusId, "", "");
+  if (statusEl) statusEl.textContent = "Rapor hazırlanıyor… (şekiller çiziliyor)";
   try {
     const secili = $("repSecili").value;
     let dplvKaynak;
@@ -450,9 +447,11 @@ async function downloadReport() {
       body: JSON.stringify({ girdi: S.girdi, sonuc: S.sonuc, meta }),
     });
     const name = await dosyaIndir(resp, "Taskin_Bolum.docx");
-    $("repStatus").textContent = "✓ İndirildi: " + name;
+    const okEl = $("repStatus") || $("comparisonStatus");
+    if (okEl) okEl.textContent = "✓ İndirildi: " + name;
   } catch (e) {
-    $("repStatus").textContent = "Hata: " + e.message;
+    const errEl = $("repStatus") || $("comparisonStatus");
+    if (errEl) errEl.textContent = "Hata: " + e.message;
   }
 }
 

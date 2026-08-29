@@ -21,7 +21,7 @@ import { renderRainTable } from "../wizard/rain.js";
 import { renderDplvGrid, updatePlvAutoInfo } from "../wizard/dplv.js";
 import { updateComputeReady } from "../wizard/steps.js";
 
-const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili"];
+const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili", "rapFilter"];
 function setReplacer(k, v) {
   return v instanceof Set ? { __set: [...v] } : v;
 }
@@ -87,6 +87,7 @@ $("btnSave").onclick = async () => {
     "inpW75",
     "inpYald",
     "inpOetElle",
+    "repBolum",
   ].forEach((id) => {
     const el = $(id);
     if (el) fields[id] = el.value;
