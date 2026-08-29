@@ -11,12 +11,14 @@ import { _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map } from "./init.js";
+import { kurCrsSecici, seciliCrs } from "../core/crs.js";
 
 /* ---- bilgi amaçlı harita katmanları ----
    Hesaba GİRMEZ; proje sınırı, yollar, yerleşim, mevcut tesis gibi bağlam
    katmanlarını haritada göstermek içindir.                                 */
 const INFO_RENK = ["#8e24aa", "#00838f", "#ef6c00", "#5d4037", "#c2185b", "#455a64", "#1565c0", "#2e7d32"];
 S.infoLayers = [];
+kurCrsSecici($("infoCrs"), "auto", $("infoCrsCustom"));
 function renderInfoLayers() {
   const el = $("infoLayers");
   if (!el) return;
@@ -62,11 +64,17 @@ function renderInfoLayers() {
 $("infoFile").onchange = async () => {
   const dosyalar = Array.from($("infoFile").files || []);
   if (!dosyalar.length) return;
+  const crs = seciliCrs($("infoCrs"), $("infoCrsCustom"));
   for (const f of dosyalar) {
+    if (/\.ncz$/i.test(f.name)) {
+      setStatus("delinStatus", `“${_esc(f.name)}” doğrudan okunamaz. Netcad/NView ile GeoJSON, KML/KMZ, DXF veya SHP/ZIP'e aktarın.`, "err");
+      continue;
+    }
     setStatus("delinStatus", `“${_esc(f.name)}” bilgi katmanı olarak okunuyor…`, "loading");
     try {
       const fd = new FormData();
       fd.append("file", f);
+      if (crs && /\.(dxf|dwg)$/i.test(f.name)) fd.append("crs", crs);
       const r = await api("/api/bilgi-katmani", fd, true);
       const renk = INFO_RENK[S.infoLayers.length % INFO_RENK.length];
       const layer = L.geoJSON(r.geojson, {
@@ -74,7 +82,9 @@ $("infoFile").onchange = async () => {
         pointToLayer: (f2, ll) => L.circleMarker(ll, { radius: 5, color: renk, fillColor: renk, fillOpacity: 0.85 }),
         onEachFeature: (f2, lyr) => {
           const ad = f2.properties && f2.properties.ad;
-          if (ad) lyr.bindTooltip(_esc(ad), { sticky: true });
+          const kat = f2.properties && f2.properties.layer;
+          const parts = [...new Set([ad, kat].filter(Boolean))];
+          if (parts.length) lyr.bindTooltip(_esc(parts.join(" — ")), { sticky: true });
         },
       }).addTo(map);
       S.infoLayers.push({ ad: r.ad || f.name, layer, renk, gorunur: true, sayi: r.sayi });

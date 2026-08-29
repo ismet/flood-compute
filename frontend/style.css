@@ -177,8 +177,10 @@ label:has(> #inpHedefAlan),   /* Beklenen alan (km², ops.) */
 #modeSu {
   display: none !important;
 }
-#rasterFile { color: transparent; width: 95px; }
-#rasterFile::file-selector-button { color: var(--metin); }
+#rasterFile, #infoFile { color: transparent; width: 95px; max-width: 95px; }
+#rasterFile::file-selector-button, #infoFile::file-selector-button { color: var(--metin); }
+.bilgi-katman-label { max-width: 150px; }
+#infoCrs { max-width: 190px; }
 .info-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--kenar-hafif); color: var(--metin-orta); font-size: 11px; font-weight: 700; cursor: help; flex: none; }
 .small-btn { padding: 3px 8px; font-size: 12px; background: var(--vurgu); color: var(--beyaz); border: none; border-radius: 5px; cursor: pointer; }
 table.rain.st td:nth-child(2) { width: 130px; }

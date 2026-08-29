@@ -6,7 +6,7 @@ import re
 import subprocess
 import traceback
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, model_validator
@@ -250,19 +250,27 @@ def api_delineate(req: DelineateReq):
 
 
 @app.post("/api/bilgi-katmani")
-async def api_bilgi_katmani(file: UploadFile = File(...)):
+async def api_bilgi_katmani(file: UploadFile = File(...), crs: str = Form("")):
     """Bilgi amaçlı harita katmanı: dosyadaki tüm geometrileri GeoJSON döner.
 
     Hesaba girmez; yalnız haritada bağlam göstermek içindir."""
-    from backend.core import vektor
+    from backend.core import katman
     try:
-        fc = vektor.oku_tum(await file.read(), file.filename or "")
+        dosya_adi = os.path.basename(file.filename or "").lower()
+        if dosya_adi.endswith(".ncz"):
+            raise RuntimeError(katman.NCZ_HATASI)
+        if dosya_adi.endswith((".dxf", ".dwg")) and not crs.strip():
+            raise RuntimeError("DXF/DWG dosyası için CRS alanına EPSG kodunu yazın")
+        fc, warnings = katman.oku(await file.read(), file.filename or "", crs.strip() or None)
         turler = {}
         for f in fc["features"]:
             t = f["geometry"].get("type", "?")
             turler[t] = turler.get(t, 0) + 1
-        return {"geojson": fc, "ad": file.filename, "sayi": len(fc["features"]),
-                "turler": turler}
+        result = {"geojson": fc, "ad": file.filename, "sayi": len(fc["features"]),
+                  "turler": turler}
+        if warnings:
+            result["uyarilar"] = warnings
+        return result
     except Exception as e:
         return _err(e)
 
@@ -1302,7 +1310,7 @@ def api_raster_layers():
 
 
 # ana raster sayılan uzantılar; kalanlar yan dosya (.sdw/.tfw/.prj/.aux.xml)
-RASTER_UZANTI = (".tif", ".tiff", ".vrt", ".img", ".sid", ".png", ".jpg", ".jpeg", ".ecw")
+RASTER_UZANTI = (".tif", ".tiff", ".geotiff", ".vrt", ".img", ".sid", ".png", ".jpg", ".jpeg", ".ecw")
 
 
 @app.post("/api/raster-add")
@@ -1328,7 +1336,25 @@ async def api_raster_add(files: list[UploadFile] = File(...),
                 "Raster dosyası bulunamadı. Ana dosya şu biçimlerden biri olmalı: "
                 + ", ".join(RASTER_UZANTI))
         ad, veri = okunan[ana]
-        yan = [x for i, x in enumerate(okunan) if i != ana]
+        ana_kok = os.path.splitext(os.path.basename(ad))[0].lower()
+        yan = []
+        for i, (yan_ad, yan_veri) in enumerate(okunan):
+            if i == ana:
+                continue
+            yan_ad_kucuk = os.path.basename(yan_ad).lower()
+            if yan_ad_kucuk.endswith(".ovr") or (
+                yan_ad_kucuk.endswith(".xml") and not yan_ad_kucuk.endswith(".aux.xml")
+            ):
+                raise RuntimeError("Yalnızca eşleşen raster yan dosyaları kabul edilir; .ovr ve genel .xml yüklenemez")
+            yan_uzanti = (".aux.xml" if yan_ad_kucuk.endswith(".aux.xml")
+                          else os.path.splitext(yan_ad_kucuk)[1])
+            if yan_uzanti not in (".tfw", ".wld", ".sdw", ".prj", ".aux.xml"):
+                raise RuntimeError(f"Desteklenmeyen raster yan dosyası: {yan_ad}")
+            beklenen = (ana_kok + yan_uzanti if yan_uzanti != ".aux.xml"
+                        else os.path.basename(ad).lower() + yan_uzanti)
+            if yan_ad_kucuk != beklenen:
+                raise RuntimeError(f"Raster yan dosyası ana dosyayla eşleşmiyor: {yan_ad}")
+            yan.append((yan_ad, yan_veri))
         return raster.ekle(veri, ad, crs=crs.strip() or None,
                            baslik=baslik.strip() or None, yardimci=yan)
     except Exception as e:

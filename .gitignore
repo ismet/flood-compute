@@ -64,6 +64,9 @@ data/yagis/_onbellek_aylik.npz
 # Node devDependencies — depoya girmemeli (eslint/vitest/prettier)
 node_modules/
 
+# Yerel büyük format örnekleri — türetilmiş, depoya girmemeli (f20a2.dxf 5 MB, BARAJ.kmz 18 MB)
+sample_file_formats/
+
 # Lavish Editor inceleme yüzeyleri — yerel, geçici
 .lavish/
 .opencode/

@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
 # rasterio/pyproj için GDAL/PROJ runtime kütüphaneleri manylinux wheel'lerinde gömülü;
 # ek sistem paketi gerekmez. numba için gcc de gerekmez (wheel).
 WORKDIR /app

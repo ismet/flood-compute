@@ -121,12 +121,15 @@ def _fiona_oku(veri, ad):
 
 
 def _temiz(t):
-    """Haritada innerHTML ile gösterileceği için XSS'e karşı kaçış."""
-    t = (t or "").strip()
-    for a, b in (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"),
-                 ('"', "&quot;"), ("'", "&#x27;")):
-        t = t.replace(a, b)
-    return t
+    """Görünen ad için kontrol karakterlerini kaldırıp uzunluğu sınırlar.
+
+    HTML kaçışı YAPMAZ — ham döner. Haritada innerHTML/bindTooltip ile
+    gösterileceği için çağıran frontend `frontend/js/core/format.js:_esc`
+    ile kaçış yapmak ZORUNDADIR (MIGRATION.md §3 stage 11 sözleşmesi).
+    Çift kaçışı önlemek için backend bilerek kaçış yapmaz.
+    """
+    t = "".join(c for c in (t or "").strip() if c >= " " or c in "\t\n")
+    return t[:500]
 
 
 def _kml_ozellikler(xml_bytes):

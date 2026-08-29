@@ -7,6 +7,8 @@ Hesap motoru, Tayakadın örneğinin tüm Excel çıktılarıyla doğrulanmışt
 
 ## Kurulum ve çalıştırma
 
+DWG bilgi katmanı yüklemek için ODA File Converter kurulmalı ve Linux ortamında başsız çalıştırma için `xvfb-run` bulunmalıdır. Arch Linux: `sudo pacman -S xorg-server-xvfb`; Ubuntu/Docker: Docker imajı `xvfb` paketini kurar. ODA binary yolu `ODA_FILE_CONVERTER` ile verilebilir; uygulama Linux'ta ODA'yı otomatik olarak `xvfb-run -a -s '-screen 0 1280x1024x24'` ile çalıştırır.
+
 ```bat
 pip install -r requirements.txt
 python run.py

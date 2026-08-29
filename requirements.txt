@@ -13,3 +13,4 @@ matplotlib
 
 fpdf2
 Pillow
+ezdxf==1.4.2

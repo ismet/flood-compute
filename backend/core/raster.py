@@ -308,6 +308,8 @@ def ekle(veri, dosya_adi, crs=None, baslik=None, yardimci=None):
     crs_nesnesi = crs_coz(crs)
     uzanti = os.path.splitext(dosya_adi or "")[1].lower()
     ad = _temiz_ad(baslik or dosya_adi)
+    if _meta_oku(ad):
+        raise RuntimeError(f"Aynı adlı raster katmanı zaten var: {ad}")
     hedef = os.path.join(_dizin(), ad + (uzanti or ".tif"))
     with open(hedef, "wb") as f:
         f.write(veri)
@@ -354,11 +356,10 @@ def ekle(veri, dosya_adi, crs=None, baslik=None, yardimci=None):
                 "Dosyada koordinat sistemi tanımlı değil. Yükleme formundaki "
                 "CRS alanına EPSG kodunu yazın (ör. ED50/UTM 37N için EPSG:23037, "
                 "WGS84/UTM 37N için EPSG:32637).")
-        if crs_nesnesi is not None:
-            # CRS'i dosyaya KALICI yaz. Çalışma anında "şu CRS'miş gibi oku"
-            # demek güvenilir değil: rasterio.warp.reproject, kaynak bir Band
-            # olduğunda src_crs'i veri kümesinden alır ve dışarıdan verilen
-            # değeri yok sayar (karo tamamen saydam çıkar).
+        if kaynak_crs is not None and crs_nesnesi is not None and kaynak_crs != crs_nesnesi:
+            raise RuntimeError(
+                f"Dosyadaki CRS ({kaynak_crs}) ile girilen CRS ({crs_nesnesi}) farklı.")
+        if kaynak_crs is None and crs_nesnesi is not None:
             with rasterio.open(hedef, "r+") as src:
                 src.crs = crs_nesnesi
         with rasterio.open(hedef) as src:
@@ -369,6 +370,8 @@ def ekle(veri, dosya_adi, crs=None, baslik=None, yardimci=None):
                 "ad": ad,
                 "baslik": baslik or ad,
                 "dosya": os.path.basename(hedef),
+                "kaynak_crs": kaynak_crs.to_string() if kaynak_crs is not None else None,
+                "user_crs": crs_nesnesi.to_string() if crs_nesnesi is not None else None,
                 "crs": crs_nesnesi.to_string() if crs_nesnesi is not None else None,
                 "etkin_crs": src.crs.to_string(),
                 "genislik": src.width, "yukseklik": src.height,

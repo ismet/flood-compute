@@ -11,11 +11,13 @@ import { _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map } from "./init.js";
+import { kurCrsSecici, seciliCrs } from "../core/crs.js";
 
 /* ---- koordinatlı raster altlıklar (1/25000 paftalar) ----
    Dosya arka uca yüklenir, orada Web Mercator'a yeniden projeksiyonlanıp XYZ
    karo olarak sunulur; burada yalnızca L.tileLayer ile gösterilir.          */
 S.rasterLayers = []; // [{meta, layer, gorunur, saydam}]
+kurCrsSecici($("rasterCrs"), "auto", $("rasterCrsCustom"));
 
 function renderRasterLayers() {
   const el = $("rasterLayers");
@@ -71,7 +73,10 @@ function renderRasterLayers() {
         if (!confirm(`“${_esc(k.meta.baslik || k.meta.ad)}” altlığı sunucudan silinsin mi?`)) return;
         try {
           await api("/api/raster-delete", { ad: k.meta.ad });
-        } catch (e) {}
+        } catch (e) {
+          setStatus("rasterStatus", "Altlık silinemedi: " + e.message, "err");
+          return;
+        }
         k.layer.remove();
         S.rasterLayers.splice(i, 1);
         renderRasterLayers();
@@ -133,14 +138,20 @@ function sidUyar(dosyalar) {
 async function rasterYukle() {
   const dosyalar = Array.from($("rasterFile").files || []);
   if (!dosyalar.length) return setStatus("rasterStatus", "Önce raster dosyasını seçin", "err");
-  // Tek dosya modu: yalnızca ilk dosya yüklenir (world dosyası CRS ile çözülür)
-  const tekDosya = dosyalar.slice(0, 1);
+  const tekDosya = dosyalar;
   if (sidUyar(tekDosya)) {
     $("rasterFile").value = "";
     return;
   }
   const sid = tekDosya.some((f) => /\.sid$/i.test(f.name));
-  const worldVar = tekDosya.some((f) => /\.(sdw|tfw|wld|prj)$/i.test(f.name));
+  const worldVar = tekDosya.some((f) => /\.(sdw|tfw|wld)$/i.test(f.name));
+  const primary = tekDosya.filter((f) => /\.(tif|tiff|geotiff|vrt|img|sid|png|jpg|jpeg|ecw)$/i.test(f.name));
+  if (primary.length !== 1 || tekDosya.some((f) => /\.ovr$/i.test(f.name))) {
+    return setStatus("rasterStatus", "Bir ana raster ve eşleşen yan dosyaları (.tfw/.sdw/.wld/.prj/.aux.xml) seçin; .ovr yüklenemez.", "err");
+  }
+  if (tekDosya.some((f) => /\.xml$/i.test(f.name) && !/\.aux\.xml$/i.test(f.name))) {
+    return setStatus("rasterStatus", "Yalnızca eşleşen .aux.xml yan dosyası kabul edilir.", "err");
+  }
   if (sid && !worldVar && !$("rasterCrs").value.trim()) {
     setStatus(
       "rasterStatus",
@@ -148,6 +159,8 @@ async function rasterYukle() {
         "boş. Georeferans dosyanın içinde değilse altlık yanlış yere oturur.",
       "err",
     );
+    $("rasterFile").value = "";
+    return;
   }
   setStatus(
     "rasterStatus",
@@ -158,7 +171,7 @@ async function rasterYukle() {
   try {
     const fd = new FormData();
     tekDosya.forEach((f) => fd.append("files", f));
-    const crs = $("rasterCrs").value.trim();
+    const crs = seciliCrs($("rasterCrs"), $("rasterCrsCustom"));
     const url = "/api/raster-add" + (crs ? `?crs=${encodeURIComponent(crs)}` : "");
     const meta = await api(url, fd, true);
     rasterKatmanEkle(meta);
@@ -175,10 +188,6 @@ async function rasterYukle() {
   }
 }
 $("rasterFile").onchange = () => {
-  if (sidUyar(Array.from($("rasterFile").files || []))) {
-    $("rasterFile").value = "";
-    return;
-  }
-  rasterYukle();
+  sidUyar(Array.from($("rasterFile").files || []));
 };
 $("btnRasterAdd").onclick = rasterYukle;

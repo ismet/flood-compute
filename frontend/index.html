@@ -187,12 +187,19 @@
         <label>Dere eşiği (km²)<input id="inpRivThr" type="number" step="0.1" value="1"></label>
       </div>
       <div class="rain-tools" style="margin-top:2px">
-        <label class="inline" title="Yalnız haritada göstermek için: proje sınırı, yollar, yerleşimler, mevcut tesisler vb. Hesaba girmez. Birden çok dosya seçebilirsiniz.">🗺 Bilgi katmanı ekle <input type="file" id="infoFile" accept=".kml,.kmz,.geojson,.json,.zip,.gpkg" multiple></label>
+        <label class="inline bilgi-katman-label" title="Yalnız haritada göstermek için: proje sınırı, yollar, yerleşimler, mevcut tesisler vb. Hesaba girmez.">🗺 Bilgi Katmanları <input type="file" id="infoFile" accept=".kml,.kmz,.geojson,.json,.zip,.gpkg,.dxf,.dwg,.ncz" multiple></label>
+        <label class="inline" title="Dosyanın koordinat sistemi. Boş bırakılırsa dosyadaki CRS kullanılır; DXF/DWG CRS içermiyorsa listeden seçin.">CRS
+          <select id="infoCrs" style="width:190px"></select>
+          <input id="infoCrsCustom" placeholder="EPSG:####" style="width:100px;display:none">
+        </label>
       </div>
       <div id="infoLayers" class="small"></div>
       <div class="rain-tools" style="margin-top:2px">
-        <label class="inline" title="Koordinatlı raster altlık (1/25000 pafta vb.). GeoTIFF veya MrSID (.sid) yükleyin — .sid harici GDAL ile GeoTIFF'e çevrilir.">🗺 1/25000 altlık <input type="file" id="rasterFile" accept=".tif,.tiff,.vrt,.img,.sid,.png,.jpg,.sdw,.tfw,.wld,.prj,.xml"></label>
-        <label class="inline" title="Dosyada koordinat sistemi tanımlı değilse (ArcInfo .sdw world file ile gelen taramalarda çoğu kez böyledir) EPSG kodunu yazın. ED50/UTM 37N: EPSG:23037 — WGS84/UTM 37N: EPSG:32637. Gömülüyse boş bırakın.">CRS <input id="rasterCrs" placeholder="EPSG:32637" style="width:110px"></label>
+        <label class="inline" title="Koordinatlı raster altlık (1/25000 pafta vb.). GeoTIFF veya MrSID (.sid) yükleyin — .sid harici GDAL ile GeoTIFF'e çevrilir.">🗺 1/25000 altlık <input type="file" id="rasterFile" accept=".tif,.tiff,.geotiff,.vrt,.img,.sid,.png,.jpg,.sdw,.tfw,.wld,.prj,.aux.xml" multiple></label>
+        <label class="inline" title="Dosyada CRS varsa otomatik kullanılır. CRS yoksa listeden seçin; seçilen değer dosyadaki CRS’i geçersiz kılmaz.">CRS
+          <select id="rasterCrs" style="width:245px"></select>
+          <input id="rasterCrsCustom" placeholder="EPSG:####" style="width:100px;display:none">
+        </label>
         <button id="btnRasterAdd" class="small-btn">Altlığı ekle</button>
       </div>
       <div id="rasterLayers" class="small"></div>
