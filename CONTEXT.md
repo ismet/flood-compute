@@ -6,8 +6,8 @@ analizi ve frekans analizi tek iş akışında.
 ## Language
 
 **Adım**:
-Tek Havza modundaki beş aşamalı iş akışından biri (Havza → Parametre →
-Yağış → Hesap → Frekans). Yağış adımı Thiessen kümesi ve ağırlıkları ile yinelenmeli yağışları birlikte içerir (eskiden Adım 3+4). UI metinlerinde numarayla anılır.
+Tek Havza modundaki altı aşamalı iş akışından biri (Havza → Parametre →
+Yağış → Hesap → Frekans → Mukayese ve Rapor). Yağış adımı Thiessen kümesi ve ağırlıkları ile yinelenmeli yağışları birlikte içerir (eskiden Adım 3+4); 6. adım ise Hesap’taki yöntemlerin karşılaştırılması (overlay) ve rapor/CSV/JSON/rezervuar çıktılarını toplar. UI metinlerinde numarayla anılır.
 _Avoid_: sekme, bölüm
 
 **Parametre**:

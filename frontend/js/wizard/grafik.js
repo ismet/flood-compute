@@ -116,7 +116,11 @@ function cmpHydro(method, rp) {
 }
 
 function openCompare() {
+  if (!S.sonuc) return;
   const avail = cmpAvailable();
+  if (!Object.keys(avail).length) return;
+  // idempotent on spam: if already open and not requested to re-render, still refresh data
+  // but keep rendering to reflect latest S.sonuc (e.g., after compute while on 6)
   cmpState.methods = {};
   Object.keys(avail).forEach((k) => (cmpState.methods[k] = true));
   // tekerrür seçici

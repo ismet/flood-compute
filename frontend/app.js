@@ -13,13 +13,15 @@ import { S, onHavzaChanged } from "./js/core/state.js";
 import { map, layers, setOnHavzaClick, katmanGeojson } from "./js/map/init.js";
 import { $, setStatus } from "./js/ui/dom.js";
 import { exportKmz } from "./js/wizard/kmz.js";
-import { STEP_KEYS, updateComputeReady } from "./js/wizard/steps.js";
+import { N_STEPS, STEP_KEYS, updateComputeReady } from "./js/wizard/steps.js";
 import { renderKotlar, renderRasyonelC } from "./js/wizard/cn.js";
 import { useDefaultStations } from "./js/wizard/thiessen.js";
 import { renderRainTable } from "./js/wizard/rain.js";
 import { renderDplvGrid, autoSelectPLV } from "./js/wizard/dplv.js";
 import { renderHesapDock } from "./js/wizard/hesap.js";
 import { agiKatmanAc } from "./js/wizard/frekans.js";
+import { openCompare } from "./js/wizard/grafik.js";
+import "./js/wizard/comparison.js";
 let _mmyLoaded = false;
 async function ensureMmy() {
   if (_mmyLoaded) return;
@@ -76,6 +78,15 @@ async function activateStep(n) {
   if (n === 5) {
     agiKatmanAc();
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
+  }
+  if (n === 6) {
+    try {
+      const { renderMukayese } = await import("./js/wizard/comparison.js");
+      renderMukayese();
+      if (S.sonuc) openCompare();
+    } catch (e) {
+      console.error("Mukayese yüklenemedi:", e);
+    }
   }
 }
 
@@ -149,6 +160,7 @@ function clearSingleBasin() {
   S.dplvManual = false;
   S.dplvAuto = null;
   S.dplvValues = null;
+  S.rapFilter = new Set();
   if ("dplvList" in S) delete S.dplvList;
   S.resPoints = null;
   S.resSonuc = null;
@@ -156,6 +168,10 @@ function clearSingleBasin() {
     S.resMarker.remove();
     S.resMarker = null;
   }
+  // Mukayese UI + overlay reset (step 6)
+  if ($("comparisonResults")) $("comparisonResults").innerHTML = "";
+  if ($("comparisonStatus")) setStatus("comparisonStatus", "", "");
+  if ($("cmpWrap")) $("cmpWrap").classList.add("hidden");
   ["havza", "dere", "kanal", "thiessen", "markers", "havzaAgi", "havzaMgm"].forEach((k) => {
     try {
       layers[k].clearLayers();
@@ -231,7 +247,7 @@ document.querySelectorAll(".step").forEach((b) => {
     if (dir) {
       e.preventDefault();
       const n = +b.dataset.step + dir;
-      const next = document.querySelector(`.step[data-step="${n < 1 ? 5 : n > 5 ? 1 : n}"]`);
+      const next = document.querySelector(`.step[data-step="${n < 1 ? N_STEPS : n > N_STEPS ? 1 : n}"]`);
       if (next) next.focus();
     }
   };
