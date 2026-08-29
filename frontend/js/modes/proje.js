@@ -11,7 +11,7 @@
  *  - Rank 2 (modes) — proje→wizard renders fan-in izinli.
  */
 
-import { S } from "../core/state.js";
+import { S, _notifyHavzaChanged } from "../core/state.js";
 import { _esc } from "../core/format.js";
 import { api } from "../core/api.js";
 import { $ } from "../ui/dom.js";
@@ -196,6 +196,9 @@ $("projList").onchange = async () => {
       if (S.kanal) layers.kanal.addData(S.kanal);
       map.fitBounds(layers.havza.getBounds());
     }
+    try {
+      _notifyHavzaChanged();
+    } catch (e) {}
   } catch (e) {
     alert("Proje yüklenemedi: " + e.message);
     console.error(e);

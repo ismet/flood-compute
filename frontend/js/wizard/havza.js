@@ -249,6 +249,9 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
   autoSelectPLV();
   havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
   havzaYakinIstasyonlariGoster();
+  try {
+    _notifyHavzaChanged();
+  } catch (e) {}
 }
 
 export function renderAdayKanallar(r) {
@@ -398,11 +401,9 @@ map.on("click", async (ev) => {
     autoSelectPLV();
     havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
     havzaYakinIstasyonlariGoster();
-    if (S.mode === "su") {
-      try {
-        _notifyHavzaChanged();
-      } catch (e) {}
-    }
+    try {
+      _notifyHavzaChanged();
+    } catch (e) {}
   } catch (e) {
     setStatus("delinStatus", "Hata: " + e.message, "err");
   }

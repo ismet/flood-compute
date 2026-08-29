@@ -1,11 +1,12 @@
 /**
- * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, rapor/KMZ/CSV, abaklar.
+ * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, rapor/CSV, abaklar.
  * @module wizard/hesap
  * Owns: S.girdi, S.sonuc, S.ctcp, S.abak2 (abak verileri)
  * Exports: logInterp, lin1, yaldFromArea, loadCtCp, loadAbak2, snyderW, updateSnyderW, build*Html, renderHesapDock, renderResults, syncRepSecili, downloadReport, downloadKmz, exportCSV
  * Notes:
- *  - Allowed pulls (§3.1): hesap→grafik (openCompare, showChart, cmpPeak), hesap→map/init (katmanGeojson, layers)
+ *  - Allowed pulls (§3.1): hesap→grafik (openCompare, showChart, showSnyderChart), hesap→kmz (exportKmz — legacy re-export)
  *  - Dialog: hesap→rezervuar dynamic import(openReservoir)
+ *  - KMZ dışa aktarım wizard/kmz.js'e taşındı (step 1'den erişim); buradaki downloadKmz uyumluluk sarmalayıcısıdır.
  *  - Rank 2 (wizard).
  * @typedef {Object} ComputeGirdi
  * @property {string} ad - Proje/havza adı
@@ -34,11 +35,11 @@ import { S } from "../core/state.js";
 import { api } from "../core/api.js";
 import { fmt, _esc } from "../core/format.js";
 import { $, setStatus, download, dosyaIndir } from "../ui/dom.js";
-import { layers, katmanGeojson } from "../map/init.js";
-import { DURS, RPS, CMP_LABELS, CMP_RPS } from "../core/constants.js";
+import { DURS, RPS, CMP_LABELS } from "../core/constants.js";
 import { dplvRatios } from "./dplv.js";
 import { markDone } from "./steps.js";
-import { openCompare, showChart, showSnyderChart, cmpPeak } from "./grafik.js";
+import { openCompare, showChart, showSnyderChart } from "./grafik.js";
+import { exportKmz } from "./kmz.js";
 
 /* ---- Snyder Ct-Cp abağı (log-log, çift yönlü otomatik) ---- */
 
@@ -369,7 +370,6 @@ function renderResults() {
     </div>
     <div class="export-row" style="align-items:center">
       <button id="btnReport" class="primary">📄 Word Raporu (Bölüm) indir</button>
-      <button id="btnKmz">🌍 KMZ indir (havza + dere + debiler)</button>
       <span id="repStatus" class="small"></span>
     </div>
     <div class="export-row"><button id="btnCompare" class="primary">⚖ Yöntemleri Karşılaştır</button>
@@ -385,7 +385,6 @@ function renderResults() {
     m.openReservoir();
   };
   $("btnReport").onclick = downloadReport;
-  $("btnKmz").onclick = downloadKmz;
   $("btnYil").onclick = () => {
     const sel = document.querySelector("#hesapGrid #selDur") || $("selDur");
     const d = sel?.value,
@@ -461,47 +460,11 @@ async function downloadReport() {
 /* === extracted to ui/dom.js dosyaIndir === */
 /* Katmandaki güncel geometri (elle düzenlemeler dahil); boşsa null. */
 /* === extracted to map/init.js katmanGeojson === */
-/* Nihai havza sınırı + dere ağı + seçili yöntemin tekerrürlü pik debileri → KMZ.
-   Geometri S'ten değil harita katmanlarından okunur, böylece haritada yapılan
-   düzenlemeler çıktıya birebir yansır. */
-async function downloadKmz() {
-  if (!S.sonuc) {
-    $("repStatus").textContent = "Önce hesaplayın";
-    return;
-  }
-  const havza = katmanGeojson(layers.havza);
-  if (!havza) {
-    $("repStatus").textContent = "Havza sınırı yok — önce havzayı çıkarın";
-    return;
-  }
-  const yontem = $("repSecili").value;
-  $("repStatus").textContent = "KMZ hazırlanıyor…";
-  try {
-    const debiler = {};
-    CMP_RPS.forEach((rp) => {
-      const v = cmpPeak(yontem, rp);
-      if (v != null) debiler[rp] = v;
-    });
-    const o = S.outlet;
-    const resp = await fetch("/api/kmz-export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ad: $("projName").value || (S.girdi && S.girdi.ad) || "Havza",
-        yontem_ad: CMP_LABELS[yontem] || yontem,
-        havza_geojson: havza,
-        dere_geojson: katmanGeojson(layers.dere),
-        kanal_geojson: katmanGeojson(layers.kanal),
-        outlet: o ? { lat: o.snap_lat ?? o.lat, lon: o.snap_lon ?? o.lon } : null,
-        debiler,
-        girdi_ozeti: S.sonuc.girdi_ozeti || null,
-      }),
-    });
-    const name = await dosyaIndir(resp, "havza.kmz");
-    $("repStatus").textContent = "✓ İndirildi: " + name;
-  } catch (e) {
-    $("repStatus").textContent = "Hata: " + e.message;
-  }
+/* KMZ dışa aktarım wizard/kmz.js'e taşındı — step 1'den erişim. */
+async function downloadKmz(opts = {}) {
+  // Uyumluluk sarmalayıcısı: eski çağrılar repStatus'a yazar
+  const statusId = opts.statusId || "repStatus";
+  return exportKmz({ ...opts, statusId });
 }
 /* === extracted to ui/dom.js download === */ function exportCSV() {
   const r = S.sonuc;
