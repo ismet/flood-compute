@@ -13,6 +13,7 @@ import { api } from "../core/api.js";
 import { fmt, _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
+import { agiCircleMarker, STATION_TOOLTIP_AGI } from "../map/station-markers.js";
 
 /* ---------------- SU POTANSİYELİ ----------------
    Günlük akım serilerinden hacim odaklı değerlendirme. Taşkın tarafındaki
@@ -26,12 +27,20 @@ function suIsaretle() {
     if (!l.su) return;
     const sec = S.suSecili.has(l.su.kod);
     const hedef = $("suHedef").value === l.su.kod;
+    // AGİ mavi daire — hedef/secili vurgusu siyah bordür, diğerleri mavi
+    const blue = (() => {
+      try {
+        return window.getComputedStyle(document.documentElement).getPropertyValue("--istasyon-agi").trim() || "#0072b2";
+      } catch (e) {
+        return "#0072b2";
+      }
+    })();
     l.setStyle({
       radius: hedef ? 9 : sec ? 7 : 5,
-      color: hedef ? "#000" : sec ? "#00695c" : "#78909c",
+      color: hedef ? "#000" : sec ? "#00695c" : blue,
       weight: hedef ? 3 : sec ? 2.5 : 1.2,
-      fillColor: l.su.icinde ? "#26a69a" : "#90a4ae",
-      fillOpacity: 0.85,
+      fillColor: l.su.icinde ? blue : "#90a4ae",
+      fillOpacity: sec || hedef ? 0.92 : l.su.icinde ? 0.85 : 0.45,
     });
   });
   $("btnSuPeriyot").disabled = S.suSecili.size < 1;
@@ -116,9 +125,9 @@ $("btnSuGetir").onclick = async () => {
     layers.su.clearLayers();
     r.istasyonlar.forEach((s) => {
       if (s.lat == null || s.lon == null) return;
-      const m = L.circleMarker([s.lat, s.lon], { radius: 5 });
+      const m = agiCircleMarker([s.lat, s.lon], { inside: s.icinde !== false });
       m.su = s;
-      m.bindTooltip(`${s.kod} — ${(s.ad || "").replace(/_/g, " ")}`, { sticky: true });
+      m.bindTooltip(`${_esc(s.kod)} — ${_esc((s.ad || "").replace(/_/g, " "))}`, STATION_TOOLTIP_AGI);
       m.on("click", () => {
         if (S.suSecili.has(s.kod)) S.suSecili.delete(s.kod);
         else S.suSecili.add(s.kod);
