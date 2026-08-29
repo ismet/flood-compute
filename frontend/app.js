@@ -20,6 +20,17 @@ import { renderRainTable } from "./js/wizard/rain.js";
 import { renderDplvGrid, autoSelectPLV } from "./js/wizard/dplv.js";
 import { renderHesapDock } from "./js/wizard/hesap.js";
 import { agiKatmanAc } from "./js/wizard/frekans.js";
+let _mmyLoaded = false;
+async function ensureMmy() {
+  if (_mmyLoaded) return;
+  _mmyLoaded = true;
+  try {
+    await import("./js/wizard/mmy.js");
+  } catch (e) {
+    _mmyLoaded = false;
+    console.error("MMY modülü yüklenemedi:", e);
+  }
+}
 import { multiLayers, invalidateMultiSolve, renderMultiPoints, updateMultiShared } from "./js/modes/multi.js";
 import { suBaslat } from "./js/modes/su.js";
 import { initDilekce } from "./js/modes/dilekce.js";
@@ -35,7 +46,7 @@ import "./js/modes/multi-sonuc.js";
 import "./js/modes/rezervuar.js";
 import "./js/modes/proje.js";
 
-function activateStep(n) {
+async function activateStep(n) {
   document.querySelectorAll(".step").forEach((x) => x.classList.remove("active"));
   const _active = document.querySelector(`.step[data-step="${n}"]`);
   if (!_active) return;
@@ -47,6 +58,7 @@ function activateStep(n) {
     renderRainTable();
     renderDplvGrid();
     if (S.havza && !S.dplvManual && !S.dplvAuto) autoSelectPLV();
+    ensureMmy();
   }
   const hd = $("hesapDock");
   if (hd) {

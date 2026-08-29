@@ -306,6 +306,31 @@
       ekranın altında, harita üzerinde tam genişlikte açılır. Excel'deki değer bloğunu kopyalayın,
       tabloda başlangıç hücresine tıklayıp <b>Ctrl+V</b> ile yapıştırın; kalan hücreler otomatik
       dolar, ağırlıklı satır anlık hesaplanır.</p>
+
+      <hr style="margin:8px 0;border:none;border-top:1px solid #e2ded8">
+      <p class="hint"><b>Muhtemel Maksimum Yağış (MMY)</b> — Hershfield yöntemi.
+      Bir meteoroloji istasyonunun <b>1 günlük yıllık en büyük yağış</b> serisinden
+      MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2 hesaplanır; K<sub>m</sub>
+      bölgesel zarf eğrisinden düzeltilmiş ortalamaya göre okunur. Çıkan derinlik
+      <b>OET (elle)</b> alanına yazılarak muhtemel maksimum feyezan
+      (Q<sub>OET</sub>) elde edilir.</p>
+
+      <div class="rain-tools">
+        <label class="inline">Bölge<select id="mmyBolge" style="max-width:320px"></select></label>
+        <label class="inline">İstasyon adı<input id="mmyIstasyon" placeholder="ör. BİNKILIÇ MGİ" style="width:170px"></label>
+      </div>
+      <label class="small" title="Yıllık en büyük 1 günlük yağışlar (mm). Excel'den bir sütun kopyalayıp yapıştırabilirsiniz; satır/boşluk/virgül ayracı kabul edilir.">Yıllık en büyük 1 günlük yağışlar (mm)
+        <textarea id="mmySeri" rows="4" placeholder="69.1&#10;93.1&#10;96.7&#10;…" style="width:100%"></textarea></label>
+      <div class="rain-tools" style="margin-top:2px">
+        <label class="inline" title="Hershfield abağından okunur: en büyük gözlemin ORTALAMAYI şişirmesini düzeltir. Abak, Port(-Pmax)/Port oranı ile N'e bağlıdır — ikisi de hesaplandıktan sonra ekranda gösterilir. Bilinmiyorsa 1 bırakın.">M1<sub>ort</sub><input id="mmyM1o" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="inline" title="Kayıt uzunluğu düzeltmesi (ortalama için), N'e bağlı.">M2<sub>ort</sub><input id="mmyM2o" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="inline" title="En büyük gözlemin STANDART SAPMAYI şişirmesini düzelten katsayı.">M1<sub>s</sub><input id="mmyM1s" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="inline" title="Kayıt uzunluğu düzeltmesi (standart sapma için).">M2<sub>s</sub><input id="mmyM2s" type="number" step="0.0001" value="1" style="width:80px"></label>
+        <label class="chk" title="Sabit saatte okunan günlük yağışı gerçek 24 saatlik maksimuma çeviren katsayı. Örnek DSİ hesaplarında uygulanmamıştır."><input type="checkbox" id="mmyGun"> ×1.13</label>
+        <button id="btnMmy" class="primary">MMY hesapla</button>
+      </div>
+      <div id="mmyStatus" class="status"></div>
+      <div id="mmySonuc"></div>
     </section>
 
     <!-- ADIM 4: Hesap -->
@@ -409,30 +434,6 @@
       <div id="btfaStatus" class="status"></div>
       <div id="btfaSonuc"></div>
 
-      <hr>
-      <p class="hint"><b>Muhtemel Maksimum Yağış (MMY)</b> — Hershfield yöntemi.
-      Bir meteoroloji istasyonunun <b>1 günlük yıllık en büyük yağış</b> serisinden
-      MMY = P<sub>ort</sub>·M1·M2 + K<sub>m</sub>·S·M1·M2 hesaplanır; K<sub>m</sub>
-      bölgesel zarf eğrisinden düzeltilmiş ortalamaya göre okunur. Çıkan derinlik,
-      3. adımdaki <b>OET</b> yağış satırına yazılarak muhtemel maksimum feyezan
-      (Q<sub>OET</sub>) elde edilir.</p>
-
-      <div class="rain-tools">
-        <label class="inline">Bölge<select id="mmyBolge" style="max-width:320px"></select></label>
-        <label class="inline">İstasyon adı<input id="mmyIstasyon" placeholder="ör. BİNKILIÇ MGİ" style="width:170px"></label>
-      </div>
-      <label class="small" title="Yıllık en büyük 1 günlük yağışlar (mm). Excel'den bir sütun kopyalayıp yapıştırabilirsiniz; satır/boşluk/virgül ayracı kabul edilir.">Yıllık en büyük 1 günlük yağışlar (mm)
-        <textarea id="mmySeri" rows="4" placeholder="69.1&#10;93.1&#10;96.7&#10;…" style="width:100%"></textarea></label>
-      <div class="rain-tools" style="margin-top:2px">
-        <label class="inline" title="Hershfield abağından okunur: en büyük gözlemin ORTALAMAYI şişirmesini düzeltir. Abak, Port(-Pmax)/Port oranı ile N'e bağlıdır — ikisi de hesaplandıktan sonra ekranda gösterilir. Bilinmiyorsa 1 bırakın.">M1<sub>ort</sub><input id="mmyM1o" type="number" step="0.0001" value="1" style="width:80px"></label>
-        <label class="inline" title="Kayıt uzunluğu düzeltmesi (ortalama için), N'e bağlı.">M2<sub>ort</sub><input id="mmyM2o" type="number" step="0.0001" value="1" style="width:80px"></label>
-        <label class="inline" title="En büyük gözlemin STANDART SAPMAYI şişirmesini düzelten katsayı.">M1<sub>s</sub><input id="mmyM1s" type="number" step="0.0001" value="1" style="width:80px"></label>
-        <label class="inline" title="Kayıt uzunluğu düzeltmesi (standart sapma için).">M2<sub>s</sub><input id="mmyM2s" type="number" step="0.0001" value="1" style="width:80px"></label>
-        <label class="chk" title="Sabit saatte okunan günlük yağışı gerçek 24 saatlik maksimuma çeviren katsayı. Örnek DSİ hesaplarında uygulanmamıştır."><input type="checkbox" id="mmyGun"> ×1.13</label>
-        <button id="btnMmy" class="primary">MMY hesapla</button>
-      </div>
-      <div id="mmyStatus" class="status"></div>
-      <div id="mmySonuc"></div>
     </section>
   </aside>
 
