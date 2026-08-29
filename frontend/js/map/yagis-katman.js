@@ -47,6 +47,7 @@ function yagisKatmanUygula() {
   const k = $("yagisKatman").value;
   if (layers.yagis) layers.yagis.remove();
   layers.yagis = L.tileLayer(`/api/yagis/${k}/{z}/{x}/{y}.png`, {
+    pane: "iklimPane",
     opacity: (+$("yagisOpak").value || 75) / 100,
     maxZoom: 18,
     crossOrigin: true,

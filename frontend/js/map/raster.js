@@ -83,6 +83,7 @@ function renderRasterLayers() {
 function rasterKatmanEkle(meta) {
   if (S.rasterLayers.some((k) => k.meta.ad === meta.ad)) return;
   const layer = L.tileLayer(`/api/raster/${encodeURIComponent(meta.ad)}/{z}/{x}/{y}.png`, {
+    pane: "rasterPane",
     maxZoom: 22,
     opacity: 1,
     bounds: meta.sinir || undefined,
