@@ -21,7 +21,7 @@ import { renderRainTable } from "../wizard/rain.js";
 import { renderDplvGrid, updatePlvAutoInfo } from "../wizard/dplv.js";
 import { updateComputeReady } from "../wizard/steps.js";
 
-const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili", "rapFilter"];
+const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili", "rapFilter", "seciliYontemler"];
 function setReplacer(k, v) {
   return v instanceof Set ? { __set: [...v] } : v;
 }
@@ -151,6 +151,28 @@ $("projList").onchange = async () => {
     }
     if (S.dplvAuto === undefined) S.dplvAuto = null;
     if (S.dplvValues === undefined) S.dplvValues = null;
+    if (!(S.seciliYontemler instanceof Set)) {
+      // eski projeler: S.seciliYontemler yok → varsayılan DSİ+Mockus
+      // rapFilter varsa ondan türetme yapma — rapFilter rapor hariç, hesap seçimi değil
+      S.seciliYontemler = new Set(["dsi", "mockus"]);
+    }
+    // Hesap yöntem seçimini DOM'a yansıt (Adım 4 fieldset)
+    try {
+      document.querySelectorAll(".hesapYontem").forEach((cb) => {
+        const m = cb.dataset.m;
+        if (m === "dsi") cb.checked = true;
+        else cb.checked = S.seciliYontemler.has(m);
+      });
+      const rb = document.getElementById("rasyonelBox");
+      const sb = document.getElementById("snyderBox");
+      if (rb) rb.classList.toggle("hidden", !S.seciliYontemler.has("rasyonel"));
+      if (sb) sb.classList.toggle("hidden", !S.seciliYontemler.has("snyder"));
+      // hide-sync inner legacy
+      const ir = document.getElementById("inpRasyonel");
+      if (ir) ir.checked = S.seciliYontemler.has("rasyonel");
+      const is = document.getElementById("inpSnyder");
+      if (is) is.checked = S.seciliYontemler.has("snyder");
+    } catch (e) {}
     renderKotlar();
     renderRainTable();
     renderDplvGrid();

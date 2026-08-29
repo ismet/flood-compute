@@ -109,10 +109,20 @@ export function renderRasyonelC(r) {
     const anahtar = $("cSecim").value;
     const deger = c[anahtar];
     $("inpC100").value = deger.toFixed(3);
-    $("inpRasyonel").checked = true;
+    // outer group (new) + hide-sync inner for one-release compat
+    const rOuter = document.querySelector('.hesapYontem[data-m="rasyonel"]');
+    if (rOuter) {
+      rOuter.checked = true;
+      if (S.seciliYontemler instanceof Set) S.seciliYontemler.add("rasyonel");
+      const rb = $("rasyonelBox");
+      if (rb) { rb.classList.remove("hidden"); rb.open = true; }
+    }
+    if ($("inpRasyonel")) $("inpRasyonel").checked = true;
     S.cSecim = anahtar;
     S.rasyonelCKaynak = { deger, secim: anahtar, kaynak: r.kaynak };
     updateComputeReady();
+    // live-filter overlay if already computed
+    if (S.sonuc) import("./hesap.js").then((m) => m.renderHesapDock()).catch(() => {});
   };
 }
 renderRasyonelC(null);
