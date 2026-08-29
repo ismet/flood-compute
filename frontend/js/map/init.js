@@ -11,6 +11,12 @@
  */
 
 export const map = L.map("map").setView([39.2, 32.8], 6);
+// Tematik tile katmanları için ayrı pane'ler — tilePane(200) < iklim/raster < overlayPane(400)
+// Harita/Uydu/Topo tabanları tilePane'de kalır, bu pane'ler her tabanın üstünde görünür.
+if (!map.getPane("iklimPane")) map.createPane("iklimPane");
+if (!map.getPane("rasterPane")) map.createPane("rasterPane");
+map.getPane("iklimPane").style.zIndex = "250";
+map.getPane("rasterPane").style.zIndex = "260";
 export const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: "© OpenStreetMap",

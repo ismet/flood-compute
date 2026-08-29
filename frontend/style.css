@@ -51,6 +51,8 @@ body {
 #panel > * { position: relative; z-index: 1; }
 #mapwrap { flex: 1; position: relative; }
 #map { height: 100%; }
+/* İklim pane — Uydu/Topo'da vendor plus-lighter blend koyu pikselleri yuttuğu için normal */
+.leaflet-iklim-pane img.leaflet-tile { mix-blend-mode: normal; }
 
 /* ---- loader ---- */
 #loader {
