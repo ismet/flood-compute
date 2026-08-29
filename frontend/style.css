@@ -237,8 +237,12 @@ fieldset.mmethods legend { font-size: 12.5px; font-weight: 700; color: var(--met
 .mpt-row .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .mpt-row button { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--hata-ikincil); font-size: 15px; }
 
-/* ---- yöntem karşılaştırma — fit-content (haritayı örtmeyen) ---- */
-#cmpWrap, #mcmpWrap, #resWrap, #parWrap { position: absolute; top: 12px; left: 12px; right: 12px; bottom: auto; height: auto; max-height: 70vh; z-index: 1200; display: flex; flex-direction: column;
+/* ---- Step 6 — Yağış/Hesap ile aynı alt dock yapısı (standardize) ---- */
+#cmpWrap { position: absolute; left: 12px; right: 12px; bottom: 12px; top: auto; height: auto; max-height: 70vh; z-index: 1000;
+           background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
+           padding: 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+           box-shadow: 0 4px 18px rgba(0,0,0,.12); display: block; }
+#mcmpWrap, #resWrap, #parWrap { position: absolute; top: 12px; left: 12px; right: 12px; bottom: auto; height: auto; max-height: 70vh; z-index: 1200; display: flex; flex-direction: column;
            background: rgba(255,255,255,.99); border: 1px solid var(--kenar); border-radius: 10px;
            box-shadow: 0 8px 30px rgba(0,0,0,.22); padding: 10px 12px; overflow: hidden; }
 .cmp-head { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--kenar-hafif); padding-bottom: 6px; }
