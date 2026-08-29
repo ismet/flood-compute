@@ -29,6 +29,7 @@ import { api } from "../core/api.js";
 import { fmt, _esc } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
+import { agiCircleMarker, agiRenk, STATION_TOOLTIP_AGI } from "../map/station-markers.js";
 
 /* ---- AGİ (Akım Gözlem İstasyonu) katmanı + noktasal frekans analizi ----
    Sentetik yöntemlerden bağımsız ikinci bir yol: gözlenmiş yıllık pik akımlara
@@ -40,8 +41,6 @@ S.agiSecili = null; // noktasal analiz (tek istasyon)
 S.agiBolgesel = new Set(); // bölgesel analiz (çok istasyon)
 S.agiListe = [];
 
-const agiRenk = (s) => (s.kurum === "EİE" ? "#6a1b9a" : "#e65100");
-
 function agiIsaretle() {
   layers.agi.eachLayer((l) => {
     const s = l.agi;
@@ -50,9 +49,9 @@ function agiIsaretle() {
     const bolgesel = S.agiBolgesel.has(s.kod);
     l.setStyle({
       radius: secili ? 8 : bolgesel ? 7 : 5,
-      color: secili ? "#000" : bolgesel ? "#00695c" : agiRenk(s),
+      color: secili ? "#000" : bolgesel ? "#00695c" : agiRenk(),
       weight: secili ? 3 : bolgesel ? 2.5 : 1.5,
-      fillColor: agiRenk(s),
+      fillColor: agiRenk(),
       fillOpacity: s.icinde === false ? 0.25 : 0.85,
     });
   });
@@ -188,9 +187,9 @@ async function agiYukle() {
     layers.agi.clearLayers();
     r.istasyonlar.forEach((s) => {
       if (s.enlem == null || s.boylam == null) return;
-      const m = L.circleMarker([s.enlem, s.boylam], { radius: 5 });
+      const m = agiCircleMarker([s.enlem, s.boylam], { inside: s.icinde !== false });
       m.agi = s;
-      m.bindTooltip(`${_esc(s.kod)} — ${_esc(s.ad || "")} (${s.yil_sayisi} yıl)`, { sticky: true });
+      m.bindTooltip(`${_esc(s.kod)} — ${_esc(s.ad || "")} (${s.yil_sayisi} yıl)`, STATION_TOOLTIP_AGI);
       m.on("click", () => agiSec(s));
       m.addTo(layers.agi);
     });

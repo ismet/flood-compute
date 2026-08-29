@@ -19,6 +19,7 @@ import { api } from "../core/api.js";
 import { _esc } from "../core/format.js";
 import { map, layers } from "../map/init.js";
 import { recolorThiessen, renderRainTable } from "./rain.js";
+import { mgmTriangleIcon, elleCircleMarker, STATION_TOOLTIP_MGM, STATION_TOOLTIP_ELLE } from "../map/station-markers.js";
 
 export const kurumColor = (k) =>
   k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0" : k === "Elle" ? "#2e7d32" : "#7d6e4f";
@@ -103,20 +104,24 @@ export async function runThiessen(stations, kaynak) {
     if (S.outlet) L.marker([S.outlet.snap_lat, S.outlet.snap_lon]).addTo(layers.markers).bindPopup("Outlet");
     const aktif = S.thiessen.filter((t) => t.agirlik > 0);
     let h = `<div class="th-legend">
-      <span><i style="background:#1565c0"></i> DMİ/MGM</span>
-      <span><i style="background:#e65100"></i> DSİ</span>
-      <span><i style="background:#2e7d32"></i> Elle eklenen</span></div>
+      <span><i class="mgm-tri"></i> MGM</span>
+      <span><i class="elle-dot"></i> Elle eklenen</span></div>
       <table class="tbl"><tr><th>İstasyon</th><th>Kurum</th><th>Ağırlık</th><th>Alan (km²)</th><th></th></tr>`;
     aktif.forEach((t) => {
       if (t.poligon_geojson)
         layers.thiessen.addData({ type: "Feature", properties: { name: t.name }, geometry: t.poligon_geojson });
-      const col = kurumColor(t.kurum);
-      const mk = L.circleMarker([t.lat, t.lon], { radius: 6, color: col, fillColor: col, fillOpacity: 0.8 })
-        .addTo(layers.markers)
-        .bindPopup(
-          `${_esc(t.name)}${t.kurum ? " [" + _esc(t.kurum) + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)` +
-            `<br><button class="link-btn" data-pop-del="1">✕ Bu istasyonu çıkar</button>`,
-        );
+      const isElle = t.kurum === "Elle";
+      const mk = isElle
+        ? elleCircleMarker([t.lat, t.lon]).addTo(layers.markers)
+        : L.marker([t.lat, t.lon], { icon: mgmTriangleIcon({ inside: true }) }).addTo(layers.markers);
+      mk.bindTooltip(
+        `${_esc(t.name)}${t.kurum ? " [" + _esc(t.kurum) + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)`,
+        isElle ? STATION_TOOLTIP_ELLE : STATION_TOOLTIP_MGM,
+      );
+      mk.bindPopup(
+        `${_esc(t.name)}${t.kurum ? " [" + _esc(t.kurum) + "]" : ""} (w=${(t.agirlik * 100).toFixed(1)}%)` +
+          `<br><button class="link-btn" data-pop-del="1">✕ Bu istasyonu çıkar</button>`,
+      );
       const key = stKey(t);
       mk.on("popupopen", (ev) => {
         const btn = ev.popup.getElement().querySelector("button[data-pop-del]");

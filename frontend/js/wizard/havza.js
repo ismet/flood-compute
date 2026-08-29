@@ -24,6 +24,7 @@ import { autoSelectPLV } from "./dplv.js";
 import { markDone, updateComputeReady } from "./steps.js";
 import { updateSnyderW } from "./hesap.js";
 import { havzaOrtalamasiGoster } from "../map/yagis-katman.js";
+import { agiCircleMarker, mgmTriangleIcon, STATION_TOOLTIP_AGI, STATION_TOOLTIP_MGM } from "../map/station-markers.js";
 
 // layers.havza OWNER-CREATED (registry-bag)
 if (layers.havza) {
@@ -56,8 +57,7 @@ if (layers.havzaMgm) {
 }
 layers.havzaMgm = L.layerGroup().addTo(map);
 
-const havzaAgiRenk = (s) => (s.kurum === "EİE" ? "#6a1b9a" : "#e65100");
-const havzaMgmRenk = "#0288d1";
+/* AGİ mavi daire / MGM kırmızı üçgen — style.css --istasyon-* ile senkron */
 
 export async function havzaYakinIstasyonlariGoster() {
   if (!S.havza) return;
@@ -84,14 +84,9 @@ export async function havzaYakinIstasyonlariGoster() {
     const [agiR, mgmR] = await Promise.all([agiP, mgmP]);
     (agiR.istasyonlar || []).forEach((s) => {
       if (s.enlem == null || s.boylam == null) return;
-      const m = L.circleMarker([s.enlem, s.boylam], {
-        radius: 6,
-        color: havzaAgiRenk(s),
-        weight: 1.5,
-        fillColor: havzaAgiRenk(s),
-        fillOpacity: s.icinde === false ? 0.35 : 0.9,
-      });
-      m.bindTooltip(`${_esc(s.kod)} — ${_esc(s.ad || "")} (${s.yil_sayisi} yıl) — AGİ`, { sticky: true });
+      const inside = s.icinde !== false;
+      const m = agiCircleMarker([s.enlem, s.boylam], { inside });
+      m.bindTooltip(`${_esc(s.kod)} — ${_esc(s.ad || "")} (${s.yil_sayisi} yıl) — AGİ`, STATION_TOOLTIP_AGI);
       m.bindPopup(
         `<b>${_esc(s.kod)}</b> — ${_esc(s.ad || "")}<br>${_esc(s.kurum || "")} · ${s.yil_sayisi} yıl (${s.ilk_yil}–${s.son_yil})` +
           (s.yagis_alani ? `<br>Yağış alanı: ${s.yagis_alani} km²` : "") +
@@ -103,14 +98,8 @@ export async function havzaYakinIstasyonlariGoster() {
       const lat = s.enlem ?? s.lat;
       const lon = s.boylam ?? s.lon;
       if (lat == null || lon == null) return;
-      const m = L.circleMarker([lat, lon], {
-        radius: 6,
-        color: havzaMgmRenk,
-        weight: 1.5,
-        fillColor: havzaMgmRenk,
-        fillOpacity: 0.9,
-      });
-      m.bindTooltip(`${_esc(s.kod || s.no || "")} — ${_esc(s.ad || s.istasyon || "")} (${s.yil_sayisi || "?"} yıl) — MGM`, { sticky: true });
+      const m = L.marker([lat, lon], { icon: mgmTriangleIcon({ inside: true }) });
+      m.bindTooltip(`${_esc(s.kod || s.no || "")} — ${_esc(s.ad || s.istasyon || "")} (${s.yil_sayisi || "?"} yıl) — MGM`, STATION_TOOLTIP_MGM);
       m.bindPopup(
         `<b>${_esc(s.kod || s.no || "")}</b> — ${_esc(s.ad || s.istasyon || "")}<br>MGM · ${s.yil_sayisi || "?"} yıl` +
           `<br><span class="small">Yağış sekmesinde Thiessen için kullanılır</span>`,
