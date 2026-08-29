@@ -104,8 +104,13 @@ button.picking { background: var(--hata) !important; border-color: var(--hata) !
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
 .grid2 > label { min-width: 0; }
-.kot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.kot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.kot-grid > label { min-width: 0; }
 .kot-grid label { font-size: 11px; font-weight: 600; }
+.kot-grid input { width: 100%; min-width: 0; box-sizing: border-box; padding: 6px 6px; display: block; }
+.kot-grid input::-webkit-outer-spin-button,
+.kot-grid input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.kot-grid input[type=number] { -webkit-appearance: textfield; -moz-appearance: textfield; appearance: textfield; }
 
 table.tbl { border-collapse: collapse; width: 100%; font-size: 12px; background: var(--beyaz); font-variant-numeric: tabular-nums; }
 .tbl th, .tbl td { border: 1px solid var(--kenar-acik); padding: 3px 6px; text-align: right; }
@@ -263,6 +268,8 @@ h3.res { font-size: 15px; font-weight: 700; color: var(--vurgu); margin-top: 12p
   #hesapDock { max-height: 40%; }
   #chartwrap { width: auto; left: 8px; right: 8px; height: 280px; }
 }
+
+@media (max-width: 420px) { .kot-grid { gap: 4px; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
