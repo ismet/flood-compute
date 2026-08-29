@@ -153,6 +153,11 @@ function clearSingleBasin() {
     if ($(id)) $(id).value = "";
   });
   $("inpCN2").value = "75";
+  ["karA", "karH", "karHist", "karTemps"].forEach((id) => {
+    if ($(id)) $(id).value = "";
+  });
+  if ($("karRate")) $("karRate").value = "1.08";
+  if ($("karPeriod")) $("karPeriod").value = "15";
   $("yzdInfo").textContent = "";
   ["cnTable", "thTable", "results"].forEach((id) => {
     if ($(id)) $(id).innerHTML = "";

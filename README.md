@@ -91,8 +91,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 2. **Parametre** — Ana kanal boyunca 11 kot (harmonik eğim profili) DEM'den
    otomatik dolar, elle düzeltilebilir. Bölge sınıfı (A/B/C — YZD eğrisi)
    `data/regions/YZD_ALANLAR.kmz`'den havza konumuna göre **otomatik seçilir**
-   (en çok örtüşen bölge; gerekirse elle değiştirilir). Baz akım, opsiyonel kar
-   erimesi (KAR1: derece-gün, dağıtım paterni).
+   (en çok örtüşen bölge; gerekirse elle değiştirilir). Baz akım (Q<sub>baz</sub>).
 
    **CN de bu adımdadır** — CORINE rasteri havza ile kesilir (yerel yoksa EEA
    CLC2018 servisinden otomatik indirilir); seçilen hidrolojik zemin grubuna
@@ -116,7 +115,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
 
    ⚠ **P100’e dikkat.** Kısa seride log-Pearson-3 çok ağır kuyruk üretebiliyor: SARAY (27 yıl) P100 = 200 mm, SARMISAKLI (46 yıl) P100 = 78 mm. Kaynak sütunu bunu görünür kılmak için var.
 
-4. **Hesap** — Tek tıkla:
+4. **Hesap** — Snyder ve kar erimesi seçenekleri doldurulup (opsiyonel) tek tıkla:
    * **DSİ Sentetik**: qp = 414·A⁻⁰·²²⁵·(L·Lc/√S)⁻⁰·¹⁶ → BH2 boyutsuz birim
      hidrograf 0.5 sa adıma örneklenir; 2/4/6/8/12/18/24 saatlik sağanaklar
      2'şer saatlik bloklara (YZD eğrisi) ayrılıp SCS artım akışlarıyla süperpoze
@@ -135,6 +134,7 @@ Tarayıcı otomatik açılır: http://127.0.0.1:8737
      Q2–Q100 pikleri Excel ile birebir (`backend/tests/test_snyder_golden.py`).
       W50/W75 girilmezse **ŞEKİL 1 (DSİ Snyder abağı)** formülüyle otomatik okunur:
       W50=5.87/(qp/1000)^1.08/2.54, W75=3.35/(qp/1000)^1.08/2.54 (`snyder.w50_w75`).
+   * **Kar erimesi** (opsiyonel, KAR1): derece-gün, sıcaklıklar kar kotuna taşınır (0.5°C/100 m), en büyük ortaya dağıtım paterni — Qkar piki OET hidrografına eklenir. Hesap sekmesindeki `Kar erimesi (opsiyonel)` kutusunda doldurulur.
    * Hidrograf grafiği, CSV/JSON dışa aktarım, debiden tekerrür yılı bulma
      (`Yıl_Ara` makrosunun analitik çözümü: Q = Q10 + (0.99·log₁₀T − 0.98)·(Q100−Q10)).
    * **⚖ Yöntem Karşılaştırma** (tam ekran): dört yöntemi (DSİ/Mockus/Rasyonel/Snyder)

@@ -1,7 +1,7 @@
 /**
- * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, rapor/CSV, abaklar.
+ * @fileoverview Hesap — DSİ/Mockus/Rasyonel/Snyder compute, rapor/CSV, abaklar, kar erimesi.
  * @module wizard/hesap
- * Owns: S.girdi, S.sonuc, S.ctcp, S.abak2 (abak verileri)
+ * Owns: S.girdi, S.sonuc, S.ctcp, S.abak2 (abak verileri), kar DOM (karBox: karA/karH/karHist/karRate/karPeriod/karTemps — havza-scoped, clearSingleBasin'de sıfırlanır)
  * Exports: logInterp, lin1, yaldFromArea, loadCtCp, loadAbak2, snyderW, updateSnyderW, build*Html, renderHesapDock, renderResults, syncRepSecili, downloadReport, downloadKmz, exportCSV
  * Notes:
  *  - Allowed pulls (§3.1): hesap→grafik (openCompare, showChart, showSnyderChart), hesap→kmz (exportKmz — legacy re-export)
