@@ -17,10 +17,14 @@ export function renderKotlar() {
   g.innerHTML = "";
   for (let i = 0; i < 11; i++) {
     const lab = document.createElement("label");
-    lab.innerHTML = `H${i}${i === 0 ? " (outlet)" : i === 10 ? " (memba)" : ""}`;
+    lab.textContent = `H${i}`;
+    if (i === 0) lab.title = "outlet";
+    else if (i === 10) lab.title = "memba";
     const inp = document.createElement("input");
     inp.type = "number";
     inp.step = "0.1";
+    if (i === 0) inp.setAttribute("aria-label", "H0 outlet");
+    else if (i === 10) inp.setAttribute("aria-label", "H10 memba");
     inp.value = S.kotlar[i];
     inp.oninput = () => {
       S.kotlar[i] = +inp.value;
