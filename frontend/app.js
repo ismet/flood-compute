@@ -9,9 +9,10 @@
  *  - Thin root — 155 satır hedef, iş mantığı içermez.
  */
 
-import { S } from "./js/core/state.js";
-import { map, layers, setOnHavzaClick } from "./js/map/init.js";
+import { S, onHavzaChanged } from "./js/core/state.js";
+import { map, layers, setOnHavzaClick, katmanGeojson } from "./js/map/init.js";
 import { $, setStatus } from "./js/ui/dom.js";
+import { exportKmz } from "./js/wizard/kmz.js";
 import { STEP_KEYS, updateComputeReady } from "./js/wizard/steps.js";
 import { renderKotlar, renderRasyonelC } from "./js/wizard/cn.js";
 import { useDefaultStations } from "./js/wizard/thiessen.js";
@@ -159,9 +160,10 @@ function clearSingleBasin() {
   if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
   $("hesapDock")?.classList.add("hidden");
   renderRasyonelC(null);
-  ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus"].forEach((id) => {
+  ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus", "kmzStatus"].forEach((id) => {
     if ($(id)) setStatus(id, "", "");
   });
+  if ($("btnKmz")) $("btnKmz").disabled = true;
   document.querySelectorAll(".step").forEach((s) => s.classList.remove("done"));
   renderKotlar();
   renderRainTable();
@@ -189,6 +191,16 @@ function onHavzaClick() {
   clearSingleBasin();
 }
 setOnHavzaClick(onHavzaClick);
+
+// KMZ dışa aktarım — composition root wiring (havza paneli + hesap verisi)
+// Self-wiring değil: havza view + hesap peak'i birleştiren çapraz özellik kökte bağlanır.
+if ($("btnKmz")) $("btnKmz").onclick = () => exportKmz({ statusId: "kmzStatus" });
+onHavzaChanged(() => {
+  const btn = $("btnKmz");
+  if (!btn) return;
+  const hasHavza = !!(S.havza || katmanGeojson(layers.havza));
+  btn.disabled = !hasHavza;
+});
 
 document.querySelectorAll(".step").forEach((b) => {
   b.tabIndex = 0;

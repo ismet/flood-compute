@@ -78,7 +78,8 @@ frontend/
       rain.js           # rain grid, MGM matching, recalcRain, rain-color cluster,
                         #   layers.thiessen OWNER-CREATED, mgmDbListesi/mgmDbYakin
       dplv.js           # DPLV grids (MGM PLV auto + manuel 14), loadMgm/autoSelectPLV/mgmFind/renderDplvGrid
-      hesap.js          # compute+builders+results, report/KMZ/CSV, Snyder Ct/Cp/W50/YALD abak
+      kmz.js            # KMZ dışa aktarım — havza+dere+debiler, step 1'den (geometri-only) ve step 4'ten (pik dahil) ortak
+      hesap.js          # compute+builders+results, report/CSV, Snyder Ct/Cp/W50/YALD abak (KMZ kmz.js'e taşındı)
       grafik.js         # chartwrap, cmp-compare, cmpInterp, showChart/showSnyderChart
       frekans.js        # AGI layer/list + NTFA/BTFA/MMY (~550 ln — size consciously accepted)
     modes/
@@ -91,8 +92,8 @@ frontend/
 ### 3.1 Dependency contract (enforced by D-08 test)
 - **Ranks strict:** `map/wizard/modes → ui → core`. No skips upward.
 - **Static feature graph ACYCLIC.**
-- **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable) · `havza→{cn,dplv,steps,hesap}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/hesap→map/init` (registry) · `hesap→grafik` (openCompare, showChart, cmpPeak).
-- **Push reactions:** only via `onHavzaChanged(fn)` observer in core/state (consumer today: `su.suHavzaGuncelle`). Direct wizard→modes pushes forbidden.
+- **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable) · `havza→{cn,dplv,steps}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW — hesap edge KMZ taşındı) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/kmz/hesap→map/init` (registry, katmanGeojson) · `hesap→grafik` (openCompare, showChart, showSnyderChart) · `kmz→grafik` (cmpPeak, cmpAvailable) · `kmz→core/constants` (CMP_LABELS, CMP_RPS) · `app→kmz` (exportKmz composition-root wiring) · `hesap→kmz` (exportKmz legacy re-export).
+- **Push reactions:** only via `onHavzaChanged(fn)` observer in core/state (consumers: `su.suHavzaGuncelle`, `app` KMZ `btnKmz.disabled`). Direct wizard→modes pushes forbidden.
 - **Dialog opens across features:** dynamic `import()` inside handlers (`multi-sonuc`→rezervuar.openReservoir; `hesap`→rezervuar.openReservoir).
 - **Registry-bag:** `init.js` exports `const layers = {}`; owners assign (`layers.havza = L.geoJSON(...)` etc.). Consumers uniformly import `{layers}`.
 - **Constants admission:** a constant enters `constants.js` only with ≥2 feature consumers; otherwise module-local (`MRP`, `SNY_RPS`, `CMP_COLORS`, `CMP_HYDRO_RPS`, `RES_RP`, `DPLV_*`, `INFO_RENK`, `RAIN_BLUES`, `RAIN_COLS`, `kurumColor`, `STEP_KEYS`, `PM_SECENEK`, `DERE_STIL`, `DERE_PATLAT_LIMIT`, `AKARSU_MIN_ZOOM`).
