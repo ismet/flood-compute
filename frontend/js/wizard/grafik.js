@@ -14,6 +14,7 @@ import { DURS, RPS, CMP_LABELS, CMP_RPS } from "../core/constants.js";
 
 /* ================= YÖNTEM KARŞILAŞTIRMA ================= */
 const CMP_COLORS = { dsi: "#2a9d8f", mockus: "#e07b3a", rasyonel: "#7b1fa2", snyder: "#c73e3a" };
+const MOCKUS_TONES = { K1: "#e07b3a", K2: "#cf6e2f", K3: "#b85e28" };
 /* === extracted to core/constants.js CMP_LABELS === */ /* === extracted to core/constants.js CMP_RPS === */ const CMP_HYDRO_RPS =
   ["2", "5", "10", "25", "50", "100", "OET"]; // gerçek/üçgen hidrograf olanlar
 let cmpChart = null,
@@ -31,8 +32,9 @@ function cmpAvailable() {
 }
 
 // bir yöntem + tekerrür için pik debi (m³/s); yoksa null
-function cmpPeak(method, rp) {
+function cmpPeak(method, rp, kOverride) {
   const r = S.sonuc;
+  if (!r) return null;
   if (method === "dsi") {
     // KABULET zarfı: süreler içinde en büyük
     let mx = null;
@@ -44,7 +46,8 @@ function cmpPeak(method, rp) {
   }
   if (method === "snyder") return r.snyder?.pikler?.[rp] ?? null;
   if (method === "mockus") {
-    const s = r.mockus?.sonuclar?.[cmpState.K];
+    const k = kOverride || cmpState.K;
+    const s = r.mockus?.sonuclar?.[k];
     if (!s) return null;
     if (rp === "OET") return s.Q_OET;
     if (["500", "1000", "10000"].includes(rp)) return s.Q_ext?.[rp];
@@ -83,7 +86,12 @@ function cmpHydro(method, rp) {
     return { points: arr.map((y, i) => ({ x: i, y })), synthetic: false, note: "saatlik" };
   }
   if (method === "mockus") {
-    const pk = cmpPeak("mockus", rp);
+    // hidrograf K1 temsilci; Pik tablosunda 3 varyant ayrı gösterilir
+    let pk = cmpPeak("mockus", rp);
+    if (pk == null) {
+      // K1 yoksa sıradaki varyantı dene (bozuk proje koruması)
+      pk = cmpPeak("mockus", rp, "K2") ?? cmpPeak("mockus", rp, "K3");
+    }
     if (pk == null) return null;
     const Tp = r.mockus?.Tp;
     if (Tp == null) return null;
@@ -136,11 +144,15 @@ function openCompare() {
     cmpState.rp = rpSel.value;
     renderCompare();
   };
-  $("cmpK").onchange = () => {
-    cmpState.K = $("cmpK").value;
-    renderCompare();
-  };
-  $("cmpK").parentElement.style.display = avail.mockus ? "" : "none";
+  // retained for hydro/KMZ K1 fallback; Pik tablosunda 3 satır ayrı, seçici gizli
+  const _cmpK = $("cmpK");
+  if (_cmpK) {
+    _cmpK.onchange = () => {
+      cmpState.K = _cmpK.value;
+      renderCompare();
+    };
+    _cmpK.parentElement?.style && (_cmpK.parentElement.style.display = "none");
+  }
   // yöntem onay kutuları
   $("cmpMethods").innerHTML = Object.keys(avail)
     .map(
@@ -176,7 +188,8 @@ if (_btnCloseCmp) _btnCloseCmp.onclick = () => $("cmpWrap").classList.add("hidde
 
 function renderCompare() {
   const active = Object.keys(cmpState.methods).filter((k) => cmpState.methods[k]);
-  document.querySelector(".cmp-mockusk").style.display = active.includes("mockus") ? "" : "none";
+  const _mockusK = document.querySelector(".cmp-mockusk");
+  if (_mockusK) _mockusK.style.display = "none";
   // hidrograf sekmesinde yalnız gerçek hidrografı olan tekerrürler seçilebilir
   const opts = cmpState.tab === "hidro" ? CMP_HYDRO_RPS : CMP_RPS;
   if (!opts.includes(cmpState.rp)) cmpState.rp = "100";
@@ -189,16 +202,30 @@ function renderCompare() {
 }
 
 function renderCmpPeaks(active) {
-  // grafik: seçili tekerrür için yöntem bazında bar
+  // grafik: seçili tekerrür için yöntem bazında bar (Mockus K1/K2/K3 ayrı)
   const rp = cmpState.rp;
-  const labels = active.map((m) => CMP_LABELS[m]);
-  const data = active.map((m) => cmpPeak(m, rp));
+  const exp = [];
+  active.forEach((m) => {
+    if (m === "mockus") {
+      ["K1", "K2", "K3"].forEach((k) => {
+        const s = S.sonuc?.mockus?.sonuclar?.[k];
+        if (!s) return;
+        const lbl = `Mockus Qp (K${k.slice(1)}=${s.K.toFixed(3).replace(".", ",")})`;
+        exp.push({ label: lbl, color: MOCKUS_TONES[k], m: "mockus", k });
+      });
+    } else {
+      exp.push({ label: CMP_LABELS[m], color: CMP_COLORS[m], m, k: null });
+    }
+  });
+  const labels = exp.map((e) => e.label);
+  const data = exp.map((e) => (e.m === "mockus" ? cmpPeak("mockus", rp, e.k) : cmpPeak(e.m, rp)));
+  const colors = exp.map((e) => e.color);
   if (cmpChart) cmpChart.destroy();
   cmpChart = new Chart($("cmpChart"), {
     type: "bar",
     data: {
       labels,
-      datasets: [{ label: `Q${rp} piki (m³/s)`, data, backgroundColor: active.map((m) => CMP_COLORS[m]) }],
+      datasets: [{ label: `Q${rp} piki (m³/s)`, data, backgroundColor: colors }],
     },
     options: {
       animation: false,
@@ -207,28 +234,28 @@ function renderCmpPeaks(active) {
       scales: { y: { title: { display: true, text: "Q (m³/s)" }, beginAtZero: true } },
     },
   });
-  // tablo: yöntem × tüm tekerrürler
+  // tablo: yöntem × tüm tekerrürler (Mockus 3 satır)
   let h = `<table class="tbl"><tr><th>Yöntem</th>` + CMP_RPS.map((t) => `<th>Q${t}</th>`).join("") + `</tr>`;
-  active.forEach((m) => {
+  exp.forEach((e) => {
     h +=
-      `<tr><td style="border-left:4px solid ${CMP_COLORS[m]}">${CMP_LABELS[m]}${m === "mockus" ? " (" + cmpState.K + ")" : ""}</td>` +
+      `<tr><td style="border-left:4px solid ${e.color}">${e.label}</td>` +
       CMP_RPS.map((t) => {
-        const v = cmpPeak(m, t);
+        const v = e.m === "mockus" ? cmpPeak("mockus", t, e.k) : cmpPeak(e.m, t);
         return `<td class="${t === rp ? "max" : ""}">${v == null ? "—" : fmt(v, 1)}</td>`;
       }).join("") +
       `</tr>`;
   });
-  // yöntemler arası oran (min-maks) satırı
+  // yöntemler arası oran (varyantlar dahil)
   h +=
     `<tr><td><b>maks/min</b></td>` +
     CMP_RPS.map((t) => {
-      const vs = active.map((m) => cmpPeak(m, t)).filter((v) => v != null && v > 0);
+      const vs = exp.map((e) => (e.m === "mockus" ? cmpPeak("mockus", t, e.k) : cmpPeak(e.m, t))).filter((v) => v != null && v > 0);
       if (vs.length < 2) return `<td>—</td>`;
       return `<td>${fmt(Math.max(...vs) / Math.min(...vs), 2)}×</td>`;
     }).join("") +
     `</tr></table>
     <div class="small">Değerler m³/s. DSİ = süreler içindeki en büyük pik (KABULET zarfı).
-    Mockus K katsayısı üstten seçilir. Rasyonel'de OET yoktur.</div>`;
+    Mockus K1/K2/K3 ayrı satırlardadır. Rasyonel'de OET yoktur.</div>`;
   $("cmpTable").innerHTML = h;
 }
 

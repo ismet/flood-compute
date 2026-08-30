@@ -234,25 +234,54 @@ def _method_present(sonuc, m):
 
 
 def _peaks_of(sonuc, m):
-    """Yöntem için {rp: pik} (m³/s). DSİ=süre zarfı, Mockus=K1, Rasyonel OET yok."""
+    """Yöntem için {rp: pik} (m³/s). DSİ=süre zarfı, Mockus=K1 (K2/K3 için 'mockus:K2'), Rasyonel OET yok."""
+    def _get(d, k):
+        if d is None:
+            return None
+        if k in d:
+            return d[k]
+        try:
+            ik = int(k)
+            if ik in d:
+                return d[ik]
+        except Exception:
+            pass
+        return None
+
     out = {}
     if m == "dsi":
         for rp in RP_ALL:
             vals = [sonuc["kabulet"].get(str(d), {}).get(rp) for d in DURS]
             out[rp] = max([v for v in vals if v is not None], default=None)
-    elif m == "mockus":
-        s = sonuc["mockus"]["sonuclar"]["K1"]
+    elif m == "mockus" or m.startswith("mockus:"):
+        k = m.split(":", 1)[1] if ":" in m else "K1"
+        sonuclar = (sonuc.get("mockus") or {}).get("sonuclar") or {}
+        s = sonuclar.get(k)
+        if not s:
+            # "mockus" (K1) yoksa boş dön; "mockus:K2" için K1'e sessiz fallback yapma
+            return out
         for rp in RP_ALL:
-            out[rp] = (s["Q_OET"] if rp == "OET" else
-                       s["Q_ext"].get(rp) if rp in ("500", "1000", "10000") else s["Q"].get(rp))
+            if rp == "OET":
+                out[rp] = s.get("Q_OET")
+            elif rp in ("500", "1000", "10000"):
+                out[rp] = _get(s.get("Q_ext"), rp)
+            else:
+                out[rp] = _get(s.get("Q"), rp)
     elif m == "rasyonel":
-        r = sonuc["rasyonel"]
+        r = sonuc.get("rasyonel")
+        if not r:
+            return out
         for rp in RP_ALL:
-            out[rp] = (None if rp == "OET" else
-                       r["Q_ext"].get(rp) if rp in ("500", "1000", "10000") else r["Q"].get(rp))
+            if rp == "OET":
+                out[rp] = None
+            elif rp in ("500", "1000", "10000"):
+                out[rp] = _get(r.get("Q_ext"), rp)
+            else:
+                out[rp] = _get(r.get("Q"), rp)
     elif m == "snyder":
+        pikler = (sonuc.get("snyder") or {}).get("pikler")
         for rp in RP_ALL:
-            out[rp] = sonuc["snyder"]["pikler"].get(rp)
+            out[rp] = _get(pikler, rp)
     return out
 
 
@@ -343,9 +372,20 @@ def _mockus_section(doc, sonuc, num, ad, ctr):
         f"Mockus (süperpozesiz) yöntemi ile toplanma süresi Tc={_n(m['Tc'], 3)} saat, yağış "
         f"süresi D={_n(m['D'])} saat, pike varış süresi Tp={_n(m['Tp'], 3)} saat hesaplanmıştır. "
         "Üç akım katsayısı (K1=0,208, K2=0,163, K3 havza özelliğine bağlı) için pik debiler "
-        "belirlenmiştir. Raporda temsilci olarak K1 katsayısı sonuçları kullanılmıştır. "
-        "Taşkın yinelenme pikleri aşağıda verilmiştir.")
-    _peak_table(doc, ctr, sonuc, "mockus", "Mockus Yöntemi (K1)")
+        "belirlenmiştir. Taşkın yinelenme pikleri aşağıda verilmiştir.")
+    # üç K ayrı satır
+    ctr["t"] += 1
+    hdr = ["Yinelenme"] + [f"Q{rp}" for rp in RP_ALL]
+    rows = []
+    for k in ["K1", "K2", "K3"]:
+        s = m["sonuclar"].get(k)
+        if not s:
+            continue
+        pk = _peaks_of(sonuc, f"mockus:{k}")
+        k_str = _n(s["K"], 3)
+        rows.append([f"Mockus Qp (K{k[1]}={k_str}) (m³/s)"] + [_n(pk.get(rp)) for rp in RP_ALL])
+    _table(doc, hdr, rows)
+    _caption(doc, f"Tablo {ctr['t']}  Mockus Yöntemi ile Hesaplanan Taşkın Yinelenme Pikleri (m³/s)")
 
 
 def _rasyonel_section(doc, sonuc, num, ad, ctr):
@@ -367,12 +407,24 @@ def _comparison_section(doc, sonuc, num, dahil, secili, ctr):
     ctr["t"] += 1
     hdr = ["Yöntem"] + [f"Q{rp}" for rp in RP_ALL]
     rows, bold_rows = [], []
-    for i, m in enumerate(dahil):
-        pk = _peaks_of(sonuc, m)
-        nm = METHOD_NAMES[m] + (" ✔" if m == secili else "")
-        rows.append([nm] + [_n(pk.get(rp)) for rp in RP_ALL])
-        if m == secili:
-            bold_rows.append(i + 1)  # +1: başlık satırı
+    for m in dahil:
+        if m == "mockus":
+            for k in ["K1", "K2", "K3"]:
+                s = sonuc["mockus"]["sonuclar"].get(k)
+                if not s:
+                    continue
+                pk = _peaks_of(sonuc, f"mockus:{k}")
+                k_str = _n(s["K"], 3)
+                nm = f"Mockus Qp (K{k[1]}={k_str})" + (" ✔" if secili == "mockus" else "")
+                rows.append([nm] + [_n(pk.get(rp)) for rp in RP_ALL])
+                if secili == "mockus":
+                    bold_rows.append(len(rows))  # header + rows
+        else:
+            pk = _peaks_of(sonuc, m)
+            nm = METHOD_NAMES[m] + (" ✔" if m == secili else "")
+            rows.append([nm] + [_n(pk.get(rp)) for rp in RP_ALL])
+            if m == secili:
+                bold_rows.append(len(rows))
     t = _table(doc, hdr, rows)
     for ri in bold_rows:
         for cell in t.rows[ri].cells:
