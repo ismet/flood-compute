@@ -125,15 +125,13 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 12px; background:
 .tbl tr.sel td { background: var(--uyari-acik); }
 .tbl td.max { background: var(--uyari); font-weight: 700; }
 
-#rainDock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 1000;
+#rainDock, #hesapDock, #cmpWrap { position: absolute; left: 12px; right: 12px; bottom: 12px; top: auto; height: auto; max-height: calc(100vh - 24px); width: auto; max-width: none;
             background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
-            padding: 8px; height: auto; max-height: 60vh; overflow-y: auto;
-            overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+            padding: 8px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+#rainDock { z-index: 1000; }
+#hesapDock { z-index: 999; }
+#cmpWrap { z-index: 999; display: block; }
 #rainDock table.tbl { margin-bottom: 4px; }
-#hesapDock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 999;
-            background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
-            padding: 8px; height: auto; max-height: 70vh; overflow-y: auto;
-            overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
 .hesap-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;
             border-bottom: 1px solid var(--kenar-hafif); padding-bottom: 6px; }
 .hesap-head b { color: var(--vurgu); font-size: 15px; }
@@ -237,11 +235,6 @@ fieldset.mmethods legend { font-size: 12.5px; font-weight: 700; color: var(--met
 .mpt-row .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .mpt-row button { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--hata-ikincil); font-size: 15px; }
 
-/* ---- Step 6 — bottom dock identical to Hesap (standardized, full-width) ---- */
-#cmpWrap { position: absolute; left: 12px; right: 12px; bottom: 12px; top: auto; height: auto; max-height: 70vh; z-index: 999;
-           background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
-           padding: 8px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
-           box-shadow: 0 4px 18px rgba(0,0,0,.12); display: block; width: auto; max-width: none; }
 #mcmpWrap, #resWrap, #parWrap { position: absolute; top: 12px; left: 12px; right: 12px; bottom: auto; height: auto; max-height: 70vh; z-index: 1200; display: flex; flex-direction: column;
            background: rgba(255,255,255,.99); border: 1px solid var(--kenar); border-radius: 10px;
            box-shadow: 0 8px 30px rgba(0,0,0,.22); padding: 10px 12px; overflow: hidden; }
@@ -288,8 +281,7 @@ h3.res { font-size: 15px; font-weight: 700; color: var(--vurgu); margin-top: 12p
   #app { flex-direction: column; }
   #panel { width: 100%; max-width: none; min-width: 0; max-height: 50vh; border-right: none; border-bottom: 1px solid var(--kenar-acik); }
   input, select, textarea, button, body { font-size: 16px; }
-  #rainDock { max-height: 40%; }
-  #hesapDock { max-height: 40%; }
+  #rainDock, #hesapDock, #cmpWrap { max-height: 40%; }
   #chartwrap { width: auto; left: 8px; right: 8px; height: 280px; }
 }
 
