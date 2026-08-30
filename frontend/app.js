@@ -125,11 +125,18 @@ async function activateStep(n) {
     agiKatmanAc();
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
   }
+  // cmpWrap — only visible on Step 6 (Mukayese ve Rapor)
+  const _cmpEl = $("cmpWrap");
+  if (_cmpEl) {
+    if (n !== 6) _cmpEl.classList.add("hidden");
+    // when n===6, visibility is decided below (needs S.sonuc)
+  }
   if (n === 6) {
     try {
       const { renderMukayese } = await import("./js/wizard/comparison.js");
       renderMukayese();
       if (S.sonuc) openCompare();
+      else if (_cmpEl) _cmpEl.classList.add("hidden");
     } catch (e) {
       console.error("Mukayese yüklenemedi:", e);
     }
@@ -155,6 +162,7 @@ function setMode(mode) {
   else layers.su.remove();
   $("rainDock").classList.add("hidden");
   $("hesapDock")?.classList.add("hidden");
+  $("cmpWrap")?.classList.add("hidden");
   if (multi) {
     if (S.outlet && (!S.multi.mansap || S.multi.mansapAuto)) {
       const nm = {
