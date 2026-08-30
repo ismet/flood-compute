@@ -62,9 +62,22 @@ function wireAllDocks() {
   } catch (e) {}
 }
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", wireAllDocks);
+  document.addEventListener("DOMContentLoaded", () => {
+    wireAllDocks();
+    updateMapControls();
+  });
 } else {
   wireAllDocks();
+  updateMapControls();
+}
+
+function updateMapControls() {
+  const show = (S.mode ?? "wizard") === "wizard" && document.querySelector('.step[data-step="1"]')?.classList.contains("active");
+  const wrap = document.getElementById("mapwrap");
+  if (wrap) wrap.classList.toggle("havza-active", show);
+  const search = document.getElementById("mapSearch");
+  if (search) search.classList.toggle("hidden", !show);
+  document.querySelectorAll(".leaflet-control-zoom, .leaflet-control-layers, .leaflet-pm-toolbar").forEach((el) => el.classList.toggle("hidden", !show));
 }
 
 async function activateStep(n) {
@@ -141,6 +154,7 @@ async function activateStep(n) {
       console.error("Mukayese yüklenemedi:", e);
     }
   }
+  updateMapControls();
 }
 
 function setMode(mode) {
@@ -185,6 +199,7 @@ function setMode(mode) {
     if (wiz) document.querySelector('.step[data-step="1"]').click();
   }
   if (dil) initDilekce();
+  updateMapControls();
 }
 
 function clearSingleBasin() {

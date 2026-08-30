@@ -77,6 +77,7 @@
  */
 
 export const S = {
+  mode: "wizard",
   outlet: null,
   havza: null,
   kotlar: Array(11).fill(""),
