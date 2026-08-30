@@ -12,6 +12,7 @@
 import { S, onHavzaChanged } from "./js/core/state.js";
 import { map, layers, setOnHavzaClick, katmanGeojson } from "./js/map/init.js";
 import { $, setStatus } from "./js/ui/dom.js";
+import { wireDock, isMinimized, setMinimized, clearMinimized } from "./js/ui/dock.js";
 import { exportKmz } from "./js/wizard/kmz.js";
 import { N_STEPS, STEP_KEYS, updateComputeReady } from "./js/wizard/steps.js";
 import { renderKotlar, renderRasyonelC } from "./js/wizard/cn.js";
@@ -47,6 +48,37 @@ import "./js/wizard/grafik.js";
 import "./js/modes/multi-sonuc.js";
 import "./js/modes/rezervuar.js";
 import "./js/modes/proje.js";
+
+// --- Dock minimize/maximize wiring (all 7 overlays) ---
+function wireAllDocks() {
+  try {
+    wireDock("rainDock", { title: "🌧 Yağış Tablosu" });
+    wireDock("hesapDock");
+    wireDock("cmpWrap");
+    wireDock("mcmpWrap");
+    wireDock("parWrap");
+    wireDock("resWrap");
+    wireDock("chartwrap");
+  } catch (e) {}
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    wireAllDocks();
+    updateMapControls();
+  });
+} else {
+  wireAllDocks();
+  updateMapControls();
+}
+
+function updateMapControls() {
+  const show = (S.mode ?? "wizard") === "wizard" && document.querySelector('.step[data-step="1"]')?.classList.contains("active");
+  const wrap = document.getElementById("mapwrap");
+  if (wrap) wrap.classList.toggle("havza-active", show);
+  const search = document.getElementById("mapSearch");
+  if (search) search.classList.toggle("hidden", !show);
+  document.querySelectorAll(".leaflet-control-zoom, .leaflet-control-layers, .leaflet-pm-toolbar").forEach((el) => el.classList.toggle("hidden", !show));
+}
 
 async function activateStep(n) {
   document.querySelectorAll(".step").forEach((x) => x.classList.remove("active"));
@@ -106,15 +138,23 @@ async function activateStep(n) {
     agiKatmanAc();
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
   }
+  // cmpWrap — only visible on Step 6 (Mukayese ve Rapor)
+  const _cmpEl = $("cmpWrap");
+  if (_cmpEl) {
+    if (n !== 6) _cmpEl.classList.add("hidden");
+    // when n===6, visibility is decided below (needs S.sonuc)
+  }
   if (n === 6) {
     try {
       const { renderMukayese } = await import("./js/wizard/comparison.js");
       renderMukayese();
       if (S.sonuc) openCompare();
+      else if (_cmpEl) _cmpEl.classList.add("hidden");
     } catch (e) {
       console.error("Mukayese yüklenemedi:", e);
     }
   }
+  updateMapControls();
 }
 
 function setMode(mode) {
@@ -136,6 +176,7 @@ function setMode(mode) {
   else layers.su.remove();
   $("rainDock").classList.add("hidden");
   $("hesapDock")?.classList.add("hidden");
+  $("cmpWrap")?.classList.add("hidden");
   if (multi) {
     if (S.outlet && (!S.multi.mansap || S.multi.mansapAuto)) {
       const nm = {
@@ -158,6 +199,7 @@ function setMode(mode) {
     if (wiz) document.querySelector('.step[data-step="1"]').click();
   }
   if (dil) initDilekce();
+  updateMapControls();
 }
 
 function clearSingleBasin() {
@@ -199,6 +241,13 @@ function clearSingleBasin() {
   if ($("comparisonResults")) $("comparisonResults").innerHTML = "";
   if ($("comparisonStatus")) setStatus("comparisonStatus", "", "");
   if ($("cmpWrap")) $("cmpWrap").classList.add("hidden");
+  ["mcmpWrap", "parWrap", "resWrap", "chartwrap"].forEach((id) => {
+    const el = $(id);
+    if (el) el.classList.add("hidden");
+  });
+  try {
+    clearMinimized();
+  } catch (e) {}
   ["havza", "dere", "kanal", "thiessen", "markers", "havzaAgi", "havzaMgm"].forEach((k) => {
     try {
       layers[k].clearLayers();
@@ -287,24 +336,27 @@ $("modeSu").onclick = () => setMode("su");
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    const rw = $("resWrap");
-    if (rw && !rw.classList.contains("hidden")) {
-      rw.classList.add("hidden");
+    const order = ["resWrap", "mcmpWrap", "cmpWrap", "chartwrap", "parWrap"];
+    for (const id of order) {
+      const el = $(id);
+      if (el && !el.classList.contains("hidden")) {
+        if (isMinimized(id)) {
+          el.classList.add("hidden");
+        } else {
+          setMinimized(id, true);
+        }
+        return;
+      }
+    }
+    // rainDock/hesapDock are step-controlled; Esc minimizes them if visible on their step
+    const rain = $("rainDock");
+    if (rain && !rain.classList.contains("hidden") && !isMinimized("rainDock")) {
+      setMinimized("rainDock", true);
       return;
     }
-    const mcmp = $("mcmpWrap");
-    if (mcmp && !mcmp.classList.contains("hidden")) {
-      mcmp.classList.add("hidden");
-      return;
-    }
-    const cmp = $("cmpWrap");
-    if (cmp && !cmp.classList.contains("hidden")) {
-      cmp.classList.add("hidden");
-      return;
-    }
-    const cw = $("chartwrap");
-    if (cw && !cw.classList.contains("hidden")) {
-      cw.classList.add("hidden");
+    const hesap = $("hesapDock");
+    if (hesap && !hesap.classList.contains("hidden") && !isMinimized("hesapDock")) {
+      setMinimized("hesapDock", true);
       return;
     }
   }

@@ -17,7 +17,7 @@ const CMP_COLORS = { dsi: "#2a9d8f", mockus: "#e07b3a", rasyonel: "#7b1fa2", sny
 /* === extracted to core/constants.js CMP_LABELS === */ /* === extracted to core/constants.js CMP_RPS === */ const CMP_HYDRO_RPS =
   ["2", "5", "10", "25", "50", "100", "OET"]; // gerçek/üçgen hidrograf olanlar
 let cmpChart = null,
-  cmpState = { tab: "pik", rp: "100", methods: {}, K: "K1" };
+  cmpState = { tab: "hidro", rp: "100", methods: {}, K: "K1" };
 
 function cmpAvailable() {
   const r = S.sonuc;
@@ -171,7 +171,8 @@ function openCompare() {
   $("cmpWrap").classList.remove("hidden");
   renderCompare();
 }
-$("btnCloseCmp").onclick = () => $("cmpWrap").classList.add("hidden");
+const _btnCloseCmp = $("btnCloseCmp");
+if (_btnCloseCmp) _btnCloseCmp.onclick = () => $("cmpWrap").classList.add("hidden");
 
 function renderCompare() {
   const active = Object.keys(cmpState.methods).filter((k) => cmpState.methods[k]);

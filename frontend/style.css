@@ -51,6 +51,10 @@ body {
 #panel > * { position: relative; z-index: 1; }
 #mapwrap { flex: 1; position: relative; }
 #map { height: 100%; }
+#mapwrap:not(.havza-active) .leaflet-control-zoom,
+#mapwrap:not(.havza-active) .leaflet-control-layers,
+#mapwrap:not(.havza-active) .leaflet-pm-toolbar,
+#mapwrap:not(.havza-active) #mapSearch { display: none !important; }
 /* İklim pane — Uydu/Topo'da vendor plus-lighter blend koyu pikselleri yuttuğu için normal */
 .leaflet-iklim-pane img.leaflet-tile { mix-blend-mode: normal; }
 
@@ -125,15 +129,13 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 12px; background:
 .tbl tr.sel td { background: var(--uyari-acik); }
 .tbl td.max { background: var(--uyari); font-weight: 700; }
 
-#rainDock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 1000;
+#rainDock, #hesapDock, #cmpWrap { position: absolute; left: 12px; right: 12px; bottom: 12px; top: auto; height: auto; max-height: calc(100vh - 24px); width: auto; max-width: none;
             background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
-            padding: 8px; max-height: 60%; overflow-y: auto;
-            box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+            padding: 8px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+#rainDock { z-index: 1000; }
+#hesapDock { z-index: 999; }
+#cmpWrap { z-index: 999; display: block; }
 #rainDock table.tbl { margin-bottom: 4px; }
-#hesapDock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 999;
-            background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
-            padding: 8px; height: auto; max-height: calc(100% - 24px); overflow-y: auto;
-            overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
 .hesap-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;
             border-bottom: 1px solid var(--kenar-hafif); padding-bottom: 6px; }
 .hesap-head b { color: var(--vurgu); font-size: 15px; }
@@ -202,11 +204,23 @@ details { background: var(--beyaz); border: 1px solid var(--kenar); border-radiu
 details summary { cursor: pointer; font-size: 12.5px; color: var(--vurgu); }
 details summary:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 2px; border-radius: 2px; }
 
-#chartwrap { position: absolute; right: 12px; bottom: 12px; width: 620px; height: 380px;
+#chartwrap { position: absolute; right: 12px; bottom: 12px; width: 620px; height: 380px; max-height: 70vh;
              background: rgba(255,255,255,.97); border: 1px solid var(--kenar); border-radius: 8px;
-             z-index: 1000; padding: 8px; display: flex; flex-direction: column; }
+             z-index: 1000; padding: 8px; display: flex; flex-direction: column; overflow: hidden; }
 #chartwrap canvas { flex: 1; min-height: 0; }
-.chart-head { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.dock-head { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--kenar-hafif); padding-bottom: 6px; margin-bottom: 6px; }
+.dock-head b { font-size: 15px; color: var(--vurgu); }
+.dock-min-btn { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--metin-soluk); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+.dock-min-btn:hover { background: var(--arka-gri); color: var(--metin); }
+.dock-min-btn:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 1px; }
+.dock-minimized { height: auto !important; max-height: none !important; }
+.dock-minimized .dock-body { display: none !important; }
+.dock-minimized .cmp-body, .dock-minimized #rainGrid, .dock-minimized #hesapGrid, .dock-minimized #parBody, .dock-minimized #resVolGrid, .dock-minimized #resRatingGrid { display: none !important; }
+.dock-minimized canvas { display: none !important; }
+.dock-minimized .cmp-ctrl, .dock-minimized #resVolGrid, .dock-minimized #resRatingGrid, .dock-minimized details { display: none !important; }
+.dock-minimized > *:not(.dock-head):not(.cmp-head):not(.chart-head):not(.hesap-head) { display: none !important; }
+.dock-minimized .dock-head, .dock-minimized .cmp-head, .dock-minimized .chart-head, .dock-minimized .hesap-head { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
 /* ---- mod çubuğu + ara havza ---- */
 #modeBar { display: flex; gap: 4px; margin-bottom: 8px; }
@@ -225,10 +239,9 @@ fieldset.mmethods legend { font-size: 12.5px; font-weight: 700; color: var(--met
 .mpt-row .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .mpt-row button { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--hata-ikincil); font-size: 15px; }
 
-/* ---- yöntem karşılaştırma tam ekran ---- */
-#cmpWrap, #mcmpWrap, #resWrap, #parWrap { position: absolute; inset: 12px; z-index: 1200; display: flex; flex-direction: column;
+#mcmpWrap, #resWrap, #parWrap { position: absolute; top: 12px; left: 12px; right: 12px; bottom: auto; height: auto; max-height: 70vh; z-index: 1200; display: flex; flex-direction: column;
            background: rgba(255,255,255,.99); border: 1px solid var(--kenar); border-radius: 10px;
-           box-shadow: 0 8px 30px rgba(0,0,0,.22); padding: 10px 12px; }
+           box-shadow: 0 8px 30px rgba(0,0,0,.22); padding: 10px 12px; overflow: hidden; }
 .cmp-head { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--kenar-hafif); padding-bottom: 6px; }
 .cmp-head > b { font-size: 15px; color: var(--vurgu); }
 .cmp-tabs { display: flex; gap: 4px; }
@@ -242,9 +255,8 @@ fieldset.mmethods legend { font-size: 12.5px; font-weight: 700; color: var(--met
 #resWrap .cmp-ctrl { align-content: flex-start; }
 /* rezervuar overlay: bölümler üst üste binmesin — sabit yükseklikli grafik +
    kaydırılabilir gövde, kompakt yapıştırma tabloları */
-#resWrap { overflow-y: auto; }
 #resWrap .cmp-body { flex: none; height: 320px; }
-#resWrap > details { flex: none; }
+#resWrap details { flex: none; }
 #resVolGrid, #resRatingGrid { max-height: 230px; overflow: auto; border: 1px solid var(--kenar-cok-acik); border-radius: 4px; }
 #resVolGrid table, #resRatingGrid table { border-collapse: collapse; font-size: 12px; width: auto; }
 #resVolGrid th, #resRatingGrid th { position: sticky; top: 0; background: var(--arka-gri); padding: 4px 6px; white-space: nowrap; z-index: 1; }
@@ -257,9 +269,10 @@ fieldset.mmethods legend { font-size: 12.5px; font-weight: 700; color: var(--met
 .cmp-methods label { flex-direction: row; align-items: center; gap: 4px; cursor: pointer; }
 .cmp-methods label input { width: auto; }
 .cmp-methods .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-.cmp-body { flex: 1; min-height: 0; display: flex; gap: 12px; }
-.cmp-canvas { flex: 1.5; min-width: 0; position: relative; }
+.cmp-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 12px; overflow: auto; }
+.cmp-canvas { flex: 1.5; min-width: 0; position: relative; min-height: 260px; max-height: 45vh; }
 .cmp-table { flex: 1; overflow: auto; min-width: 0; }
+.dock-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 0; }
 .cmp-table table { width: 100%; }
 @media (max-width: 900px) { .cmp-body { flex-direction: column; } .cmp-canvas { min-height: 240px; } }
 
@@ -272,8 +285,7 @@ h3.res { font-size: 15px; font-weight: 700; color: var(--vurgu); margin-top: 12p
   #app { flex-direction: column; }
   #panel { width: 100%; max-width: none; min-width: 0; max-height: 50vh; border-right: none; border-bottom: 1px solid var(--kenar-acik); }
   input, select, textarea, button, body { font-size: 16px; }
-  #rainDock { max-height: 40%; }
-  #hesapDock { max-height: 40%; }
+  #rainDock, #hesapDock, #cmpWrap { max-height: 40%; }
   #chartwrap { width: auto; left: 8px; right: 8px; height: 280px; }
 }
 
