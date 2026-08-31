@@ -179,6 +179,11 @@ $("projList").onchange = async () => {
     renderRainTable();
     renderDplvGrid();
     updatePlvAutoInfo();
+    // kayıtta varsa NTFA/BTFA sonuçlarını dock'a geri getir (S.tfa/S.btfa kayıtta durur)
+    try {
+      const frek = await import("../wizard/frekans.js");
+      frek.frekansDockGuncelle();
+    } catch (e) {}
     // kayıtta varsa CORINE dökümü ve Adım 4'teki C bloğu geri gelir
     if (S.cnSonuc) renderCnSonuc(S.cnSonuc);
     updateComputeReady();

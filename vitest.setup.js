@@ -108,25 +108,36 @@ if (typeof globalThis.L === "undefined") {
     setLatLngs() {},
   });
   globalThis.L = {
-    map: () => ({
-      setView() {
-        return this;
-      },
-      on() {},
-      off() {},
-      getCenter() {
-        return { lat: 39, lng: 35 };
-      },
-      getContainer() {
-        return { style: {} };
-      },
-      removeLayer() {},
-      addLayer() {},
-      pm: {
-        enableDraw() {},
-        disableDraw() {},
-      },
-    }),
+    map: () => {
+      // 898ffaf pane'leri: init.js modül seviyesinde getPane/createPane çağırır
+      const panes = {};
+      return {
+        setView() {
+          return this;
+        },
+        on() {},
+        off() {},
+        getPane(name) {
+          return panes[name] || null;
+        },
+        createPane(name) {
+          panes[name] = { style: {} };
+          return panes[name];
+        },
+        getCenter() {
+          return { lat: 39, lng: 35 };
+        },
+        getContainer() {
+          return { style: {} };
+        },
+        removeLayer() {},
+        addLayer() {},
+        pm: {
+          enableDraw() {},
+          disableDraw() {},
+        },
+      };
+    },
     tileLayer: () => ({
       addTo() {
         return {};

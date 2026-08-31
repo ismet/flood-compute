@@ -2,10 +2,10 @@
  * @fileoverview Frekans modülleri — AGİ katmanı, NTFA/BTFA.
  * @module wizard/frekans
  * Owns: S.agiSecili, S.agiBolgesel, S.agiListe, S.tfa, S.btfa; layers.agi
- * Exports: agiYukle, agiListele, agiSec, agiKatmanAc, tfaAykiriBlok, tfaCiz, btfaHomojenCiz, btfaCiz
+ * Exports: agiYukle, agiListele, agiSec, agiKatmanAc, tfaAykiriBlok, tfaCiz, btfaHomojenCiz, btfaCiz, frekansDockGuncelle, frekansReset
  * Notes:
  *  - Rank 2 (wizard). MMY: wizard/mmy.js (Hershfield) ayrı modül.
- *  - Eski boyut notu (~550 ln) MMY taşınmadan önceydi; şimdi ~646 ln.
+ *  - Eski boyut notu (~550 ln) MMY taşınmadan önceydi; şimdi ~691 ln.
  * @typedef {Object} TfaPayload
  * @property {string} kod - AGİ kodu
  * @property {number} ilk_yil - Başlangıç su yılı (0=tümü)
@@ -372,7 +372,7 @@ $("btnTfa").onclick = async () => {
       aykiri_disla: $("tfaAykiriAt") ? $("tfaAykiriAt").checked : false,
     });
     S.tfa = o;
-    tfaCiz(o);
+    frekansDockGuncelle();
     setStatus(
       "tfaStatus",
       `${o.parametreler.yil_sayisi} yıllık seri — ` + `kabul edilen dağılım: ${o.kabul_edilen_adi}.`,
@@ -602,6 +602,53 @@ function btfaCiz(o) {
   $("btfaSonuc").innerHTML = h;
 }
 
+/* ---- Dock: NTFA/BTFA sonuçları haritaya alta yatışan #frekansDock'ta yaşar.
+   Görünürlük hesapDock sözleşmesi gibidir: activateStep n===5'te buraya bakar,
+   başka adımda root gizler; render yalnız dock görünürken koşar (Chart.js
+   gizliyken 0×0 ölçülmesin). Yeni sonuç geldikçe de aynı kapıdan tazelenir. */
+function frekansDockGuncelle() {
+  const dock = $("frekansDock");
+  if (!dock) return;
+  // Yalnız Adım 5 görünürken aç (proje restore başka adımdayken dock patlamasın)
+  const adim5 = !document.querySelector('.page[data-page="5"]')?.classList.contains("hidden");
+  const acik = adim5 && !!(S.tfa || S.btfa);
+  dock.classList.toggle("hidden", !acik);
+  if (!acik) return;
+  if (S.tfa) tfaCiz(S.tfa);
+  else $("tfaSonuc").innerHTML = "";
+  if (S.btfa) btfaCiz(S.btfa);
+  else {
+    $("btfaSonuc").innerHTML = "";
+    $("btfaHomojenGrafikKutu").classList.add("hidden");
+    if (btfaHomChart) {
+      btfaHomChart.destroy();
+      btfaHomChart = null;
+    }
+  }
+}
+
+/* clearSingleBasin çağırır — frekans durumu havzaya bağlıdır, bayat sonuç kalmasın. */
+function frekansReset() {
+  S.agiSecili = null;
+  S.agiBolgesel.clear();
+  S.agiListe = [];
+  S.tfa = null;
+  S.btfa = null;
+  layers.agi.clearLayers();
+  $("agiInfo").innerHTML = "";
+  $("agiListe").innerHTML = "";
+  $("tfaSonuc").innerHTML = "";
+  $("btfaSonuc").innerHTML = "";
+  $("btfaHomojenGrafikKutu").classList.add("hidden");
+  if (btfaHomChart) {
+    btfaHomChart.destroy();
+    btfaHomChart = null;
+  }
+  $("frekansDock")?.classList.add("hidden");
+  setStatus("tfaStatus", "", "");
+  agiIsaretle(); // butonlar disabled, btfaStatus boş, aktarım listesi taze
+}
+
 $("btnBtfa").onclick = async () => {
   const alan = +$("btfaAlan").value || +$("inpA").value;
   if (!alan)
@@ -622,7 +669,7 @@ $("btnBtfa").onclick = async () => {
       dusuk_guveni_at: $("tfaDusukAt").checked,
     });
     S.btfa = o;
-    btfaCiz(o);
+    frekansDockGuncelle();
     const at = o.istasyonlar.length - o.kullanilan_sayisi;
     setStatus(
       "btfaStatus",
@@ -642,4 +689,4 @@ $("btnBtfa").onclick = async () => {
   }
 };
 
-export { agiYukle, agiListele, agiSec, agiKatmanAc, tfaAykiriBlok, tfaCiz, btfaHomojenCiz, btfaCiz };
+export { agiYukle, agiListele, agiSec, agiKatmanAc, tfaAykiriBlok, tfaCiz, btfaHomojenCiz, btfaCiz, frekansDockGuncelle, frekansReset };

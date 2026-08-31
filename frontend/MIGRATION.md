@@ -83,7 +83,8 @@ frontend/
       hesap.js          # compute+builders+results, Yıl_Ara + dock, report/CSV (single-owner), Snyder Ct/Cp/W50/YALD abak (KMZ kmz.js'e taşındı)
       comparison.js     # Mukayese ve Rapor — step 6 view (rapora dahil + secili + bolum no + Word + rezervuar + CSV/JSON), S.rapFilter
       grafik.js         # chartwrap, cmp-compare, cmpInterp, showChart/showSnyderChart (overlay backend, auto-open on 6)
-      frekans.js        # AGI layer/list + NTFA/BTFA (~646 ln)
+      frekans.js        # AGI layer/list + NTFA/BTFA (~691 ln) + #frekansDock (alt overlay, hesapDock sözleşmesi:
+                        #   activateStep(5) S'den render+göster, başka adım/mod root gizler; clearSingleBasin → frekansReset)
       mmy.js            # MMY Hershfield — Yağış sekmesi sonu, OET (elle) köprüsü (recalcRain)
     modes/
       multi.js          # points/qbaz/solve orchestration + reRouteMulti
@@ -228,6 +229,7 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 [2026-08-25] stage 16 OK — 873fd80 — FINAL GATE: full §8 smoke, eslint+vitest+graph green, legacy 0, sentinel cleaned, baseline parity (approved deltas only), AGENTS finalized
 [2026-08-25] post-signoff fix — resMarker circular-JSON save crash (pre-existing, latent): openReservoir stores live L.circleMarker in S.resMarker; Geoman .pm._layer back-ref breaks JSON.stringify. buildDurumS() strips it (proje.js), load preserves session handle (orphan-marker guard), regression test in proje.test.js
 [2026-08-25] post-signoff fix — reservoir kontrolsüz devasa hazne uyarısı ve gecikme düzeltmesi: route() kret-aralık dışı ve sıfır çıkışta girdi_uyarisi üretir (maks He ~0.00 m), gecikme_saat/cikis_pik_saat null; renderReservoir uyarıyı tabloya basar, fmt null→"—" ile −2 sa artefaktı giderildi
+[2026-08-31] post-signoff feature — Adım 5 sonuç dock'u #frekansDock: NTFA/BTFA sonuçları + homojenlik grafiği sol panelden alta yatışan dock'a taşındı (özgün id'ler korundu: tfaSonuc/btfaSonuc/btfaHomojenGrafikKutu — tfaCiz/btfaCiz/agiSec dokunulmadı; btnTfa/btnBtfa frekansDockGuncelle çağırır). hesapDock sözleşmesi: activateStep(5) S.tfa/S.btfa varsa göster+S'den render, değilse gizle; setMode/diğer adımlar root gizler; Esc minimize; wireDock(.hesap-head → minimize ücretsiz, style.css :132/:138/:289). clearSingleBasin → frekansReset() (layers.agi + durum + statüler + butonlar). proje restore → dinamik import frekansDockGuncelle (S.tfa/S.btfa kayıtta durur, restore'da ilk kez ekrana gelir — eski görüntüleme açığı kapandı). UI testinde iki kusur yakalandı ve giderildi: (1) vitest.setup.js L.map stub'ına getPane/createPane — 898ffaf pane commit'inden beri rain/hesap/proje/duzenle test dosyaları yüklenemiyordu (önceden var olan kırılma, 18→45 test); (2) frekansDockGuncelle aktif adım denetimi (.page[data-page="5"] gizli değilse) — proje restore başka adımdayken dock açılıyordu. Gate: test_frontend_modules + eslint + vitest 45/45 yeşil; agent-browser + chrome-devtools-axi ile canlı akış (1225+ AGİ, E15A001 NTFA 82 yıl Pearson-3, 2 istasyon BTFA Q100=142.5, grafik 793×280/1418×280, adım geçişi, minimize/Esc, proje round-trip) + konsol hatasız + ekran görüntüleri doğrulandı
 ```
 
 ## 10. Standing Protocols
