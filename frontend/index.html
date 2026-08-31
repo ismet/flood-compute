@@ -427,7 +427,6 @@
         <button id="btnTfa" class="primary" disabled>Frekans analizi yap</button>
       </div>
       <div id="tfaStatus" class="status"></div>
-      <div id="tfaSonuc"></div>
 
       <hr>
       <p class="hint"><b>Bölgesel analiz (BTFA)</b> — indeks-debi yöntemi.
@@ -449,11 +448,7 @@
         <label class="chk" title="Homojenlik testinden geçemeyen istasyonlar çıkarılıp analiz bir kez daha koşulur; iki durum yan yana karşılaştırılır."><input type="checkbox" id="btfaAykiriAt" checked> aykırıları çıkarıp tekrarla</label>
         <button id="btnBtfa" class="primary" disabled>Bölgesel analiz yap</button>
       </div>
-      <div id="btfaHomojenGrafikKutu" class="hidden" style="height:280px;margin-top:6px">
-        <canvas id="btfaHomojenGrafik"></canvas>
-      </div>
       <div id="btfaStatus" class="status"></div>
-      <div id="btfaSonuc"></div>
 
     </section>
   </aside>
@@ -482,6 +477,14 @@
     <div id="hesapDock" class="hidden">
       <div class="hesap-head"><b>📊 Hesap Sonuçları</b></div>
       <div id="hesapGrid"></div>
+    </div>
+    <div id="frekansDock" class="hidden">
+      <div class="hesap-head"><b>📈 Frekans Analizi Sonuçları</b></div>
+      <div id="tfaSonuc"></div>
+      <div id="btfaHomojenGrafikKutu" class="hidden" style="height:280px;margin-top:6px">
+        <canvas id="btfaHomojenGrafik"></canvas>
+      </div>
+      <div id="btfaSonuc"></div>
     </div>
     <div id="chartwrap" class="hidden">
       <div class="chart-head">

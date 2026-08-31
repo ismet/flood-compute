@@ -20,7 +20,7 @@ import { useDefaultStations } from "./js/wizard/thiessen.js";
 import { renderRainTable } from "./js/wizard/rain.js";
 import { renderDplvGrid, autoSelectPLV } from "./js/wizard/dplv.js";
 import { renderHesapDock } from "./js/wizard/hesap.js";
-import { agiKatmanAc } from "./js/wizard/frekans.js";
+import { agiKatmanAc, frekansDockGuncelle, frekansReset } from "./js/wizard/frekans.js";
 import { openCompare } from "./js/wizard/grafik.js";
 import "./js/wizard/comparison.js";
 let _mmyLoaded = false;
@@ -49,11 +49,12 @@ import "./js/modes/multi-sonuc.js";
 import "./js/modes/rezervuar.js";
 import "./js/modes/proje.js";
 
-// --- Dock minimize/maximize wiring (all 7 overlays) ---
+// --- Dock minimize/maximize wiring (all 8 overlays) ---
 function wireAllDocks() {
   try {
     wireDock("rainDock", { title: "🌧 Yağış Tablosu" });
     wireDock("hesapDock");
+    wireDock("frekansDock");
     wireDock("cmpWrap");
     wireDock("mcmpWrap");
     wireDock("parWrap");
@@ -137,6 +138,10 @@ async function activateStep(n) {
   if (n === 5) {
     agiKatmanAc();
     if (!$("btfaAlan").value && +$("inpA").value) $("btfaAlan").value = $("inpA").value;
+    frekansDockGuncelle();
+  } else {
+    const fd = $("frekansDock");
+    if (fd) fd.classList.add("hidden");
   }
   // cmpWrap — only visible on Step 6 (Mukayese ve Rapor)
   const _cmpEl = $("cmpWrap");
@@ -176,6 +181,7 @@ function setMode(mode) {
   else layers.su.remove();
   $("rainDock").classList.add("hidden");
   $("hesapDock")?.classList.add("hidden");
+  $("frekansDock")?.classList.add("hidden");
   $("cmpWrap")?.classList.add("hidden");
   if (multi) {
     if (S.outlet && (!S.multi.mansap || S.multi.mansapAuto)) {
@@ -276,6 +282,9 @@ function clearSingleBasin() {
   if ($("hesapGrid")) $("hesapGrid").innerHTML = "";
   $("hesapDock")?.classList.add("hidden");
   renderRasyonelC(null);
+  try {
+    frekansReset();
+  } catch (e) {}
   ["delinStatus", "cnStatus", "thStatus", "compStatus", "rainStatus", "kmzStatus"].forEach((id) => {
     if ($(id)) setStatus(id, "", "");
   });
@@ -364,6 +373,11 @@ document.addEventListener("keydown", (e) => {
     const hesap = $("hesapDock");
     if (hesap && !hesap.classList.contains("hidden") && !isMinimized("hesapDock")) {
       setMinimized("hesapDock", true);
+      return;
+    }
+    const frekans = $("frekansDock");
+    if (frekans && !frekans.classList.contains("hidden") && !isMinimized("frekansDock")) {
+      setMinimized("frekansDock", true);
       return;
     }
   }

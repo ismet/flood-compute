@@ -129,12 +129,13 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 12px; background:
 .tbl tr.sel td { background: var(--uyari-acik); }
 .tbl td.max { background: var(--uyari); font-weight: 700; }
 
-#rainDock, #hesapDock, #cmpWrap { position: absolute; left: 12px; right: 12px; bottom: 12px; top: auto; height: auto; max-height: calc(100vh - 24px); width: auto; max-width: none;
+#rainDock, #hesapDock, #cmpWrap, #frekansDock { position: absolute; left: 12px; right: 12px; bottom: 12px; top: auto; height: auto; max-height: calc(100vh - 24px); width: auto; max-width: none;
             background: rgba(255,255,255,.98); border: 1px solid var(--kenar); border-radius: 8px;
             padding: 8px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
 #rainDock { z-index: 1000; }
 #hesapDock { z-index: 999; }
 #cmpWrap { z-index: 999; display: block; }
+#frekansDock { z-index: 999; }
 #rainDock table.tbl { margin-bottom: 4px; }
 .hesap-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;
             border-bottom: 1px solid var(--kenar-hafif); padding-bottom: 6px; }
@@ -285,7 +286,7 @@ h3.res { font-size: 15px; font-weight: 700; color: var(--vurgu); margin-top: 12p
   #app { flex-direction: column; }
   #panel { width: 100%; max-width: none; min-width: 0; max-height: 50vh; border-right: none; border-bottom: 1px solid var(--kenar-acik); }
   input, select, textarea, button, body { font-size: 16px; }
-  #rainDock, #hesapDock, #cmpWrap { max-height: 40%; }
+  #rainDock, #hesapDock, #cmpWrap, #frekansDock { max-height: 40%; }
   #chartwrap { width: auto; left: 8px; right: 8px; height: 280px; }
 }
 
