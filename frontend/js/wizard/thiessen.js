@@ -47,6 +47,7 @@ export async function loadStationSet(list, kaynak) {
 }
 // --- Thiessen manuel ekle/çıkar yardımcıları ---
 let _thiessenBusy = false;
+let _thiessenBekleyen = false; // hesap sürerken gelen ekle/çıkar: kuyruğa alınır, sessizce düşürülmez
 function _havzaMerkez() {
   if (!S.havza) return null;
   try {
@@ -124,8 +125,18 @@ export function restoreStation(key) {
 }
 export async function recomputeThiessen() {
   if (!S.stBase && !S.stExtra.length) return;
-  if (_thiessenBusy) return;
+  if (_thiessenBusy) {
+    _thiessenBekleyen = true; // sürün hesap bitince effectiveStations() yeniden alınarak koşacak
+    return;
+  }
   await runThiessen(effectiveStations(), S.stKaynak || "Güncel liste");
+}
+function _pinKaldir(kod, sk) {
+  if (S.stKorumali) {
+    if (kod) S.stKorumali.delete(kod);
+    if (sk) S.stKorumali.delete(sk);
+  }
+  recomputeThiessen();
 }
 function _adaylariBul() {
   if (!S.havza || !S.mgmDbYakin || !S.mgmDbYakin.length) return [];
@@ -141,12 +152,10 @@ function _adaylariBul() {
     const sk = stKey(n);
     if (aktifKeys.has(sk) || (n.kod && aktifKod.has(n.kod))) continue;
     if (S.stExclude.has(sk)) continue; // çıkarılan hayalet ayrı
-    if (S.stKorumali && (S.stKorumali.has(sk) || (n.kod && S.stKorumali.has(n.kod)))) {
-      // korumalı ama henüz aktif değilse (eşik baypas bekliyor) — yine aday sayma, recompute sonrası aktif olacak
-      // bu durumda adayı gösterme, korumalı listede zaten
-      continue;
-    }
-    out.push(n);
+    const pinli = S.stKorumali && (S.stKorumali.has(sk) || (n.kod && S.stKorumali.has(n.kod)));
+    // korumalı ama henüz aktif değil: ya hesap sürüyor ya da hücresi havzaya ulaşmadı
+    // (ağırlık 0). Kaybetme — "pay düşmedi" etiketiyle listede kalsın, koruması kaldırılabilsin.
+    out.push(pinli ? { ...n, _pinli: true, _stKey: sk } : n);
   }
   return out;
 }
@@ -174,24 +183,26 @@ export function renderAdaylar() {
   const limit = 30;
   const goster = adaylar.slice(0, limit);
   const kalan = adaylar.length - goster.length;
-  let h = `<div class="small aday-baslik">${adaylar.length} aday istasyon (havza dışı, yakınlık sıralı) — haritada soluk üçgen, tıkla ekle:</div>`;
-  h += goster.map((a) => {
+  const _satir = (a) => {
     const mes = a._mesafe < 9000 ? ` ${a._mesafe.toFixed(1)} km` : "";
     const yil = a.yil_sayisi ? ` · ${a.yil_sayisi} yıl` : "";
-    return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${yil} <button class="link-btn" data-add="${_esc(a.kod)}" title="Thiessen’e ekle">+ Ekle</button></span>`;
-  }).join(" · ");
+    const btn = a._pinli
+      ? ` <em class="small" title="Eklendi ama Voronoi hücresi havzaya ulaşmıyor — daha yakın istasyonlar gölgeledi">ekli — pay düşmedi</em>` +
+        ` <button class="link-btn" data-unpin="${_esc(a.kod)}" data-unpin-key="${_esc(a._stKey || "")}" title="Ekleme korumasını kaldır">− Çıkar</button>`
+      : ` <button class="link-btn" data-add="${_esc(a.kod)}" title="Thiessen'e ekle">+ Ekle</button>`;
+    return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${yil}${btn}</span>`;
+  };
+  let h = `<div class="small aday-baslik">${adaylar.length} aday istasyon (havza dışı, yakınlık sıralı) — haritada soluk üçgen, tıkla ekle:</div>`;
+  h += goster.map(_satir).join(" · ");
   if (kalan > 0) h += `<div class="small" style="margin-top:4px"><button class="link-btn" id="btnAdayDaha" title="Kalan adayları göster">+ ${kalan} aday daha göster</button></div>`;
   el.innerHTML = h;
   el.querySelectorAll("button[data-add]").forEach((b) => b.onclick = () => addStation(b.dataset.add));
+  el.querySelectorAll("button[data-unpin]").forEach((b) => (b.onclick = () => _pinKaldir(b.dataset.unpin, b.dataset.unpinKey)));
   const daha = el.querySelector("#btnAdayDaha");
   if (daha) daha.onclick = () => {
-    const tum = adaylar.map((a) => {
-      const mes = a._mesafe < 9000 ? ` ${a._mesafe.toFixed(1)} km` : "";
-      const yil = a.yil_sayisi ? ` · ${a.yil_sayisi} yıl` : "";
-      return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${yil} <button class="link-btn" data-add2="${_esc(a.kod)}">+ Ekle</button></span>`;
-    }).join(" · ");
-    el.innerHTML = `<div class="small aday-baslik">${adaylar.length} aday istasyon:</div>` + tum;
-    el.querySelectorAll("button[data-add2]").forEach((b) => b.onclick = () => addStation(b.dataset.add2));
+    el.innerHTML = `<div class="small aday-baslik">${adaylar.length} aday istasyon:</div>` + adaylar.map(_satir).join(" · ");
+    el.querySelectorAll("button[data-add]").forEach((b) => b.onclick = () => addStation(b.dataset.add));
+    el.querySelectorAll("button[data-unpin]").forEach((b) => (b.onclick = () => _pinKaldir(b.dataset.unpin, b.dataset.unpinKey)));
   };
 }
 export function renderAdayMarkers() {
@@ -325,8 +336,23 @@ export async function runThiessen(stations, kaynak) {
           `<br><button class="link-btn" data-pop-del="1">✕ Bu istasyonu çıkar</button>`,
       );
       const key = stKey(t);
+      // hover → pop-up (✕ çıkar butonu); fare çekilince gecikmeli kapan, pop-up üzerinde kalınırsa açık tut
+      let popTimer = null;
+      const _popIptal = () => clearTimeout(popTimer);
+      mk.on("mouseover", () => {
+        _popIptal();
+        mk.openPopup();
+      });
+      mk.on("mouseout", () => {
+        popTimer = setTimeout(() => mk.closePopup(), 300);
+      });
       mk.on("popupopen", (ev) => {
-        const btn = ev.popup.getElement().querySelector("button[data-pop-del]");
+        const el = ev.popup.getElement();
+        el.addEventListener("mouseenter", _popIptal);
+        el.addEventListener("mouseleave", () => {
+          popTimer = setTimeout(() => mk.closePopup(), 200);
+        });
+        const btn = el.querySelector("button[data-pop-del]");
         if (btn) btn.onclick = () => removeStation(key);
       });
       h +=
@@ -344,12 +370,29 @@ export async function runThiessen(stations, kaynak) {
     const nEk = S.stExtra.length,
       nCik = S.stExclude.size,
       nEle = (S.thElenen || []).length;
+    // elle eklenen/pinlenen ama havzada pay almayan (ağırlık 0) istasyonlar —
+    // poligonun değişmemesinin açıklaması
+    const manuelAnahtar = new Set(
+      [
+        ...(S.stExtra || []).map(stKey),
+        ...(S.stExtra || []).map((s) => s.kod).filter(Boolean),
+        ...(S.stKorumali || []),
+      ]
+        .filter(Boolean)
+        .map(String),
+    );
+    const nPayYok = (S.thiessen || []).filter(
+      (t) => t.agirlik <= 0 && ((t.kod && manuelAnahtar.has(String(t.kod))) || manuelAnahtar.has(stKey(t))),
+    ).length;
     setStatus(
       "thStatus",
       `${kaynak}: ${stations.length} istasyondan ${aktif.length} tanesi havzada pay alıyor` +
         (nCik ? ` | ${nCik} elle çıkarıldı` : "") +
         (nEk ? ` | ${nEk} elle eklendi` : "") +
-        (nEle ? ` | ${nEle} istasyon küçük pay eşiğinin altında kaldığı için elendi` : ""),
+        (nEle ? ` | ${nEle} istasyon küçük pay eşiğinin altında kaldığı için elendi` : "") +
+        (nPayYok
+          ? ` | ${nPayYok} eklenen istasyona havzada pay düşmedi (daha yakın istasyonlar gölgeledi — adaylar listesinde işaretli)`
+          : ""),
       "ok",
     );
     // birleşik adımda done yalnızca ağırlıklı yağış hazır olunca yanar (recalcRain → markDone(3))
@@ -358,6 +401,11 @@ export async function runThiessen(stations, kaynak) {
     setStatus("thStatus", "Hata: " + e.message, "err");
   } finally {
     _thiessenBusy = false;
+    if (_thiessenBekleyen) {
+      // hesap sürerken gelen ekle/çıkar bekliyordu — güncel listeyle bir kez daha koş
+      _thiessenBekleyen = false;
+      recomputeThiessen();
+    }
   }
 }
 export function removeStation(key) {
