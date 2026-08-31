@@ -525,22 +525,15 @@ def api_yzd_region(req: CNReq):
 
 
 @app.get("/api/stations/default")
-def api_stations_default(en_az_yil: int = 10):
-    """Thiessen'in varsayılan istasyon kümesi — yalnız MGM ölçüm veri tabanı.
-
-    Yıllık maksimum serisi `en_az_yil` uzunluğunda olan istasyonlar döner, yani
-    her Thiessen hücresi kendi ölçtüğü yağışı taşır ve Adım 3’teki P24
-    bağlanması kimlik eşleşmesidir.
-
-    Eski `data/stations/bir_cikti.kml` artık otomatik yüklenmiyor; dosya
-    duruyor ve `POST /api/stations` ile elle yüklenebilir (o zaman istasyonlar
-    kod taşımadığı için P24 en yakın uygun MGM istasyonundan koordinatla gelir).
-    """
+def api_stations_default():
+    """Thiessen'in varsayılan kümesi — yağış sensörlü MGM istasyonları."""
     from backend.core import mgm
     try:
-        sts = mgm.thiessen_kumesi(en_az_yil)
-        return {"istasyonlar": sts, "kaynak": "mgm", "dosya": "mgm.sqlite",
-                "en_az_yil": en_az_yil, "olcumlu": len(sts)}
+        sts = mgm.thiessen_kumesi()
+        return {"istasyonlar": sts, "kaynak": "mgm",
+                "dosya": "mgm-istasyonlari.json",
+                "filtre": {"yagis_sensor": 1}, "sayi": len(sts),
+                "toplam": mgm.bilgi()["istasyon"]}
     except Exception as e:
         return _err(e)
 
@@ -619,11 +612,9 @@ def api_dplv():
 def api_mgm_stations():
     """MGM 2020 tablosu — YALNIZ plüviyograf (PLV) oranları.
 
-    Bu tablonun P24 sütunları bilerek döndürülmüyor. P2…P100 artık
-    `/api/mgm-frekans` ile 1290 istasyonun ham yıllık maksimum ölçümünden
-    hesaplanıyor; hazır tekerrür tablosunu paralelde tutmak, iki farklı
-    kaynaktan iki farklı yağış üretip hangisinin kullanıldığını belirsiz
-    bırakırdı. Uçtan tümüyle çıkarmak, kazara yeniden bağlanmasını da önler.
+    Bu tablonun P24 sütunları bilerek döndürülmüyor. P2…P100 değerleri
+    kullanıcı tarafından elle veya Excel'den girilir; bu uç yalnız zaman
+    dağılımında kullanılan PLV oranlarını sunar.
     """
     from backend.core import tables
     try:
@@ -892,7 +883,7 @@ def api_agi_seri(kod: str, ilk_yil: int = 0, son_yil: int = 0,
 
 @app.get("/api/mgm-bilgi")
 def api_mgm_bilgi():
-    """MGM meteoroloji veri tabanı kurulu mu, kaç istasyon frekansa uygun."""
+    """MGM istasyon kayıt defteri ve PLV eşleştirme tanısı."""
     from backend.core import mgm
     try:
         return mgm.bilgi()
@@ -901,84 +892,37 @@ def api_mgm_bilgi():
 
 
 @app.get("/api/mgm")
-def api_mgm(bati: float, guney: float, dogu: float, kuzey: float,
-            en_az_yil: int = 10):
-    """Pencere içindeki MGM istasyonları (yıllık maksimum serisi olanlar)."""
+def api_mgm(bati: float, guney: float, dogu: float, kuzey: float):
+    """Pencere içindeki bütün MGM istasyon kayıtları."""
     from backend.core import mgm
     try:
-        return {"istasyonlar": mgm.pencere((bati, guney, dogu, kuzey),
-                                           en_az_yil=en_az_yil)}
+        istasyonlar = mgm.pencere((bati, guney, dogu, kuzey))
+        return {"istasyonlar": istasyonlar, "sayi": len(istasyonlar),
+                "toplam": mgm.bilgi()["istasyon"]}
     except Exception as e:
         return _err(e)
 
 
 @app.get("/api/mgm-seri")
-def api_mgm_seri(kod: str, tur: str = ""):
-    """Bir MGM istasyonunun yıllık maksimum serisi ya da istenen rasat türü."""
-    from backend.core import mgm
-    try:
-        out = {"istasyon": mgm.istasyon(kod), "turler": mgm.turler(kod)}
-        out["seri"] = mgm.seri(kod, tur) if tur else mgm.yillik_maks(kod)
-        return out
-    except Exception as e:
-        return _err(e)
-
-
-class MgmFrekansGirdi(BaseModel):
-    kod: str
-    ilk_yil: int = 0
-    son_yil: int = 0
+def api_mgm_seri():
+    return _mgm_legacy_404()
 
 
 @app.post("/api/mgm-frekans")
-def api_mgm_frekans(g: MgmFrekansGirdi):
-    """Yağış frekans analizi — NTFA ile aynı hesap, girdi yıllık en büyük
-    günlük yağış (mm). Sonuçtaki `P24`, Adım 3 tablosunun P2…P100 sütunları."""
-    from backend.core import mgm
-    try:
-        return mgm.frekans(g.kod, g.ilk_yil or None, g.son_yil or None)
-    except Exception as e:
-        return _err(e)
-
-
-class MgmEslesGirdi(BaseModel):
-    istasyonlar: list[dict]             # [{ad|name, lat, lon}] — Thiessen satırları
-    en_az_yil: int = 10
-    en_cok_km: float = 25.0
-    tercih_yil: int = 25                # yarıçap içinde bu uzunluktaki seri yeğlenir
-    hesapla: bool = True                # eşleşenler için P2…P100'ü de üret
+def api_mgm_frekans():
+    return _mgm_legacy_404()
 
 
 @app.post("/api/mgm-eslestir")
-def api_mgm_eslestir(g: MgmEslesGirdi):
-    """Thiessen istasyonlarını MGM veri tabanına bağlar ve P2…P100 hesaplar.
+def api_mgm_eslestir():
+    return _mgm_legacy_404()
 
-    Önce koordinat, sonra ad denenir — KMZ'deki ad serbest metindir, koordinat
-    ölçülmüş büyüklüktür. Eşleşmenin hangi yolla ve kaç km'den kurulduğu
-    döndürülür ki kullanıcı kararı denetleyebilsin."""
-    from backend.core import mgm
-    try:
-        out = mgm.eslestir(g.istasyonlar, en_az_yil=g.en_az_yil,
-                           en_cok_km=g.en_cok_km, tercih_yil=g.tercih_yil)
-        if g.hesapla:
-            onbellek = {}
-            for k in out:
-                e = k.get("eslesen")
-                if not e:
-                    continue
-                kod = e["kod"]
-                if kod not in onbellek:
-                    try:
-                        f = mgm.frekans(kod)
-                        onbellek[kod] = {"P24": f["P24"],
-                                         "dagilim": f["kabul_edilen_adi"],
-                                         "yil_sayisi": f["parametreler"]["yil_sayisi"]}
-                    except Exception as hata:
-                        onbellek[kod] = {"hata": str(hata)}
-                k["frekans"] = onbellek[kod]
-        return {"eslesme": out}
-    except Exception as e:
-        return _err(e)
+
+def _mgm_legacy_404():
+    return JSONResponse(status_code=404, content={
+        "hata": "MGM tarihsel seri ve frekans verileri kaldırıldı; "
+                "P2–P100 değerlerini elle veya Excel'den girin."
+    })
 
 
 class PlvEnYakinGirdi(BaseModel):

@@ -34,7 +34,7 @@ python tools/mdb_akarsu_cikar.py <Kaynak_Akarsu.mdb> # one-off: MDB -> data/akar
 python tools/akarsu_sikistir.py                      # one-off: recode an old float32 akarsu.sqlite
 python tools/agi_veritabani_olustur.py <pik.csv>     # one-off: peaks CSV -> data/agi/agi.sqlite
 python tools/su_veritabani_olustur.py <Data.db>      # one-off: daily flows -> data/su/su.sqlite
-python tools/mgm_veritabani_olustur.py                # one-off: DMI-tümü/*.xls -> data/mgm/mgm.sqlite
+python tools/mgm_veritabani_olustur.py                # validate canonical MGM station JSON
 python tools/awc_soilgrids.py                        # one-off: SoilGrids -> data/yagis/awc*_tr.tif (run FIRST)
 python tools/zemin_grubu_uret.py                     # one-off: SoilGrids -> data/zemin/hsg_tr.tif
 python tools/yagis_haritasi_indir.py                 # one-off: CHELSA -> data/yagis/{yagis,pet,net}_tr.tif
@@ -178,7 +178,7 @@ data/akarsu/akarsu.sqlite    - DSİ river network (405k lines, 68 MB, committed)
 data/agi/agi.sqlite          - DSİ+EİE annual peaks 1935–2020 (2732 stations / 36.5k st-yrs, 3.8 MB)
 data/su/su.sqlite            - daily flows 1934–2015 (2909 stations, 11.5 MB; per-station
                                 zlib'd float32 blob, NaN = missing day)
-data/mgm/mgm.sqlite          - 1290 stations, 45k station-years (13 MB); 1184 (≥10 yr) = the Thiessen set
+data/mgm/mgm-istasyonlari.json - 1913-station canonical registry; 370 YagisSensor=1 default set
 data/stations/bir_cikti.kml  - legacy 2315-station layer, NO LONGER auto-loaded (no station
                                 numbers → can't join measurement DBs; cells borrowed rain
                                 from neighbours). Uploadable manually.
@@ -213,8 +213,8 @@ Stage paths explicitly - see `.gitignore:25-32`.
 | `GET /api/akarsu` (`bati/guney/dogu/kuzey`, `olcek`) / `GET /api/akarsu-bilgi` | DSİ river layer (bbox, 100/250/500 k) - context only |
 | `GET /api/yagis-bilgi` / `GET /api/yagis/{katman}/{z}/{x}/{y}.png` | climate tiles (`yagis`/`pet`/`net`, 204 outside coverage) |
 | `GET /api/yagis-nokta` / `POST /api/yagis-havza` | point / areal-mean climate queries |
-| `GET /api/mgm-bilgi` / `GET /api/mgm` / `GET /api/mgm-seri` | MGM weather stations; series by `tur` |
-| `POST /api/mgm-frekans` / `POST /api/mgm-eslestir` | P2–P100 per station / Thiessen-set match |
+| `GET /api/mgm-bilgi` / `GET /api/mgm` / `GET /api/mgm-seri` | MGM canonical station registry; legacy series route returns 404 |
+| `POST /api/mgm-frekans` / `POST /api/mgm-eslestir` | Retired; returns explanatory 404 (manual P2–P100) |
 | `POST /api/plv-en-yakin` / `GET /api/plv-en-yakin` | DPLV için en yakın MGM PLV (havza centroid, küresel) |
 | `GET /api/agi-bilgi` / `GET /api/agi` / `POST /api/agi-havza` / `GET /api/agi-seri` | AG peak-flow stations (bbox/polygon, seri filtering) |
 | `POST /api/tfa` | NTFA - at-site frequency from station code or raw series |

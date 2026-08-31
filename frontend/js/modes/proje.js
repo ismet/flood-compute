@@ -2,7 +2,7 @@
  * @fileoverview Proje kayıt/yükleme — JSON kaydetme, geri yükleme.
  * @module modes/proje
  * Owns: — (S'ye toptan yazar — yaşayan katmanlar korunur)
- * Exports: loadProjects, buildDurumS
+ * Exports: loadProjects, buildDurumS, yagisAnahtarlariniGocur
  * Notes:
  *  - Sanctioned wholesale Object.assign(S, d.S) yalnızca restore'da (§3.1).
  *  - Save'da infoLayers/rasterLayers/resMarker canlı Leaflet nesneleri oldukları
@@ -12,7 +12,7 @@
  */
 
 import { S, _notifyHavzaChanged } from "../core/state.js";
-import { _esc } from "../core/format.js";
+import { _esc, istasyonYagisAnahtari } from "../core/format.js";
 import { api } from "../core/api.js";
 import { $ } from "../ui/dom.js";
 import { map, layers } from "../map/init.js";
@@ -43,8 +43,28 @@ function reviveSets(obj) {
 // "circular structure" ile patlar (örn. resMarker'ın Geoman .pm._layer geri
 // referansı). sonuc yeniden hesaplanabilir; raster altlıkları sunucudan gelir.
 export function buildDurumS() {
-  const { dplvList: _deleted, mgmDbYakin: _mgm, ...rest } = S;
+  const { dplvList: _deleted, mgmDbYakin: _mgm, rainMeta: _rainMeta, mgmDb: _mgmDb, ...rest } = S;
   return { ...rest, sonuc: null, infoLayers: [], rasterLayers: [], resMarker: null };
+}
+
+export function yagisAnahtarlariniGocur(durum = {}) {
+  const eski = durum.rainValues;
+  if (!eski || typeof eski !== "object") return { ...durum };
+  const rainValues = { ...eski };
+  const eskiAdlar = new Set();
+  const istasyonlar = [durum.thiessen, durum.istasyonlar, durum.stBase, durum.stExtra].flatMap((x) =>
+    Array.isArray(x) ? x : [],
+  );
+  istasyonlar.forEach((s) => {
+    if (!s || !s.name || !Object.prototype.hasOwnProperty.call(eski, s.name)) return;
+    const anahtar = istasyonYagisAnahtari(s);
+    if (!Object.prototype.hasOwnProperty.call(rainValues, anahtar)) {
+      rainValues[anahtar] = Array.isArray(eski[s.name]) ? [...eski[s.name]] : eski[s.name];
+    }
+    eskiAdlar.add(s.name);
+  });
+  eskiAdlar.forEach((ad) => delete rainValues[ad]);
+  return { ...durum, rainValues };
 }
 
 $("btnDelete").onclick = async () => {
@@ -132,7 +152,8 @@ $("projList").onchange = async () => {
     const infoY = S.infoLayers,
       rasterY = S.rasterLayers,
       resM = S.resMarker;
-    Object.assign(S, d.S);
+    const kayitDurumu = yagisAnahtarlariniGocur(d.S || {});
+    Object.assign(S, kayitDurumu);
     reviveSets(S);
     // Hazır istasyon kaldırıldı — eski projelerdeki dplvList zombie'sini temizle
     if ("dplvList" in S) delete S.dplvList;
@@ -196,7 +217,7 @@ $("projList").onchange = async () => {
           try {
             layers.thiessen.addData({
               type: "Feature",
-              properties: { name: t.name },
+              properties: { name: t.name, kod: t.kod, lat: t.lat, lon: t.lon },
               geometry: t.poligon_geojson,
             });
           } catch (e) {}
@@ -213,7 +234,7 @@ $("projList").onchange = async () => {
     try {
       const { renderAdaylar, renderAdayMarkers } = await import("../wizard/thiessen.js");
       S.mgmDbYakin = null;
-      // renderAdaylar mgmDbListesi'ni lazy çağırır; marker’lar havza bounds’tan sonra dolacak
+      // renderAdaylar yakın MGM adaylarını lazy yükler; marker’lar sonra dolacak
       renderAdaylar();
       renderAdayMarkers();
     } catch (e) {}

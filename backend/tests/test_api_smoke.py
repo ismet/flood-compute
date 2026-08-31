@@ -189,70 +189,31 @@ else:
           f"{tm['gozlem']} gözlem + {tm['dolduruldu']} dolduruldu, "
           f"havza çıkışı {tm['outlet']['q_ort']:.3f} m³/s")
 
-# --- MGM meteoroloji veri tabanı + yağış frekans analizi
+# --- MGM kanonik istasyon kayıt defteri + PLV
 b = c.get("/api/mgm-bilgi").json()
-if not b.get("var"):
-    print("MGM atlandı: veri tabanı yok "
-          "(python tools/mgm_veritabani_olustur.py)")
-else:
-    r = c.get("/api/mgm", params={"bati": 27.0, "guney": 40.5, "dogu": 28.5,
-                                  "kuzey": 41.5, "en_az_yil": 20}).json()
-    assert r["istasyonlar"], "pencerede MGM istasyonu bulunamadı"
-    kod = r["istasyonlar"][0]["kod"]
-    f = c.post("/api/mgm-frekans", json={"kod": kod}).json()
-    assert f["birim"] == "mm" and f["kabul_edilen"], f.get("hata")
-    p = f["P24"]
-    assert set(p) == {"2", "5", "10", "25", "50", "100"}
-    # tekerrür arttıkça yağış artmalı — dağılım uydurması bozuksa burada patlar
-    art = [p[k] for k in ("2", "5", "10", "25", "50", "100")]
-    assert art == sorted(art), f"P24 tekerrürle artmıyor: {p}"
+assert b["var"] and b["istasyon"] == 1913 and b["yagis_sensorlu"] == 370
+assert b["tur"] == "json-kayit-defteri" and b["null"]["yagis_sensor"] == 4
+assert (b["plv"]["eslesen"], b["plv"]["belirsiz"], b["plv"]["cozulemeyen"]) == (215, 17, 4)
 
-    # Thiessen satırlarından eşleştirme: koordinat önce, kısa seri yeğlenmez
-    es = c.post("/api/mgm-eslestir", json={"istasyonlar": [
-        {"ad": "Çorlu", "lat": 41.1667, "lon": 27.7833},
-        {"ad": "LÜLEBURGAZ", "lat": None, "lon": None},
-    ]}).json()["eslesme"]
-    assert es[0]["yontem"] == "koordinat" and es[0]["eslesen"]["ad"] == "ÇORLU"
-    assert es[1]["yontem"] == "ad", "koordinatsız satır adla eşleşmeliydi"
-    assert es[0]["frekans"]["P24"]["100"] > es[0]["frekans"]["P24"]["2"]
-    assert es[0]["frekans"]["yil_sayisi"] >= 25
+r = c.get("/api/mgm", params={"bati": 27.0, "guney": 40.5,
+                              "dogu": 28.5, "kuzey": 41.5}).json()
+assert r["sayi"] == len(r["istasyonlar"]) and r["toplam"] == 1913
+assert r["istasyonlar"], "pencerede MGM istasyonu bulunamadı"
 
-    # Eski MGM 2020 tablosu ARTIK P24 VERMEMELİ — P2…P100'ün tek kaynağı ölçüm
-    # veritabanıdır; hazır tekerrür tablosu yalnız plüviyograf oranları için
-    # duruyor. İki kaynak paralel dururken hangisinin kullanıldığı belirsizdi.
-    eski = c.get("/api/mgm-stations").json()["istasyonlar"]
-    assert eski and "plv" in eski[0], "PLV oranları kayboldu"
-    assert "P24" not in eski[0], "eski tablo hâlâ P24 döndürüyor"
+d = c.get("/api/stations/default").json()
+assert d["sayi"] == 370 and d["toplam"] == 1913
+assert d["filtre"] == {"yagis_sensor": 1}
+assert all(s["yagis_sensor"] == 1 for s in d["istasyonlar"])
 
-    # Adım 3'ün varsayılan kümesi YALNIZ ölçüm veri tabanıdır. Her istasyonun
-    # kendi yağış serisi olmalı — kümede ölçümsüz istasyon bulunması, bir
-    # Thiessen hücresinin başka istasyonun yağışını taşıması demektir.
-    d = c.get("/api/stations/default").json()
-    sts = d["istasyonlar"]
-    assert d["kaynak"] == "mgm", f"varsayılan küme MGM dışı: {d.get('kaynak')}"
-    assert len(sts) > 1000, f"küme küçük: {len(sts)}"
-    assert all(s.get("kod") for s in sts), "kümede kodsuz (ölçümsüz) istasyon var"
-    assert all(s["yil_sayisi"] >= d["en_az_yil"] for s in sts)
-    assert all(s.get("lat") is not None and s.get("lon") is not None for s in sts)
+for method, yol in (("get", "/api/mgm-seri"),
+                    ("post", "/api/mgm-frekans"),
+                    ("post", "/api/mgm-eslestir")):
+    cevap = getattr(c, method)(yol)
+    assert cevap.status_code == 404 and "hata" in cevap.json(), (yol, cevap.text)
 
-    # Varsayılan kümeden gelen istasyon Adım 3’te (birleşik) KİMLİKLE eşleşmeli
-    kodlu = next(s for s in sts if s["yil_sayisi"] >= 25)
-    e2 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
-        {"ad": kodlu["name"], "lat": kodlu["lat"], "lon": kodlu["lon"],
-         "kod": kodlu["kod"]}]}).json()["eslesme"]
-    assert e2[0]["yontem"] == "kod" and e2[0]["mesafe_km"] == 0.0
-    # Elle yüklenen KMZ / haritaya konan nokta (kodsuz) koordinatla bağlanır
-    e3 = c.post("/api/mgm-eslestir", json={"istasyonlar": [
-        {"ad": "Elle konan nokta", "lat": 41.05, "lon": 27.80,
-         "kod": None}]}).json()["eslesme"]
-    assert e3[0]["yontem"] in ("koordinat", "koordinat-kısa"), e3[0]["yontem"]
-
-    print(f"Thiessen kümesi OK: {len(sts)} istasyon, hepsi ≥{d['en_az_yil']} yıl "
-          f"kendi ölçümüyle")
-    print(f"MGM/yağış frekansı OK: {b['istasyon']} istasyon, "
-          f"{b['frekansa_uygun']} frekansa uygun, {kod} → "
-          f"P2={p['2']} P100={p['100']} mm ({f['kabul_edilen_adi']}, "
-          f"{f['parametreler']['yil_sayisi']} yıl)")
+plv = c.get("/api/plv-en-yakin", params={"lat": 39.9, "lon": 32.8})
+assert plv.status_code == 200 and len(plv.json()["plv"]) == 14
+print("MGM kayıt defteri API OK: 1913 toplam, 370 varsayılan, PLV 215/17/4")
 
 # --- Hidrolojik zemin grubu havzadan belirlenmeli, varsayılana düşmemeli.
 # Bu parametre Q100'ü kat kat değiştiriyor; sessiz bir varsayılan, sonucu

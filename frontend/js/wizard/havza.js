@@ -15,7 +15,7 @@
  */
 
 import { S, _notifyHavzaChanged } from "../core/state.js";
-import { _esc } from "../core/format.js";
+import { _esc, mgmIstasyonGorunumu } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { map, layers, getOnHavzaClick } from "../map/init.js";
@@ -75,7 +75,6 @@ export async function havzaYakinIstasyonlariGoster() {
         guney: String(b.getSouth() - pad),
         dogu: String(b.getEast() + pad),
         kuzey: String(b.getNorth() + pad),
-        en_az_yil: "10",
       });
       mgmP = api("/api/mgm?" + q.toString());
     } catch (e) {
@@ -98,10 +97,11 @@ export async function havzaYakinIstasyonlariGoster() {
       const lat = s.enlem ?? s.lat;
       const lon = s.boylam ?? s.lon;
       if (lat == null || lon == null) return;
+      const g = mgmIstasyonGorunumu(s);
       const m = L.marker([lat, lon], { icon: mgmTriangleIcon({ inside: true }) });
-      m.bindTooltip(`${_esc(s.kod || s.no || "")} — ${_esc(s.ad || s.istasyon || "")} (${s.yil_sayisi || "?"} yıl) — MGM`, STATION_TOOLTIP_MGM);
+      m.bindTooltip(`${_esc(g.kod)} — ${_esc(g.ad)}${g.detay ? " (" + _esc(g.detay) + ")" : ""} — MGM`, STATION_TOOLTIP_MGM);
       m.bindPopup(
-        `<b>${_esc(s.kod || s.no || "")}</b> — ${_esc(s.ad || s.istasyon || "")}<br>MGM · ${s.yil_sayisi || "?"} yıl` +
+        `<b>${_esc(g.kod)}</b> — ${_esc(g.ad)}<br>MGM${g.detay ? " · " + _esc(g.detay) : ""}` +
           `<br><span class="small">Yağış sekmesinde Thiessen için kullanılır</span>`,
       );
       m.addTo(layers.havzaMgm);

@@ -1,10 +1,10 @@
 /**
  * @fileoverview Thiessen istasyon kümeleri ve ağırlıklar — manuel ekle/çıkar + aday katmanı.
  * @module wizard/thiessen
- * Owns: S.stBase, S.stExclude, S.stExtra, S.stKaynak, S.istasyonlar, S.thiessen, S.thElenen; layers.thiessenAday OWNER-CREATED
- * Exports: kurumColor, stKey, effectiveStations, loadStationSet, recomputeThiessen, renderExcluded, renderAdaylar, renderAdayMarkers, addStation, restoreStation, runThiessen, removeStation, useDefaultStations
+ * Owns: S.stBase, S.stExclude, S.stExtra, S.stKaynak, S.istasyonlar, S.thiessen, S.thElenen, S.mgmDbYakin; layers.thiessenAday OWNER-CREATED
+ * Exports: kurumColor, effectiveStations, loadStationSet, mgmAdaylariniYukle, recomputeThiessen, renderExcluded, renderAdaylar, renderAdayMarkers, addStation, restoreStation, runThiessen, removeStation, useDefaultStations
  * Notes:
- *  - Allowed pull (§3.1): thiessen→rain (recolorThiessen, renderRainTable, mgmDbListesi)
+ *  - Allowed pull (§3.1): thiessen→rain (recolorThiessen, renderRainTable)
  *  - kurumColor module-local (constants admission ≥2 gerekir, burada tek tüketici)
  *  - Rank 2 (wizard).
  * @typedef {Object} ThiessenPayload
@@ -16,9 +16,9 @@
 import { S } from "../core/state.js";
 import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
-import { _esc } from "../core/format.js";
+import { _esc, stKey, mgmIstasyonGorunumu } from "../core/format.js";
 import { map, layers } from "../map/init.js";
-import { recolorThiessen, renderRainTable, mgmDbListesi } from "./rain.js";
+import { recolorThiessen, renderRainTable } from "./rain.js";
 import { mgmTriangleIcon, elleCircleMarker, STATION_TOOLTIP_MGM, STATION_TOOLTIP_ELLE } from "../map/station-markers.js";
 
 // layers.thiessenAday: aday + çıkarılan hayalet marker’lar (thiessen.js sahibi, registry-bag)
@@ -31,7 +31,6 @@ layers.thiessenAday = L.layerGroup().addTo(map);
 
 export const kurumColor = (k) =>
   k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0" : k === "Elle" ? "#2e7d32" : "#7d6e4f";
-export const stKey = (s) => `${s.name}|${(+s.lat).toFixed(5)}|${(+s.lon).toFixed(5)}`;
 S.stExclude = new Set();
 if (!S.stKorumali) S.stKorumali = new Set();
 export function effectiveStations() {
@@ -66,21 +65,48 @@ function _mesafeKm(aLat, aLon, bLat, bLon) {
   return 2 * R * Math.asin(Math.sqrt(aa));
 }
 function _normalizeMgmEntry(e) {
+  const g = mgmIstasyonGorunumu(e);
   return {
-    name: e.ad || e.name || e.istasyon || "",
+    name: g.ad,
     lat: e.enlem ?? e.lat,
     lon: e.boylam ?? e.lon,
-    kod: e.kod || e.no || "",
-    kurum: e.kurum || "MGM",
-    yil_sayisi: e.yil_sayisi ?? e.maks_yil,
+    kod: g.kod,
+    kurum: g.kurum,
+    detay: g.detay,
     _orig: e,
   };
+}
+export async function mgmAdaylariniYukle() {
+  if (S.mgmDbYakin || !S.havza) return S.mgmDbYakin || [];
+  const gj = S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza;
+  const c = gj.coordinates || [];
+  const pts = gj.type === "MultiPolygon" ? c.flat(2) : c.flat(1);
+  if (!pts.length) {
+    S.mgmDbYakin = [];
+    return S.mgmDbYakin;
+  }
+  const lats = pts.map((p) => p[1]);
+  const lons = pts.map((p) => p[0]);
+  const t = 1.0;
+  const q = new URLSearchParams({
+    bati: String(Math.min(...lons) - t),
+    guney: String(Math.min(...lats) - t),
+    dogu: String(Math.max(...lons) + t),
+    kuzey: String(Math.max(...lats) + t),
+  });
+  try {
+    const d = await api("/api/mgm?" + q.toString());
+    S.mgmDbYakin = d.istasyonlar || [];
+  } catch (e) {
+    S.mgmDbYakin = [];
+  }
+  return S.mgmDbYakin;
 }
 export function addStation(kodOrObj) {
   if (!kodOrObj) return;
   if (typeof kodOrObj === "string") {
     const kod = kodOrObj;
-    const src = (S.mgmDbYakin || []).find((x) => (x.kod || x.no) === kod);
+    const src = (S.mgmDbYakin || []).find((x) => mgmIstasyonGorunumu(x).kod === kod);
     if (!src) return setStatus("thStatus", `İstasyon bulunamadı: ${kod}`, "err");
     const n = _normalizeMgmEntry(src);
     if (n.lat == null || n.lon == null) return setStatus("thStatus", "Koordinatı eksik istasyon eklenemez", "err");
@@ -168,7 +194,7 @@ export function renderAdaylar() {
   // mgmDbYakin henüz yoksa yüklemeyi tetikle
   if (!S.mgmDbYakin) {
     el.innerHTML = `<div class="small">Yakın istasyonlar yükleniyor…</div>`;
-    mgmDbListesi().then(() => { renderAdaylar(); renderAdayMarkers(); });
+    mgmAdaylariniYukle().then(() => { renderAdaylar(); renderAdayMarkers(); });
     return;
   }
   const adaylar = _adaylariBul();
@@ -185,12 +211,12 @@ export function renderAdaylar() {
   const kalan = adaylar.length - goster.length;
   const _satir = (a) => {
     const mes = a._mesafe < 9000 ? ` ${a._mesafe.toFixed(1)} km` : "";
-    const yil = a.yil_sayisi ? ` · ${a.yil_sayisi} yıl` : "";
+    const detay = a.detay ? ` · ${_esc(a.detay)}` : "";
     const btn = a._pinli
       ? ` <em class="small" title="Eklendi ama Voronoi hücresi havzaya ulaşmıyor — daha yakın istasyonlar gölgeledi">ekli — pay düşmedi</em>` +
         ` <button class="link-btn" data-unpin="${_esc(a.kod)}" data-unpin-key="${_esc(a._stKey || "")}" title="Ekleme korumasını kaldır">− Çıkar</button>`
       : ` <button class="link-btn" data-add="${_esc(a.kod)}" title="Thiessen'e ekle">+ Ekle</button>`;
-    return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${yil}${btn}</span>`;
+    return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${detay}${btn}</span>`;
   };
   let h = `<div class="small aday-baslik">${adaylar.length} aday istasyon (havza dışı, yakınlık sıralı) — haritada soluk üçgen, tıkla ekle:</div>`;
   h += goster.map(_satir).join(" · ");
@@ -322,7 +348,11 @@ export async function runThiessen(stations, kaynak) {
       <table class="tbl"><tr><th>İstasyon</th><th>Kurum</th><th>Ağırlık</th><th>Alan (km²)</th><th></th></tr>`;
     aktif.forEach((t) => {
       if (t.poligon_geojson)
-        layers.thiessen.addData({ type: "Feature", properties: { name: t.name }, geometry: t.poligon_geojson });
+        layers.thiessen.addData({
+          type: "Feature",
+          properties: { name: t.name, kod: t.kod, lat: t.lat, lon: t.lon },
+          geometry: t.poligon_geojson,
+        });
       const isElle = t.kurum === "Elle";
       const mk = isElle
         ? elleCircleMarker([t.lat, t.lon]).addTo(layers.markers)
@@ -428,10 +458,10 @@ export async function useDefaultStations() {
   try {
     const r = await api("/api/stations/default");
     if (!r.istasyonlar.length)
-      return setStatus("thStatus", "İstasyon kümesi boş (python tools/mgm_veritabani_olustur.py)", "err");
+      return setStatus("thStatus", "MGM istasyon kümesi boş", "err");
     await loadStationSet(
       r.istasyonlar,
-      `MGM ölçüm ağı — ${r.istasyonlar.length} istasyon (≥${r.en_az_yil} yıl yağış ölçümü)`,
+      `MGM güncel yağış sensörü ağı — ${r.istasyonlar.length} istasyon`,
     );
   } catch (e) {
     setStatus("thStatus", "Hata: " + e.message, "err");

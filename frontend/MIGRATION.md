@@ -41,7 +41,7 @@ This file is the single source of truth for the migration. Every session MUST re
 | README | No frontend references → untouched | grep |
 | Copernicus DEM cache | 131 tiles, lat 34–42 / lon 26–35 | filenames scan |
 | CORINE cache | 25 clips; **offline E2E zone = lon 36.09–36.36, lat 39.04–39.33** (Beyagac NOT covered — measured `TOTAL HITS: 0`; fallback §8.4) | rasterio bounds scan |
-| Data DBs | `mgm.sqlite` 13 MB, `agi.sqlite` 3.8 MB, `su.sqlite` 11.5 MB present | `ls` |
+| Data DBs | MGM kanonik JSON + arşiv SQLite, `agi.sqlite` 3.8 MB, `su.sqlite` 11.5 MB present | `ls` |
 | Top-level symbol census | **212 unique declarations, 0 duplicates** (arithmetic baseline for §6); statement sites ≈62 (5 `map.on` · 3 `document.addEventListener` · 49 element-handler assignments · 5 boot IIFEs) — tracked via review checklist, not arithmetic | rg census |
 | Saved-project fixture | `data/projects/duman_testi.json` is a `{x}` stub → unusable; E2E creates its own project | json inspect |
 
@@ -61,7 +61,7 @@ frontend/
       api.js            # api() fetch wrapper
       constants.js      # ONLY ≥2-feature-consumer symbols:
                         #   M_LABEL, CMP_LABELS, CMP_RPS, DURS, RPS
-      format.js         # fmt(), _esc(), mgmNorm()
+      format.js         # fmt(), _esc(), mgmNorm(), station identity/display helpers
     ui/                 # DOM primitives/widgets
       dom.js            # $(), setStatus()+loader, download(), dosyaIndir()
       paste-grid.js     # makePasteGrid(), readGridNums()
@@ -74,10 +74,10 @@ frontend/
       havza.js          # pick/delineate/import/applyBasinResult/adayKanallar,
                         #   layers.havza OWNER-CREATED, setOnBasinClick(fn) registration
       cn.js             # kotlar, CN, zemin grubu, YZD, rasyonel-C block
-      thiessen.js       # station sets/weights, kurumColor (local), stPlace dead-code (until stage 14),
+      thiessen.js       # station sets/weights, kurumColor (local), MGM aday yükleme,
                         #   manuel ekle/çıkar (aday havuzu havza±1.0°, korumali), layers.thiessenAday OWNER-CREATED
-      rain.js           # rain grid, MGM matching, recalcRain, rain-color cluster,
-                        #   layers.thiessen OWNER-CREATED, mgmDbListesi/mgmDbYakin
+      rain.js           # manuel rain grid, recalcRain, rain-color cluster,
+                        #   layers.thiessen OWNER-CREATED
       dplv.js           # DPLV grids (MGM PLV auto + manuel 14), loadMgm/autoSelectPLV/mgmFind/renderDplvGrid
       kmz.js            # KMZ dışa aktarım — havza+dere+debiler, step 1'den (geometri-only) ve step 4'ten (pik dahil) ortak
       hesap.js          # compute+builders+results, Yıl_Ara + dock, report/CSV (single-owner), Snyder Ct/Cp/W50/YALD abak (KMZ kmz.js'e taşındı)
@@ -96,17 +96,17 @@ frontend/
 ### 3.1 Dependency contract (enforced by D-08 test)
 - **Ranks strict:** `map/wizard/modes → ui → core`. No skips upward.
 - **Static feature graph ACYCLIC.**
-  - **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable, mgmDbListesi) · `mmy→rain` (recalcRain — OET ELLE bridge) · `havza→{cn,dplv,steps}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW — hesap edge KMZ taşındı) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/kmz/hesap→map/init` (registry, katmanGeojson) · `hesap→grafik` (showChart, showSnyderChart) · `comparison→hesap` (syncRepSecili, downloadReport, exportCSV — report single-owner) · `comparison→grafik` (openCompare — overlay backend reused, auto-open on 6) · `comparison→modes/rezervuar` (openReservoir dynamic) · `kmz→grafik` (cmpPeak, cmpAvailable) · `kmz→core/constants` (CMP_LABELS, CMP_RPS) · `app→kmz` (exportKmz composition-root wiring) · `app→comparison` (static for orphan reachability) · `app→grafik` (openCompare static for step 6 auto-open) · `hesap→kmz` (exportKmz legacy re-export) · `app→mmy` (dynamic `import("./js/wizard/mmy.js")` on first step 3).
+  - **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable) · `mmy→rain` (recalcRain — OET ELLE bridge) · `havza→{cn,dplv,steps}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW — hesap edge KMZ taşındı) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/kmz/hesap→map/init` (registry, katmanGeojson) · `hesap→grafik` (showChart, showSnyderChart) · `comparison→hesap` (syncRepSecili, downloadReport, exportCSV — report single-owner) · `comparison→grafik` (openCompare — overlay backend reused, auto-open on 6) · `comparison→modes/rezervuar` (openReservoir dynamic) · `kmz→grafik` (cmpPeak, cmpAvailable) · `kmz→core/constants` (CMP_LABELS, CMP_RPS) · `app→kmz` (exportKmz composition-root wiring) · `app→comparison` (static for orphan reachability) · `app→grafik` (openCompare static for step 6 auto-open) · `hesap→kmz` (exportKmz legacy re-export) · `app→mmy` (dynamic `import("./js/wizard/mmy.js")` on first step 3).
 - **Push reactions:** only via `onHavzaChanged(fn)` observer in core/state (consumers: `su.suHavzaGuncelle`, `app` KMZ `btnKmz.disabled`). Direct wizard→modes pushes forbidden.
 - **Dialog opens across features:** dynamic `import()` inside handlers (`multi-sonuc`→rezervuar.openReservoir; `hesap`→rezervuar.openReservoir).
 - **Registry-bag:** `init.js` exports `const layers = {}`; owners assign (`layers.havza = L.geoJSON(...)` etc.). Consumers uniformly import `{layers}`.
  - **Constants admission:** a constant enters `constants.js` only with ≥2 feature consumers; otherwise module-local (`MRP`, `SNY_RPS`, `CMP_COLORS`, `CMP_HYDRO_RPS`, `RES_RP`, `DPLV_*`, `INFO_RENK`, `RAIN_BLUES`, `RAIN_COLS`, `kurumColor`, `STEP_KEYS, N_STEPS`, `PM_SECENEK`, `DERE_STIL`, `DERE_PATLAT_LIMIT`, `AKARSU_MIN_ZOOM`).
   - **S-slice ownership** (writer ⇒ slices; exceptions noted):
     - havza ⇒ outlet, havza, kotlar, dere, kanal, yzdBolge, sonuc/girdi resets, dplv-* resets; aday katmanı temizliği (thiessenAday)
-    - thiessen ⇒ stBase, stExclude, stExtra, stKorumali, stKaynak, istasyonlar, thiessen, thElenen; layers.thiessenAday OWNER-CREATED
-   - rain ⇒ rainValues, rainMeta, P24w, OETw, rainColorCol, mgmDbYakin
+    - thiessen ⇒ stBase, stExclude, stExtra, stKorumali, stKaynak, istasyonlar, thiessen, thElenen, mgmDbYakin; layers.thiessenAday OWNER-CREATED
+   - rain ⇒ rainValues (kanonik istasyon anahtarı), P24w, OETw, rainColorCol
    - cn ⇒ cnSonuc, zemin, rasyonelCKaynak, cSecim
-   - dplv ⇒ dplvManual, dplvAuto, dplvValues, mgm, mgmByNorm, mgmDb (dplvList/Hazır kaldırıldı — tek kaynak MGM PLV)
+   - dplv ⇒ dplvManual, dplvAuto, dplvValues, mgm, mgmByNorm (dplvList/Hazır kaldırıldı — tek kaynak MGM PLV)
    - frekans ⇒ agiSecili, agiBolgesel, agiListe, tfa, btfa
    - mmy ⇒ mmy
    - grafik ⇒ cmpCoords (cmpState is module-local)
@@ -200,7 +200,7 @@ Mechanics: `rg -o '^(function|async function|const|let)\s+\K\w+' -r '$1' …` (c
 ## 8. E2E Protocol (chrome-devtools automation)
 
 8.1 **Setup:** `python run.py` (port 8737; fallback `PORT=8738`). Navigate with `?debug=1`; use `window.__fh` for `latLngToContainerPoint`-driven deterministic map clicks and state assertions.
-8.2 **Flow:** geocode→fly to offline zone (center ≈ `36.22°E, 39.20°N`) → topo layer → zoom 14 → click channel pixel → await delineation → assert A/L/Lc > 0 (retry via `adayKanallar` buttons ≤2×) → Adım2 CN compute → Adım3 default MGM stations + auto-match → assert `S.P24w` populated → Adım4 HESAPLA → KABULET/cmp/chart overlays → reservoir route on outlet hidrograf → KMZ + Word report downloads return valid blobs (magic-byte check) → Frekans tab: AGİ list loads, NTFA runs on first station → Su modu: getir/liste render → save project `__e2e_selfcheck` → reload page → load project → round-trip asserts (incl. stage-13 Sets) → delete project via UI.
+8.2 **Flow:** geocode→fly to offline zone (center ≈ `36.22°E, 39.20°N`) → topo layer → zoom 14 → click channel pixel → await delineation → assert A/L/Lc > 0 (retry via `adayKanallar` buttons ≤2×) → Adım2 CN compute → Adım3 default MGM stations + yedi yağış hücresini elle/DOM ile doldur → assert `S.P24w` populated → Adım4 HESAPLA → KABULET/cmp/chart overlays → reservoir route on outlet hidrograf → KMZ + Word report downloads return valid blobs (magic-byte check) → Frekans tab: AGİ list loads, NTFA runs on first station → Su modu: getir/liste render → save project `__e2e_selfcheck` → reload page → load project → round-trip asserts (incl. stage-13 Sets ve kanonik yağış anahtarları) → delete project via UI.
 8.3 **Numeric parity:** every computed value serialized to `.migration/run-N.json`; stage 16 deep-compares vs baseline (float `==` after JSON round-trip; failures only via `approved_deltas`).
 8.4 **Fallbacks:** no acceptable basin in zone after retries ⇒ permit ONE live EEA CORINE fetch at Beyagac and proceed there (log deviation). Service-port conflict ⇒ `PORT=8738`.
 8.5 **Hygiene:** only sentinel-named artifacts; cleanup verified by listing.

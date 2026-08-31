@@ -10,7 +10,7 @@
 
 import { S } from "../core/state.js";
 import { api } from "../core/api.js";
-import { fmt, _esc } from "../core/format.js";
+import { fmt, _esc, istasyonYagisAnahtari } from "../core/format.js";
 import { $, setStatus } from "../ui/dom.js";
 import { map } from "../map/init.js";
 import { dplvRatios } from "../wizard/dplv.js";
@@ -39,14 +39,16 @@ multiLayers.pts.remove(); // varsayılan gizli
 
 // 1) Ortak veri durumu (istasyon + yağış + DPLV) — Adım 3'ten (birleşik) paylaşılır
 function updateMultiShared() {
-  const nSt = (S.istasyonlar || []).length;
-  const nRain = S.rainValues
-    ? Object.values(S.rainValues).filter((v) => v && v.slice(0, 6).every((x) => x != null)).length
-    : 0;
+  const istasyonlar = (S.thiessen || []).filter((s) => s.agirlik > 0);
+  const nSt = istasyonlar.length;
+  const nRain = istasyonlar.filter((s) => {
+    const v = S.rainValues?.[istasyonYagisAnahtari(s)];
+    return v && v.slice(0, 6).every((x) => x != null);
+  }).length;
   let dplvOk = false;
   let dplvMsg = "";
   try { dplvOk = !!dplvRatios(); } catch (e) { dplvMsg = _esc(e.message); }
-  const ok = nSt > 0 && nRain > 0 && dplvOk;
+  const ok = nSt > 0 && nRain === nSt && dplvOk;
   if (ok) {
     $("multiShared").innerHTML = `✓ İstasyonlar: ${nSt} yüklü — Yağış: ${nRain} istasyon dolu — DPLV: hazır. (Değiştirmek için “Tek Havza” → Adım 3.)`;
     $("multiShared").className = "small";
@@ -198,14 +200,20 @@ async function autoComputeSub(sub, qbaz, methods) {
   const P24 = {};
   let OET = 0,
     oetOk = true;
+  const yagis = (istasyon) => S.rainValues[istasyonYagisAnahtari(istasyon)];
+  const eksik = act.find((t) => {
+    const degerler = yagis(t);
+    return !degerler || degerler.slice(0, 6).some((v) => v == null);
+  });
+  if (eksik) throw new Error(`${eksik.name} için P2–P100 yağışları eksik`);
   T.forEach((tt, j) => {
     P24[tt] = act.reduce((a, t) => {
-      const rv = S.rainValues[t.name];
+      const rv = yagis(t);
       return a + (rv ? t.agirlik * rv[j] : 0);
     }, 0);
   });
   act.forEach((t) => {
-    const rv = S.rainValues[t.name];
+    const rv = yagis(t);
     if (!rv || rv[6] == null) oetOk = false;
     else OET += t.agirlik * rv[6];
   });

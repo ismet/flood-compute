@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmt, _esc, mgmNorm } from "./format.js";
+import { fmt, _esc, mgmNorm, stKey, istasyonYagisAnahtari } from "./format.js";
 
 describe("fmt", () => {
   it("null/undefined/NaN → em dash", () => {
@@ -46,5 +46,20 @@ describe("mgmNorm", () => {
   it("preserves Turkish chars", () => {
     // "ı" uppercases to "I" (dotless) in Turkish locale, not "İ"
     expect(mgmNorm("çğıöşüÇĞİÖŞÜ")).toBe("ÇĞIÖŞÜÇĞİÖŞÜ");
+  });
+});
+
+describe("istasyon anahtarları", () => {
+  it("stKey adı ve sabit koordinat hassasiyetini kullanır", () => {
+    expect(stKey({ name: "Merkez", lat: 39.1234567, lon: 32.7654321 })).toBe("Merkez|39.12346|32.76543");
+  });
+  it("yağış anahtarında varsa kodu tercih eder", () => {
+    expect(istasyonYagisAnahtari({ name: "Merkez", kod: 17030, lat: 39, lon: 32 })).toBe("kod:17030");
+  });
+  it("kodsuz aynı adlı istasyonları koordinatla ayırır", () => {
+    const a = istasyonYagisAnahtari({ name: "Merkez", lat: 39, lon: 32 });
+    const b = istasyonYagisAnahtari({ name: "Merkez", lat: 40, lon: 33 });
+    expect(a).not.toBe(b);
+    expect(a).toBe("istasyon:Merkez|39.00000|32.00000");
   });
 });

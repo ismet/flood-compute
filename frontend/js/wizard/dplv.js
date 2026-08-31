@@ -1,8 +1,8 @@
 /**
  * @fileoverview DPLV oranları — MGM PLV (otomatik) + manuel 14 grid.
  * @module wizard/dplv
- * Owns: S.dplvManual, S.dplvAuto, S.dplvValues, S.mgm, S.mgmByNorm, S.mgmDb
- * Exports: DPLV_LABELS, loadMgm, updatePlvAutoInfo, autoSelectPLV, loadMgmDb, mgmFind, renderDplvGrid, readDplvGrid, dplvRatios
+ * Owns: S.dplvManual, S.dplvAuto, S.dplvValues, S.mgm, S.mgmByNorm
+ * Exports: DPLV_LABELS, loadMgm, updatePlvAutoInfo, autoSelectPLV, mgmFind, renderDplvGrid, readDplvGrid, dplvRatios
  * Notes: Rank 2 (wizard). DPLV_LABELS lokal sabit (constants admission).
  *   Hazır istasyon (dplvList/DPLV_GIZLI/loadDplv, GET /api/dplv) kaldırıldı — tek kaynak MGM PLV.
  */
@@ -105,14 +105,6 @@ export async function autoSelectPLV({ force = false } = {}) {
     _autoPlvPromise = null;
   }
 }
-export async function loadMgmDb() {
-  try {
-    S.mgmDb = await api("/api/mgm-bilgi");
-  } catch (e) {
-    S.mgmDb = { var: false };
-  }
-}
-loadMgmDb();
 export function mgmFind(name) {
   if (!S.mgmByNorm) return null;
   const n = mgmNorm(name);

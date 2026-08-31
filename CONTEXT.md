@@ -30,5 +30,7 @@ kullandığı girdidir. Küçük tekerrürler C_T = C100·(T/100)^üs ile ölçe
 _Avoid_: genel C
 
 **Thiessen kümesi**:
-Havzaya düşen yağı taşıyan istasyon takımı; her hücre kendi ölçtüğü yağı taşır.
+Havza yağışını alan ağırlıklarıyla temsil eden istasyon takımı. MGM'nin güncel
+`YagisSensor=1` işareti varsayılan kümeyi belirler; P2–P100/OEY değerleri ayrıca
+elle veya Excel'den girilir.
 _Avoid_: Voronoi ağı, yağış ağı

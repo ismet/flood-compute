@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { buildDurumS } from "./proje.js";
+import { buildDurumS, yagisAnahtarlariniGocur } from "./proje.js";
 import { S } from "../core/state.js";
+import { istasyonYagisAnahtari } from "../core/format.js";
 
 const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili"];
 function setReplacer(k, v) {
@@ -66,5 +67,35 @@ describe("proje save strips live leaflet layers", () => {
     } finally {
       S.resMarker = once;
     }
+  });
+});
+
+describe("proje yağış anahtarı göçü", () => {
+  it("eski ad anahtarını kanonik anahtara taşır ve değeri korur", () => {
+    const istasyon = { name: "MERKEZ", kod: "17030", lat: 39, lon: 32 };
+    const eski = { thiessen: [istasyon], rainValues: { MERKEZ: [1, 2, 3, 4, 5, 6, 7] } };
+    const gocen = yagisAnahtarlariniGocur(eski);
+    expect(gocen.rainValues.MERKEZ).toBeUndefined();
+    expect(gocen.rainValues[istasyonYagisAnahtari(istasyon)]).toEqual(eski.rainValues.MERKEZ);
+    expect(eski.rainValues[istasyonYagisAnahtari(istasyon)]).toBeUndefined();
+  });
+
+  it("aynı adlı istasyonları ayrı kanonik anahtarlara taşır", () => {
+    const a = { name: "MERKEZ", kod: "100", lat: 39, lon: 32 };
+    const b = { name: "MERKEZ", kod: "200", lat: 40, lon: 33 };
+    const gocen = yagisAnahtarlariniGocur({ thiessen: [a, b], rainValues: { MERKEZ: [10, 20] } });
+    expect(gocen.rainValues[istasyonYagisAnahtari(a)]).toEqual([10, 20]);
+    expect(gocen.rainValues[istasyonYagisAnahtari(b)]).toEqual([10, 20]);
+  });
+
+  it("kanonik kayıt turunda ayrı değerleri değiştirmez", () => {
+    const a = { name: "MERKEZ", kod: "100", lat: 39, lon: 32 };
+    const b = { name: "MERKEZ", kod: "200", lat: 40, lon: 33 };
+    const durum = {
+      thiessen: [a, b],
+      rainValues: { [istasyonYagisAnahtari(a)]: [10], [istasyonYagisAnahtari(b)]: [20] },
+    };
+    const tur = yagisAnahtarlariniGocur(JSON.parse(JSON.stringify(durum)));
+    expect(tur.rainValues).toEqual(durum.rainValues);
   });
 });

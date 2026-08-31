@@ -229,7 +229,6 @@ function clearSingleBasin() {
   S.P24w = null;
   S.OETw = null;
   S.yagis = [];
-  S.rainMeta = {};
   S.mgmDbYakin = null;
   S.cnSonuc = null;
   S.rasyonelCKaynak = null;

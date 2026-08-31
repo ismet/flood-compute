@@ -20,8 +20,7 @@
  * @property {Array} thiessen - Thiessen ağırlık listesi [{name,agirlik,alan_km2,poligon_geojson}]
  * @property {Array} istasyonlar - Ham istasyon listesi
  * @property {Array} yagis - Yağış satırları (legacy)
- * @property {Object} rainValues - {istasyonAd: [P2..P100,OET]} 7 değer
- * @property {Object} rainMeta - {istasyonAd: {yil_sayisi,dagilim,yontem,mesafe_km}}
+ * @property {Object} rainValues - {kanonikIstasyonAnahtari: [P2..P100,OEY]} 7 değer
  * @property {Object|null} P24w - Ağırlıklı P2..P100 {2,5,10,25,50,100}
  * @property {number|null} OETw - Ağırlıklı OET
  * @property {number|null} rainColorCol - Alan boyaması sütun indeksi (0..6)
@@ -35,7 +34,6 @@
  * @property {Array|null} dplvValues - 14 oran (MGM veya elle)
  * @property {Array} mgm - MGM station list
  * @property {Object} mgmByNorm - mgmNorm→station
- * @property {Object|null} mgmDb - /api/mgm-bilgi
  * @property {string|null} mode - wizard|multi|dilekce|su
  * @property {Array|null} stBase - Temel istasyon kümesi
  * @property {Set<string>} stExclude - Çıkarılan istasyon anahtarları
