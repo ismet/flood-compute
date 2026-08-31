@@ -167,7 +167,25 @@ def _ayni(a, b):
             and abs(float(a["lon"]) - float(b["lon"])) < 1e-6)
 
 
-def weights(basin_geojson, stations, min_agirlik=0.0, max_eleme=25):
+def _stkey(s):
+    """Frontend stKey ile aynı: name|lat5|lon5 (kod yoksa)."""
+    try:
+        return f"{s.get('name')}|{float(s['lat']):.5f}|{float(s['lon']):.5f}"
+    except Exception:
+        return str(s.get("name") or "")
+
+
+def _korumali_mi(o, korumali_set):
+    """Manuel eklenenler (stExtra) min_agirlik eşiğinden muaf mı."""
+    if not korumali_set:
+        return False
+    kod = o.get("kod")
+    if kod and str(kod) in korumali_set:
+        return True
+    return _stkey(o) in korumali_set
+
+
+def weights(basin_geojson, stations, min_agirlik=0.0, max_eleme=25, korumali=None):
     """Thiessen ağırlıkları; payı ``min_agirlik``ın altındaki istasyonları eler.
 
     Eleme, ağırlıkları orantılı dağıtmakla yapılmaz — istasyon listeden
@@ -177,8 +195,12 @@ def weights(basin_geojson, stations, min_agirlik=0.0, max_eleme=25):
     ve eşiğin altındakiler eşiğin üstüne çıkabilir (hepsini birden elemek
     gereğinden fazla istasyon atardı). En az bir istasyon her zaman kalır.
 
+    ``korumali``: stKey veya kod listesi — bu istasyonlar eşikten muaf
+    (manuel eklenenler stExtra). Havza dışında (agirlik==0) zaten elenmez.
+
     Döner: (sonuc, elenen) — elenen: [{name, kurum, agirlik}] (elendiği andaki pay).
     """
+    korumali_set = set(str(x) for x in (korumali or []))
     aktif = list(stations)
     elenen = []
     out = _weights_once(basin_geojson, aktif)
@@ -187,7 +209,7 @@ def weights(basin_geojson, stations, min_agirlik=0.0, max_eleme=25):
             paylilar = [o for o in out if o["agirlik"] > 0]
             if len(paylilar) <= 1:
                 break
-            kucukler = [o for o in paylilar if o["agirlik"] < min_agirlik]
+            kucukler = [o for o in paylilar if o["agirlik"] < min_agirlik and not _korumali_mi(o, korumali_set)]
             if not kucukler:
                 break
             en_kucuk = min(kucukler, key=lambda o: o["agirlik"])

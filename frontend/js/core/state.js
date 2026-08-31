@@ -39,7 +39,8 @@
  * @property {string|null} mode - wizard|multi|dilekce|su
  * @property {Array|null} stBase - Temel istasyon kümesi
  * @property {Set<string>} stExclude - Çıkarılan istasyon anahtarları
- * @property {Array} stExtra - Elle eklenen istasyonlar
+ * @property {Array} stExtra - Elle eklenen istasyonlar (havuz dışı, kod/stKey korumalı)
+ * @property {Set<string>} stKorumali - Manuel korumalı stBase anahtarları (kod veya stKey, eşikten muaf)
  * @property {string|null} stKaynak - Thiessen kaynak etiketi
  * @property {Array} thElenen - Küçük pay eşiğiyle elenenler
  * @property {string|null} agiSecili - Seçili AGİ (noktasal NTFA)

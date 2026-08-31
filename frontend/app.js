@@ -216,6 +216,9 @@ function clearSingleBasin() {
   S.stBase = null;
   S.stExclude = new Set();
   S.stExtra = [];
+  S.stKorumali = new Set();
+  S.thElenen = [];
+  S.stKaynak = null;
   S.rainValues = {};
   S.P24w = null;
   S.OETw = null;
@@ -248,11 +251,15 @@ function clearSingleBasin() {
   try {
     clearMinimized();
   } catch (e) {}
-  ["havza", "dere", "kanal", "thiessen", "markers", "havzaAgi", "havzaMgm"].forEach((k) => {
+  ["havza", "dere", "kanal", "thiessen", "thiessenAday", "markers", "havzaAgi", "havzaMgm"].forEach((k) => {
     try {
       layers[k].clearLayers();
     } catch (e) {}
   });
+  if ($("thAdaylar")) $("thAdaylar").innerHTML = "";
+  if ($("thExcluded")) $("thExcluded").innerHTML = "";
+  const tw = $("thAdayWrap");
+  if (tw) tw.style.display = "none";
   ["inpA", "inpL", "inpLc", "inpCN3"].forEach((id) => {
     if ($(id)) $(id).value = "";
   });

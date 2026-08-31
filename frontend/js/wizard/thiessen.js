@@ -1,10 +1,10 @@
 /**
- * @fileoverview Thiessen istasyon kümeleri ve ağırlıklar.
+ * @fileoverview Thiessen istasyon kümeleri ve ağırlıklar — manuel ekle/çıkar + aday katmanı.
  * @module wizard/thiessen
- * Owns: S.stBase, S.stExclude, S.stExtra, S.stKaynak, S.istasyonlar, S.thiessen, S.thElenen
- * Exports: kurumColor, stKey, effectiveStations, loadStationSet, recomputeThiessen, renderExcluded, runThiessen, removeStation, useDefaultStations
+ * Owns: S.stBase, S.stExclude, S.stExtra, S.stKaynak, S.istasyonlar, S.thiessen, S.thElenen; layers.thiessenAday OWNER-CREATED
+ * Exports: kurumColor, stKey, effectiveStations, loadStationSet, recomputeThiessen, renderExcluded, renderAdaylar, renderAdayMarkers, addStation, restoreStation, runThiessen, removeStation, useDefaultStations
  * Notes:
- *  - Allowed pull (§3.1): thiessen→rain (recolorThiessen, renderRainTable)
+ *  - Allowed pull (§3.1): thiessen→rain (recolorThiessen, renderRainTable, mgmDbListesi)
  *  - kurumColor module-local (constants admission ≥2 gerekir, burada tek tüketici)
  *  - Rank 2 (wizard).
  * @typedef {Object} ThiessenPayload
@@ -18,13 +18,22 @@ import { $, setStatus } from "../ui/dom.js";
 import { api } from "../core/api.js";
 import { _esc } from "../core/format.js";
 import { map, layers } from "../map/init.js";
-import { recolorThiessen, renderRainTable } from "./rain.js";
+import { recolorThiessen, renderRainTable, mgmDbListesi } from "./rain.js";
 import { mgmTriangleIcon, elleCircleMarker, STATION_TOOLTIP_MGM, STATION_TOOLTIP_ELLE } from "../map/station-markers.js";
+
+// layers.thiessenAday: aday + çıkarılan hayalet marker’lar (thiessen.js sahibi, registry-bag)
+if (layers.thiessenAday) {
+  try {
+    map.removeLayer(layers.thiessenAday);
+  } catch (e) {}
+}
+layers.thiessenAday = L.layerGroup().addTo(map);
 
 export const kurumColor = (k) =>
   k === "DSİ" ? "#e65100" : k === "DMİ" ? "#1565c0" : k === "Elle" ? "#2e7d32" : "#7d6e4f";
 export const stKey = (s) => `${s.name}|${(+s.lat).toFixed(5)}|${(+s.lon).toFixed(5)}`;
 S.stExclude = new Set();
+if (!S.stKorumali) S.stKorumali = new Set();
 export function effectiveStations() {
   const base = (S.stBase || []).filter((s) => !S.stExclude.has(stKey(s)));
   return base.concat(S.stExtra);
@@ -33,11 +42,187 @@ export async function loadStationSet(list, kaynak) {
   S.stBase = list;
   S.stExclude = new Set();
   S.stExtra = [];
+  S.stKorumali = new Set();
   await runThiessen(effectiveStations(), kaynak);
+}
+// --- Thiessen manuel ekle/çıkar yardımcıları ---
+let _thiessenBusy = false;
+function _havzaMerkez() {
+  if (!S.havza) return null;
+  try {
+    const gj = S.havza.features ? S.havza.features[0].geometry : S.havza.geometry || S.havza;
+    const coords = gj.type === "MultiPolygon" ? gj.coordinates.flat(2) : gj.type === "Polygon" ? gj.coordinates.flat(1) : [];
+    if (!coords.length) return null;
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    coords.forEach(([lon, lat]) => { if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat; if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon; });
+    return { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+  } catch (e) { return null; }
+}
+function _mesafeKm(aLat, aLon, bLat, bLon) {
+  const R = 6371, dLat = (bLat - aLat) * Math.PI / 180, dLon = (bLon - aLon) * Math.PI / 180;
+  const s1 = Math.sin(dLat / 2), s2 = Math.sin(dLon / 2);
+  const aa = s1 * s1 + Math.cos(aLat * Math.PI / 180) * Math.cos(bLat * Math.PI / 180) * s2 * s2;
+  return 2 * R * Math.asin(Math.sqrt(aa));
+}
+function _normalizeMgmEntry(e) {
+  return {
+    name: e.ad || e.name || e.istasyon || "",
+    lat: e.enlem ?? e.lat,
+    lon: e.boylam ?? e.lon,
+    kod: e.kod || e.no || "",
+    kurum: e.kurum || "MGM",
+    yil_sayisi: e.yil_sayisi ?? e.maks_yil,
+    _orig: e,
+  };
+}
+export function addStation(kodOrObj) {
+  if (!kodOrObj) return;
+  if (typeof kodOrObj === "string") {
+    const kod = kodOrObj;
+    const src = (S.mgmDbYakin || []).find((x) => (x.kod || x.no) === kod);
+    if (!src) return setStatus("thStatus", `İstasyon bulunamadı: ${kod}`, "err");
+    const n = _normalizeMgmEntry(src);
+    if (n.lat == null || n.lon == null) return setStatus("thStatus", "Koordinatı eksik istasyon eklenemez", "err");
+    const sk = stKey(n);
+    const effKeys = new Set(effectiveStations().map(stKey));
+    const kodSet = new Set(effectiveStations().map((s) => s.kod).filter(Boolean));
+    if (effKeys.has(sk) || (n.kod && kodSet.has(n.kod))) return setStatus("thStatus", `${n.name} zaten Thiessen’de`, "");
+    // çıkarılanlar içindeyse geri al
+    if (S.stExclude.has(sk)) {
+      S.stExclude.delete(sk);
+      // korumalıysa da sil (tekrar korumaya gerek yok, zaten etkili)
+      if (S.stKorumali) S.stKorumali.delete(sk);
+      if (S.stKorumali && n.kod) S.stKorumali.delete(n.kod);
+    } else {
+      // stBase’de var mı? Varsa korumalıya ekle, yoksa stExtra’ya ekle
+      const inBase = (S.stBase || []).some((s) => stKey(s) === sk || (n.kod && s.kod === n.kod));
+      if (inBase) {
+        if (!S.stKorumali) S.stKorumali = new Set();
+        // stKey ve kod ikisini de korumalıya ekle (backend ikisini de kontrol ediyor)
+        S.stKorumali.add(sk);
+        if (n.kod) S.stKorumali.add(n.kod);
+      } else {
+        S.stExtra.push({ name: n.name, lat: n.lat, lon: n.lon, kurum: n.kurum, kod: n.kod });
+      }
+    }
+    map.closePopup();
+    recomputeThiessen();
+    return;
+  }
+  // doğrudan obje (Elle)
+  const st = kodOrObj;
+  S.stExtra.push(st);
+  map.closePopup();
+  recomputeThiessen();
+}
+export function restoreStation(key) {
+  if (!S.stExclude.has(key)) return;
+  S.stExclude.delete(key);
+  if (S.stKorumali) {
+    S.stKorumali.delete(key);
+    // kod ile de silmeyi dene (stKey’ten kod çıkarılamaz, ama aday listesinde kod da var — geniş temizlik)
+  }
+  map.closePopup();
+  recomputeThiessen();
 }
 export async function recomputeThiessen() {
   if (!S.stBase && !S.stExtra.length) return;
+  if (_thiessenBusy) return;
   await runThiessen(effectiveStations(), S.stKaynak || "Güncel liste");
+}
+function _adaylariBul() {
+  if (!S.havza || !S.mgmDbYakin || !S.mgmDbYakin.length) return [];
+  const effKeys = new Set(effectiveStations().map(stKey));
+  const effKod = new Set(effectiveStations().map((s) => s.kod).filter(Boolean));
+  // aktif thiessen’de olup agirlik==0 olanlar da aday sayılsın (görünmez)
+  // ama mgmDbYakin zaten tüm yakın havuzu içerdiğinden, filtre mgmDbYakin üzerinden yeterli
+  const out = [];
+  for (const e of S.mgmDbYakin) {
+    const n = _normalizeMgmEntry(e);
+    if (n.lat == null || n.lon == null) continue;
+    const sk = stKey(n);
+    if (effKeys.has(sk) || (n.kod && effKod.has(n.kod))) continue;
+    if (S.stExclude.has(sk)) continue; // çıkarılanlar ayrı katmanda
+    out.push(n);
+  }
+  return out;
+}
+export function renderAdaylar() {
+  const el = $("thAdaylar");
+  const wrap = $("thAdayWrap");
+  if (!el) return;
+  if (!S.havza) { el.innerHTML = ""; if (wrap) wrap.style.display = "none"; return; }
+  if (wrap) wrap.style.display = "";
+  // mgmDbYakin henüz yoksa yüklemeyi tetikle
+  if (!S.mgmDbYakin) {
+    el.innerHTML = `<div class="small">Yakın istasyonlar yükleniyor…</div>`;
+    mgmDbListesi().then(() => { renderAdaylar(); renderAdayMarkers(); });
+    return;
+  }
+  const adaylar = _adaylariBul();
+  if (!adaylar.length) {
+    el.innerHTML = `<div class="small">Aday istasyon yok — havza çevresindeki tüm yakın istasyonlar zaten dahil.</div>`;
+    return;
+  }
+  const merkez = _havzaMerkez();
+  if (merkez) adaylar.forEach((a) => a._mesafe = _mesafeKm(merkez.lat, merkez.lon, a.lat, a.lon));
+  else adaylar.forEach((a) => a._mesafe = 9999);
+  adaylar.sort((a, b) => a._mesafe - b._mesafe);
+  const limit = 30;
+  const goster = adaylar.slice(0, limit);
+  const kalan = adaylar.length - goster.length;
+  let h = `<div class="small aday-baslik">${adaylar.length} aday istasyon (havza dışı, yakınlık sıralı) — haritada soluk üçgen, tıkla ekle:</div>`;
+  h += goster.map((a) => {
+    const mes = a._mesafe < 9000 ? ` ${a._mesafe.toFixed(1)} km` : "";
+    const yil = a.yil_sayisi ? ` · ${a.yil_sayisi} yıl` : "";
+    return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${yil} <button class="link-btn" data-add="${_esc(a.kod)}" title="Thiessen’e ekle">+ Ekle</button></span>`;
+  }).join(" · ");
+  if (kalan > 0) h += `<div class="small" style="margin-top:4px"><button class="link-btn" id="btnAdayDaha" title="Kalan adayları göster">+ ${kalan} aday daha göster</button></div>`;
+  el.innerHTML = h;
+  el.querySelectorAll("button[data-add]").forEach((b) => b.onclick = () => addStation(b.dataset.add));
+  const daha = el.querySelector("#btnAdayDaha");
+  if (daha) daha.onclick = () => {
+    const tum = adaylar.map((a) => {
+      const mes = a._mesafe < 9000 ? ` ${a._mesafe.toFixed(1)} km` : "";
+      const yil = a.yil_sayisi ? ` · ${a.yil_sayisi} yıl` : "";
+      return `<span class="small">${_esc(a.name)} (${_esc(a.kod)})${mes}${yil} <button class="link-btn" data-add2="${_esc(a.kod)}">+ Ekle</button></span>`;
+    }).join(" · ");
+    el.innerHTML = `<div class="small aday-baslik">${adaylar.length} aday istasyon:</div>` + tum;
+    el.querySelectorAll("button[data-add2]").forEach((b) => b.onclick = () => addStation(b.dataset.add2));
+  };
+}
+export function renderAdayMarkers() {
+  if (!layers.thiessenAday) return;
+  layers.thiessenAday.clearLayers();
+  if (!S.havza) return;
+  // adaylar
+  const adaylar = _adaylariBul();
+  const merkez = _havzaMerkez();
+  if (merkez) adaylar.forEach((a) => a._mesafe = _mesafeKm(merkez.lat, merkez.lon, a.lat, a.lon));
+  adaylar.sort((a, b) => (a._mesafe ?? 9999) - (b._mesafe ?? 9999));
+  // haritada çok kalabalık olmasın: en yakın 60 aday göster
+  adaylar.slice(0, 60).forEach((a) => {
+    const mk = L.marker([a.lat, a.lon], { icon: mgmTriangleIcon({ inside: false, candidate: true }) }).addTo(layers.thiessenAday);
+    const mes = a._mesafe != null ? ` · ${a._mesafe.toFixed(1)} km` : "";
+    mk.bindTooltip(`${_esc(a.name)} (${_esc(a.kod)}) — aday${mes}`, STATION_TOOLTIP_MGM);
+    mk.bindPopup(`${_esc(a.name)} (${_esc(a.kod)})${mes ? "<br>" + mes : ""}<br><button class="link-btn" data-add-pop="${_esc(a.kod)}">+ Thiessen’e ekle</button>`);
+    mk.on("popupopen", (ev) => {
+      const btn = ev.popup.getElement().querySelector("button[data-add-pop]");
+      if (btn) btn.onclick = () => addStation(btn.dataset.addPop);
+    });
+  });
+  // çıkarılan hayaletler
+  const cikarilan = (S.stBase || []).filter((s) => S.stExclude.has(stKey(s)));
+  cikarilan.forEach((s) => {
+    const mk = L.marker([s.lat, s.lon], { icon: mgmTriangleIcon({ inside: false, excluded: true }) }).addTo(layers.thiessenAday);
+    mk.bindTooltip(`${_esc(s.name)} — çıkarıldı (tıkla geri al)`, STATION_TOOLTIP_MGM);
+    const k = stKey(s);
+    mk.bindPopup(`${_esc(s.name)} — çıkarıldı<br><button class="link-btn" data-restore="${_esc(k)}">↺ Geri al</button>`);
+    mk.on("popupopen", (ev) => {
+      const btn = ev.popup.getElement().querySelector("button[data-restore]");
+      if (btn) btn.onclick = () => restoreStation(btn.dataset.restore);
+    });
+  });
 }
 export function renderExcluded() {
   const el = $("thExcluded");
@@ -90,13 +275,27 @@ export function renderExcluded() {
 }
 export async function runThiessen(stations, kaynak) {
   if (!S.havza) return setStatus("thStatus", "Önce havzayı çıkarın (Adım 1)", "err");
+  if (_thiessenBusy) return;
+  // son istasyon koruması: effectiveStations() zaten filtrelenmiş, ama kullanıcı son-1’i çıkarmaya çalışırsa engelle
+  if (stations.length <= 0) return setStatus("thStatus", "En az 1 istasyon kalmalı", "err");
+  if (stations.length === 1 && S.stExclude.size) {
+    // tek istasyon kaldıysa ve bu çağrı bir çıkarma sonrasıysa uyar (removeStation zaten engeller ama direkt çağrı için)
+  }
+  _thiessenBusy = true;
   setStatus("thStatus", "Thiessen hesaplanıyor…", "loading");
+  // aday katmanını temizle (yeniden çizilecek)
+  try { layers.thiessenAday.clearLayers(); } catch (e) {}
   try {
     S.istasyonlar = stations;
     S.stKaynak = kaynak;
     if (!S.stBase) S.stBase = stations; // doğrudan çağrılırsa temel liste bu olsun
     const minW = Math.max(0, (+$("inpMinW").value || 0) / 100);
-    const r2 = await api("/api/thiessen", { havza_geojson: S.havza, istasyonlar: S.istasyonlar, min_agirlik: minW });
+    const korumaliRaw = []
+      .concat((S.stExtra || []).map((s) => s.kod).filter(Boolean))
+      .concat((S.stExtra || []).map((s) => stKey(s)))
+      .concat([...(S.stKorumali || [])]);
+    const kSet = [...new Set(korumaliRaw.filter(Boolean))];
+    const r2 = await api("/api/thiessen", { havza_geojson: S.havza, istasyonlar: S.istasyonlar, min_agirlik: minW, korumali: kSet });
     S.thiessen = r2.sonuc;
     S.thElenen = r2.elenen || [];
     layers.thiessen.clearLayers();
@@ -136,6 +335,8 @@ export async function runThiessen(stations, kaynak) {
       .querySelectorAll("button[data-del]")
       .forEach((b) => (b.onclick = () => removeStation(b.dataset.del)));
     renderExcluded();
+    renderAdaylar();
+    renderAdayMarkers();
     recolorThiessen();
     const nEk = S.stExtra.length,
       nCik = S.stExclude.size,
@@ -152,12 +353,28 @@ export async function runThiessen(stations, kaynak) {
     renderRainTable();
   } catch (e) {
     setStatus("thStatus", "Hata: " + e.message, "err");
+  } finally {
+    _thiessenBusy = false;
   }
 }
 export function removeStation(key) {
+  // son istasyon koruması
+  const eff = effectiveStations();
+  if (eff.length <= 1) {
+    const tekKey = eff.length === 1 ? stKey(eff[0]) : null;
+    if (tekKey && tekKey === key) return setStatus("thStatus", "En az 1 istasyon kalmalı — son istasyon çıkarılamaz", "err");
+    if (eff.length <= 1) return setStatus("thStatus", "En az 1 istasyon kalmalı", "err");
+  }
   S.stExclude.add(key);
   const i = S.stExtra.findIndex((s) => stKey(s) === key);
   if (i >= 0) S.stExtra.splice(i, 1); // elle eklenmişse listeden sil
+  // korumalıysa da temizle (çıkarılan artık korunmamalı)
+  if (S.stKorumali) {
+    S.stKorumali.delete(key);
+    // kod ile eşleşen korumalı da sil (stKey’ten kod bilinmez ama geniş temizlik için stExtra kodları da kontrol)
+    const korbanKod = (S.stBase || []).find((s) => stKey(s) === key)?.kod;
+    if (korbanKod) S.stKorumali.delete(korbanKod);
+  }
   map.closePopup();
   recomputeThiessen();
 }

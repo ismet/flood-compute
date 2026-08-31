@@ -9,7 +9,7 @@ import traceback
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # Heavy GIS modules (pyflwdir→numba, rasterio) are
 # imported lazily inside endpoints to keep startup memory low.
@@ -133,6 +133,7 @@ class ThiessenReq(BaseModel):
     havza_geojson: dict
     istasyonlar: list
     min_agirlik: float = 0.05   # payı bunun altındaki istasyonlar elenir (0 = eleme yok)
+    korumali: list[str] = Field(default_factory=list)  # min_agirlik'tan muaf (manuel stExtra: kod veya stKey)
 
 
 class RainParseReq(BaseModel):
@@ -562,7 +563,8 @@ def api_thiessen(req: ThiessenReq):
     from backend.core import thiessen
     try:
         sonuc, elenen = thiessen.weights(req.havza_geojson, req.istasyonlar,
-                                         min_agirlik=req.min_agirlik)
+                                         min_agirlik=req.min_agirlik,
+                                         korumali=req.korumali)
         return {"sonuc": sonuc, "elenen": elenen}
     except Exception as e:
         return _err(e)

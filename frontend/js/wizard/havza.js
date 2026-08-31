@@ -174,6 +174,9 @@ export function applyBasinResult(r, baslik) {
   S.havza = r.havza_geojson;
   S.kotlar = r.kotlar.slice();
   S.mgmDbYakin = null; // yakın MGM listesi havzaya bağlı, yeniden kurulsun
+  // aday katmanını temizle (yeni havza için yeniden kurulacak)
+  try { if (layers.thiessenAday) layers.thiessenAday.clearLayers(); } catch (e) {}
+  try { const el = document.getElementById("thAdaylar"); if (el) el.innerHTML = ""; } catch (e) {}
   S.dplvManual = false;
   S.dplvAuto = null;
   S.dplvValues = null;
@@ -238,6 +241,13 @@ L, Lc ve kot profili: ${r.parametre_kaynagi === "dere_agi" ? "içe aktarılan DE
   autoSelectPLV();
   havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
   havzaYakinIstasyonlariGoster();
+  // thiessen manuel seçimler korunur (A2): yeni havza için ağırlıkları yeniden hesapla
+  if (S.stBase && S.stBase.length) {
+    import("./thiessen.js").then((m) => { try { m.recomputeThiessen(); } catch (e) {} }).catch(() => {});
+  } else {
+    // hiç thiessen yoksa eski poligonlar temizlensin
+    try { if (layers.thiessen) layers.thiessen.clearLayers(); } catch (e) {}
+  }
   try {
     _notifyHavzaChanged();
   } catch (e) {}
@@ -321,6 +331,8 @@ map.on("click", async (ev) => {
     S.havza = r.havza_geojson;
     S.kotlar = r.kotlar.slice();
     S.mgmDbYakin = null;
+    try { if (layers.thiessenAday) layers.thiessenAday.clearLayers(); } catch (e) {}
+    try { const el = document.getElementById("thAdaylar"); if (el) el.innerHTML = ""; } catch (e) {}
     S.dplvManual = false;
     S.dplvAuto = null;
     S.dplvValues = null;
@@ -390,6 +402,11 @@ map.on("click", async (ev) => {
     autoSelectPLV();
     havzaOrtalamasiGoster(); // düğme gizli: ortalamayı çıkarım bitince kendiliğinden hesapla
     havzaYakinIstasyonlariGoster();
+    if (S.stBase && S.stBase.length) {
+      import("./thiessen.js").then((m) => { try { m.recomputeThiessen(); } catch (e) {} }).catch(() => {});
+    } else {
+      try { if (layers.thiessen) layers.thiessen.clearLayers(); } catch (e) {}
+    }
     try {
       _notifyHavzaChanged();
     } catch (e) {}

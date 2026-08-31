@@ -21,7 +21,7 @@ import { renderRainTable } from "../wizard/rain.js";
 import { renderDplvGrid, updatePlvAutoInfo } from "../wizard/dplv.js";
 import { updateComputeReady } from "../wizard/steps.js";
 
-const SET_KEYS = ["agiBolgesel", "stExclude", "suSecili", "rapFilter", "seciliYontemler"];
+const SET_KEYS = ["agiBolgesel", "stExclude", "stKorumali", "suSecili", "rapFilter", "seciliYontemler"];
 function setReplacer(k, v) {
   return v instanceof Set ? { __set: [...v] } : v;
 }
@@ -43,7 +43,7 @@ function reviveSets(obj) {
 // "circular structure" ile patlar (örn. resMarker'ın Geoman .pm._layer geri
 // referansı). sonuc yeniden hesaplanabilir; raster altlıkları sunucudan gelir.
 export function buildDurumS() {
-  const { dplvList: _deleted, ...rest } = S;
+  const { dplvList: _deleted, mgmDbYakin: _mgm, ...rest } = S;
   return { ...rest, sonuc: null, infoLayers: [], rasterLayers: [], resMarker: null };
 }
 
@@ -156,6 +156,8 @@ $("projList").onchange = async () => {
       // rapFilter varsa ondan türetme yapma — rapFilter rapor hariç, hesap seçimi değil
       S.seciliYontemler = new Set(["dsi", "mockus"]);
     }
+    if (!(S.stKorumali instanceof Set)) S.stKorumali = new Set();
+    if (!(S.stExclude instanceof Set)) S.stExclude = new Set();
     // Hesap yöntem seçimini DOM'a yansıt (Adım 4 fieldset)
     try {
       document.querySelectorAll(".hesapYontem").forEach((cb) => {
@@ -202,6 +204,31 @@ $("projList").onchange = async () => {
     } else {
       layers.thiessen.clearLayers();
     }
+    // aday + hayalet katmanı: proje havzası için mgmDbYakin taze değil, yeniden kur
+    try {
+      const { renderAdaylar, renderAdayMarkers } = await import("../wizard/thiessen.js");
+      S.mgmDbYakin = null;
+      // renderAdaylar mgmDbListesi'ni lazy çağırır; marker’lar havza bounds’tan sonra dolacak
+      renderAdaylar();
+      renderAdayMarkers();
+    } catch (e) {}
+    // thTable/thExcluded’ı da projeden geri getir (sadece poligon değil, tablo da)
+    try {
+      const { renderExcluded } = await import("../wizard/thiessen.js");
+      renderExcluded();
+      // thTable’ı runThiessen olmadan da doldur (aktif istasyon tablosu)
+      const thTableEl = document.getElementById("thTable");
+      if (thTableEl && S.thiessen && S.thiessen.length) {
+        const aktif = S.thiessen.filter((t) => t.agirlik > 0);
+        if (aktif.length) {
+          let h = `<div class="th-legend"><span><i class="mgm-tri"></i> MGM</span><span><i class="elle-dot"></i> Elle eklenen</span></div><table class="tbl"><tr><th>İstasyon</th><th>Kurum</th><th>Ağırlık</th><th>Alan (km²)</th><th></th></tr>`;
+          aktif.forEach((t) => {
+            h += `<tr class="sel"><td>${t.name}</td><td>${t.kurum || "—"}</td><td>${(t.agirlik * 100).toFixed(1)}%</td><td>${t.alan_km2}</td><td></td></tr>`;
+          });
+          thTableEl.innerHTML = h + "</table>";
+        }
+      }
+    } catch (e) {}
     layers.markers.clearLayers();
     if (S.outlet) {
       try {

@@ -338,6 +338,14 @@ h3.res { font-size: 15px; font-weight: 700; color: var(--vurgu); margin-top: 12p
 .mgm-triangle.mgm-selected polygon { stroke: #000 !important; stroke-width: 2.2 !important; }
 .mgm-triangle.outside,
 .agi-circle.outside { opacity: 0.42; }
+.mgm-triangle.candidate { opacity: 0.42; filter: grayscale(0.25) drop-shadow(0 1px 3px rgba(0,0,0,.22)); }
+.mgm-triangle.candidate polygon { stroke-dasharray: 3 2; }
+.mgm-triangle.excluded { opacity: 0.28; filter: grayscale(0.55) drop-shadow(0 1px 2px rgba(0,0,0,.18)); }
+.mgm-triangle.excluded polygon { stroke-dasharray: 4 3; }
+#thAdaylar { margin-top: 6px; line-height: 1.7; font-size: 12px; }
+#thAdaylar .aday-baslik { font-weight: 600; color: var(--metin-orta); margin-bottom: 2px; }
+#thAdaylar .link-btn { color: var(--vurgu); }
+#thAdaylar .link-btn:disabled { color: var(--metin-acik); cursor: not-allowed; text-decoration: none; }
 
 /* AGİ mavi daire — hover büyütme (divIcon ise geçerli, circleMarker etkilenmez) */
 .agi-circle { transition: transform 0.12s ease; }
