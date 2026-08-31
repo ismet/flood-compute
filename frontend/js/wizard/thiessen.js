@@ -84,9 +84,10 @@ export function addStation(kodOrObj) {
     const n = _normalizeMgmEntry(src);
     if (n.lat == null || n.lon == null) return setStatus("thStatus", "Koordinatı eksik istasyon eklenemez", "err");
     const sk = stKey(n);
-    const effKeys = new Set(effectiveStations().map(stKey));
-    const kodSet = new Set(effectiveStations().map((s) => s.kod).filter(Boolean));
-    if (effKeys.has(sk) || (n.kod && kodSet.has(n.kod))) return setStatus("thStatus", `${n.name} zaten Thiessen’de`, "");
+    const aktif = (S.thiessen || []).filter((t) => t.agirlik > 0);
+    const aktifKeys = new Set(aktif.map(stKey));
+    const aktifKod = new Set(aktif.map((t) => t.kod).filter(Boolean));
+    if (aktifKeys.has(sk) || (n.kod && aktifKod.has(n.kod))) return setStatus("thStatus", `${n.name} zaten Thiessen’de`, "");
     // çıkarılanlar içindeyse geri al
     if (S.stExclude.has(sk)) {
       S.stExclude.delete(sk);
@@ -118,10 +119,6 @@ export function addStation(kodOrObj) {
 export function restoreStation(key) {
   if (!S.stExclude.has(key)) return;
   S.stExclude.delete(key);
-  if (S.stKorumali) {
-    S.stKorumali.delete(key);
-    // kod ile de silmeyi dene (stKey’ten kod çıkarılamaz, ama aday listesinde kod da var — geniş temizlik)
-  }
   map.closePopup();
   recomputeThiessen();
 }
@@ -132,17 +129,23 @@ export async function recomputeThiessen() {
 }
 function _adaylariBul() {
   if (!S.havza || !S.mgmDbYakin || !S.mgmDbYakin.length) return [];
-  const effKeys = new Set(effectiveStations().map(stKey));
-  const effKod = new Set(effectiveStations().map((s) => s.kod).filter(Boolean));
-  // aktif thiessen’de olup agirlik==0 olanlar da aday sayılsın (görünmez)
-  // ama mgmDbYakin zaten tüm yakın havuzu içerdiğinden, filtre mgmDbYakin üzerinden yeterli
+  // aday = mgmDbYakin içinde olup aktif Thiessen’de (agirlik>0) olmayanlar
+  // efektif değil aktif bazlı: stBase’deki ama ağırlığı 0 veya elenenler de aday sayılır
+  const aktif = (S.thiessen || []).filter((t) => t.agirlik > 0);
+  const aktifKeys = new Set(aktif.map(stKey));
+  const aktifKod = new Set(aktif.map((t) => t.kod).filter(Boolean));
   const out = [];
   for (const e of S.mgmDbYakin) {
     const n = _normalizeMgmEntry(e);
     if (n.lat == null || n.lon == null) continue;
     const sk = stKey(n);
-    if (effKeys.has(sk) || (n.kod && effKod.has(n.kod))) continue;
-    if (S.stExclude.has(sk)) continue; // çıkarılanlar ayrı katmanda
+    if (aktifKeys.has(sk) || (n.kod && aktifKod.has(n.kod))) continue;
+    if (S.stExclude.has(sk)) continue; // çıkarılan hayalet ayrı
+    if (S.stKorumali && (S.stKorumali.has(sk) || (n.kod && S.stKorumali.has(n.kod)))) {
+      // korumalı ama henüz aktif değilse (eşik baypas bekliyor) — yine aday sayma, recompute sonrası aktif olacak
+      // bu durumda adayı gösterme, korumalı listede zaten
+      continue;
+    }
     out.push(n);
   }
   return out;
@@ -368,13 +371,7 @@ export function removeStation(key) {
   S.stExclude.add(key);
   const i = S.stExtra.findIndex((s) => stKey(s) === key);
   if (i >= 0) S.stExtra.splice(i, 1); // elle eklenmişse listeden sil
-  // korumalıysa da temizle (çıkarılan artık korunmamalı)
-  if (S.stKorumali) {
-    S.stKorumali.delete(key);
-    // kod ile eşleşen korumalı da sil (stKey’ten kod bilinmez ama geniş temizlik için stExtra kodları da kontrol)
-    const korbanKod = (S.stBase || []).find((s) => stKey(s) === key)?.kod;
-    if (korbanKod) S.stKorumali.delete(korbanKod);
-  }
+  // korumalı stBase için silme yok: çıkarılan hayalet olarak kalır, geri alınırsa koruması sürer
   map.closePopup();
   recomputeThiessen();
 }
