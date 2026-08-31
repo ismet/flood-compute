@@ -74,7 +74,8 @@ frontend/
       havza.js          # pick/delineate/import/applyBasinResult/adayKanallar,
                         #   layers.havza OWNER-CREATED, setOnBasinClick(fn) registration
       cn.js             # kotlar, CN, zemin grubu, YZD, rasyonel-C block
-      thiessen.js       # station sets/weights, kurumColor (local), stPlace dead-code (until stage 14)
+      thiessen.js       # station sets/weights, kurumColor (local), stPlace dead-code (until stage 14),
+                        #   manuel ekle/çıkar (aday havuzu havza±1.0°, korumali), layers.thiessenAday OWNER-CREATED
       rain.js           # rain grid, MGM matching, recalcRain, rain-color cluster,
                         #   layers.thiessen OWNER-CREATED, mgmDbListesi/mgmDbYakin
       dplv.js           # DPLV grids (MGM PLV auto + manuel 14), loadMgm/autoSelectPLV/mgmFind/renderDplvGrid
@@ -94,14 +95,14 @@ frontend/
 ### 3.1 Dependency contract (enforced by D-08 test)
 - **Ranks strict:** `map/wizard/modes → ui → core`. No skips upward.
 - **Static feature graph ACYCLIC.**
-  - **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable) · `mmy→rain` (recalcRain — OET ELLE bridge) · `havza→{cn,dplv,steps}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW — hesap edge KMZ taşındı) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/kmz/hesap→map/init` (registry, katmanGeojson) · `hesap→grafik` (showChart, showSnyderChart) · `comparison→hesap` (syncRepSecili, downloadReport, exportCSV — report single-owner) · `comparison→grafik` (openCompare — overlay backend reused, auto-open on 6) · `comparison→modes/rezervuar` (openReservoir dynamic) · `kmz→grafik` (cmpPeak, cmpAvailable) · `kmz→core/constants` (CMP_LABELS, CMP_RPS) · `app→kmz` (exportKmz composition-root wiring) · `app→comparison` (static for orphan reachability) · `app→grafik` (openCompare static for step 6 auto-open) · `hesap→kmz` (exportKmz legacy re-export) · `app→mmy` (dynamic `import("./js/wizard/mmy.js")` on first step 3).
+  - **Allowed pull-imports (documented):** `thiessen→rain` (recolorThiessen, renderRainTable, mgmDbListesi) · `mmy→rain` (recalcRain — OET ELLE bridge) · `havza→{cn,dplv,steps}` (zeminGrubunuBelirle, autoSelectPLV, markDone/updateComputeReady, updateSnyderW — hesap edge KMZ taşındı) · `havza→yagis-katman` (havzaOrtalamasiGoster — düğme CSS ile gizlendi, çıkarım sonrası otomatik çağrı) · `multi→dplv` (dplvRatios) · `multi→multi-sonuc` · `rezervuar→multi` (reRouteMulti) · `proje→wizard renders` (restore fan-in) · `duzenle/kmz/hesap→map/init` (registry, katmanGeojson) · `hesap→grafik` (showChart, showSnyderChart) · `comparison→hesap` (syncRepSecili, downloadReport, exportCSV — report single-owner) · `comparison→grafik` (openCompare — overlay backend reused, auto-open on 6) · `comparison→modes/rezervuar` (openReservoir dynamic) · `kmz→grafik` (cmpPeak, cmpAvailable) · `kmz→core/constants` (CMP_LABELS, CMP_RPS) · `app→kmz` (exportKmz composition-root wiring) · `app→comparison` (static for orphan reachability) · `app→grafik` (openCompare static for step 6 auto-open) · `hesap→kmz` (exportKmz legacy re-export) · `app→mmy` (dynamic `import("./js/wizard/mmy.js")` on first step 3).
 - **Push reactions:** only via `onHavzaChanged(fn)` observer in core/state (consumers: `su.suHavzaGuncelle`, `app` KMZ `btnKmz.disabled`). Direct wizard→modes pushes forbidden.
 - **Dialog opens across features:** dynamic `import()` inside handlers (`multi-sonuc`→rezervuar.openReservoir; `hesap`→rezervuar.openReservoir).
 - **Registry-bag:** `init.js` exports `const layers = {}`; owners assign (`layers.havza = L.geoJSON(...)` etc.). Consumers uniformly import `{layers}`.
  - **Constants admission:** a constant enters `constants.js` only with ≥2 feature consumers; otherwise module-local (`MRP`, `SNY_RPS`, `CMP_COLORS`, `CMP_HYDRO_RPS`, `RES_RP`, `DPLV_*`, `INFO_RENK`, `RAIN_BLUES`, `RAIN_COLS`, `kurumColor`, `STEP_KEYS, N_STEPS`, `PM_SECENEK`, `DERE_STIL`, `DERE_PATLAT_LIMIT`, `AKARSU_MIN_ZOOM`).
- - **S-slice ownership** (writer ⇒ slices; exceptions noted):
-   - havza ⇒ outlet, havza, kotlar, dere, kanal, yzdBolge, sonuc/girdi resets, dplv-* resets
-   - thiessen ⇒ stBase, stExclude, stExtra, stKaynak, istasyonlar, thiessen, thElenen
+  - **S-slice ownership** (writer ⇒ slices; exceptions noted):
+    - havza ⇒ outlet, havza, kotlar, dere, kanal, yzdBolge, sonuc/girdi resets, dplv-* resets; aday katmanı temizliği (thiessenAday)
+    - thiessen ⇒ stBase, stExclude, stExtra, stKorumali, stKaynak, istasyonlar, thiessen, thElenen; layers.thiessenAday OWNER-CREATED
    - rain ⇒ rainValues, rainMeta, P24w, OETw, rainColorCol, mgmDbYakin
    - cn ⇒ cnSonuc, zemin, rasyonelCKaynak, cSecim
    - dplv ⇒ dplvManual, dplvAuto, dplvValues, mgm, mgmByNorm, mgmDb (dplvList/Hazır kaldırıldı — tek kaynak MGM PLV)

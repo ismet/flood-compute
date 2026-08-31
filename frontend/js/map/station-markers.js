@@ -51,11 +51,15 @@ export const STATION_TOOLTIP_ELLE = { sticky: true, className: "station-elle" };
  * @param {Object} opts
  * @param {boolean} opts.selected - seçili/mansap vurgusu (büyük + siyah stroke)
  * @param {boolean} opts.inside - havza içinde mi (outside → .outside opacity)
+ * @param {boolean} opts.candidate - aday/hayalet (soluk aday)
+ * @param {boolean} opts.excluded - çıkarılan hayalet
  */
-export function mgmTriangleIcon({ selected = false, inside = true } = {}) {
+export function mgmTriangleIcon({ selected = false, inside = true, candidate = false, excluded = false } = {}) {
   const s = selected ? 18 : 16;
   const h = selected ? 16 : 14;
-  const klass = `mgm-triangle${selected ? " mgm-selected" : ""}${inside ? "" : " outside"}`;
+  let klass = `mgm-triangle${selected ? " mgm-selected" : ""}${inside ? "" : " outside"}`;
+  if (candidate) klass += " candidate";
+  if (excluded) klass += " excluded";
   // Beyaz halo — sat uydu üzerinde kontrast; seçilide siyah kalın
   const stroke = selected ? "#000" : "#ffffff";
   const sw = selected ? 2.2 : 1.5;
@@ -74,11 +78,13 @@ export function mgmTriangleIcon({ selected = false, inside = true } = {}) {
  * @param {[number,number]} latlon
  * @param {Object} opts
  */
-export function agiCircleMarker(latlon, { inside = true, selected = false, radius } = {}) {
+export function agiCircleMarker(latlon, { inside = true, selected = false, radius, candidate = false, excluded = false } = {}) {
   const blue = agiRenk();
   const r = radius != null ? radius : selected ? 8 : 6;
   // `outside` için CSS class yok (path), opaklığı doğrudan ver — print için ayrıca CSS gerekir ama path’te inline
-  const op = inside ? 0.9 : 0.32;
+  let op = inside ? 0.9 : 0.32;
+  if (candidate) op = 0.45;
+  if (excluded) op = 0.22;
   return L.circleMarker(latlon, {
     radius: r,
     color: selected ? "#000" : blue,
@@ -88,10 +94,12 @@ export function agiCircleMarker(latlon, { inside = true, selected = false, radiu
   });
 }
 
-export function elleCircleMarker(latlon, { inside = true, selected = false } = {}) {
+export function elleCircleMarker(latlon, { inside = true, selected = false, candidate = false, excluded = false } = {}) {
   const g = elleRenk();
   const r = selected ? 8 : 6;
-  const op = inside ? 0.85 : 0.35;
+  let op = inside ? 0.85 : 0.35;
+  if (candidate) op = 0.45;
+  if (excluded) op = 0.22;
   return L.circleMarker(latlon, {
     radius: r,
     color: selected ? "#000" : g,
